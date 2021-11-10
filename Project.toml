@@ -1,0 +1,16 @@
+name = "SimpleHashes"
+uuid = "c5dd0088-6c3f-4803-b00e-f31a60c170fa"
+authors = ["David F Little <david.frank.little@gmail.com> and contributors"]
+version = "0.1.0"
+
+[deps]
+CRC = "44b605c4-b955-5f2b-9b6d-d2bd01d3d205"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
