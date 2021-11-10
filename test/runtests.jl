@@ -1,6 +1,28 @@
 using SimpleHashes
 using Test
+# TODO: and Aurora or whatever it is
+
+struct TestType
+    a
+    b
+end
+
+struct TestType2
+    a
+    b
+end
+
+SimpleHashes.hashmethod(::TestType) = UseProperties()
+SimpleHashes.hashmethod(::TestType2) = UseQualifiedName(UseProperties())
 
 @testset "SimpleHashes.jl" begin
-    # Write your tests here.
+    @test simplehash([1,2,3]) != simplehash([3,2,1])
+    @test simplehash((1,2,3)) == simplehash([1,2,3])
+    @test simplehash((a=1,b=2)) == simplehash((b=2,a=1))
+    @test simplehash((a=1,b=2)) != simplehash((a=2,b=1))
+    @test simplehash(sin) != simplehash(cos)
+    @test_throws ErrorException simplehash(x -> x+1)
+    @test simplehash(TestType(1,2)) == simplehash(TestType(1,2))
+    @test simplehash(TestType(1,2)) == simplehash((a=1,b=2))
+    @test simplehash(TestType2(1,2)) != simplehash((a=1,b=2))
 end

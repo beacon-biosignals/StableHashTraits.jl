@@ -1,73 +1,78 @@
 module SimpleHashes
 
+export simplehash, UseWrite, UseIterate, UseProperties, UseQualifiedName
+
+using CRC, TupleTools
+
 const crc32 = crc(CRC_32)
 
-struct UseWrite; end
+struct UseWrite end
 hashwrite(io, x, ::UseWrite) = write(io, x)
 
-struct UseIterate{T}; end
-UseIterate() = UseIteratoe{:nottyped}()
-qualified_name(::T) where T = string(parentmodule(T), '.', nameof(T))
-function hashwrite(io, x, ::UseIterate{T}) where T
-    T == :typed && haswrite(io, qualified_name(x))
+struct UseIterate end
+function hashwrite(io, x, ::UseIterate) where {T}
     for el in x
         hashwrite(io, el)
     end
 end
 
-struct UseProperties{T}; end
-UseProperties() = UseProperties{:nottyped}()
-function hashwrite(io, x, ::UseProperties{T}) where T
-    T == :typed && haswrite(io, qualified_name(x))
-    for key in propertynames(x)
+struct UseProperties end
+function hashwrite(io, x, ::UseProperties) where {T}
+    for key in TupleTools.sort(propertynames(x), by=string)
         hashwrite(io, key)
         hashwrite(io, getproperty(x, key))
     end
 end
 
-struct UseStringify; end
-function hashwrite(io, x, ::UseStringify)
-    str = string(x)
-    if startswith(str, "#")
-        error("Unnamed function objects cannot be hashed to a reliable value")
+struct UseQualifiedName{T}
+    parent::T
+end
+UseQualifiedName() = UseQualifiedName(nothing)
+qualified_name(x::Function) = string(parentmodule(x), '.', nameof(x))
+qualified_name(::T) where T = string(parentmodule(T), '.', nameof(T))
+qualified_name(::Type{T}) where T = string(parentmodule(T), '.', nameof(T))
+function hashwrite(io, x, method::UseQualifiedName)
+    str = qualified_name(x)
+    if occursin(r"\.#[^.]*$", str)
+        error("Annonymous types (those starting with `#`) cannot be hashed to a reliable value")
     end
     hashwrite(io, str)
+    !isnothing(method.parent) && hashwrite(io, x, method.parent)
 end
 
 """
     hashmethod(x)
 
 Retrieve the trait object that indicates how a type should be hashed using
-`stablehash`. 
+`stablehash`. You should return one of the following values.
 
-There are four (zero-argument) constructors you can return from this function. 
-1. `UseWrite`: writes the object to a binary format using `write(io, x)` and
-   takes a hash of that.
-2. `UseIterate`: assumes the object is iterable and finds a hash of all elements
-3. `UseProperties`: assumes a struct of some type and uses `propertynames` and
+1. `UseWrite()`: writes the object to a binary format using `write(io, x)` and
+   takes a hash of that (this is the default behavior).
+2. `UseIterate()`: assumes the object is iterable and finds a hash of all elements
+3. `UseProperties()`: assumes a struct of some type and uses `propertynames` and
    `getproperty` to compute a hash of all fields.
-4. `UseStringify`: hashes `string(x)`, throwing an error for strings that start
-   with `#` 
+4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is
+   the type of the object. Throws an error if the name includes `#` (e.g. an
+   anonymous function). If you wish to include this qualified name *and* another
+   method, pass one of the other three methods as an arugment (e.g.
+   `UseQualifiedName(UseProperites())`)
 
-## Implemented methods
+This means that by default, if `write` for an object changes, so will its hash.
+The easiest way to make a hash stable is to return one of the other three
+constructors from above.
 
-Functions default to `UseStringify`, NamedTuple's to `UseProperties` and tuples
-and arrays to `UseIterate`, all other objects default to `UseWrite`.
+## Implemented methods of `hashmethod`
 
-## Including object type in the hashed value
-
-The type is not hashed for `UseIterate` and `UseProperties`. This means that
-e.g. two objects with the same set of properties and values will hash to the
-same value. You can include the qualified name of the type (as a string) in the
-hashed value, by setting the first type argument to :typed (e.g.
-`UseIterate{:typed}()`) (a fall back method sets this argument to `:nottyped` by
-default).
+- `Any`: `UseWrite()`
+- `Function`: `UseQualifiedName`
+- `NamedTuples`: `UseProperties` 
+- `Array`, `Tuple`: `UseIterate`
 
 """
 hashmethod(::Any) = UseWrite()
 hashmethod(::Union{Tuple,Array}) = UseIterate()
 hashmethod(::NamedTuple) = UseProperties()
-hashmethod(::Function) = UseStringify()
+hashmethod(::Function) = UseQualifiedName()
 
 hashwrite(io, x) = hashwrite(io, x, hashmethod(x))
 
@@ -82,9 +87,9 @@ consider irrelevant for its hash.
 
 You can customize how an object is hashed using `hashmethod`.
 """
-function stablehash(obj...)
+function simplehash(obj...)
     io = IOBuffer()
-    hashwrite(io,obj)
+    hashwrite(io, obj)
     crc32(take!(io))
 end
 

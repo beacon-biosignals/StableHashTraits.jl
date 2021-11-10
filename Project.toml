@@ -5,9 +5,12 @@ version = "0.1.0"
 
 [deps]
 CRC = "44b605c4-b955-5f2b-9b6d-d2bd01d3d205"
+TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 
 [compat]
 julia = "1"
+CRC = "4"
+TupleTools = "1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
