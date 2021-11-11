@@ -2,7 +2,7 @@ module SimpleHashes
 
 export simplehash, UseWrite, UseIterate, UseProperties, UseQualifiedName
 
-using CRC, TupleTools
+using CRC, TupleTools, Compat
 
 const crc32 = crc(CRC_32)
 
@@ -10,14 +10,14 @@ struct UseWrite end
 hashwrite(io, x, ::UseWrite) = write(io, x)
 
 struct UseIterate end
-function hashwrite(io, x, ::UseIterate) where {T}
+function hashwrite(io, x, ::UseIterate)
     for el in x
         hashwrite(io, el)
     end
 end
 
 struct UseProperties end
-function hashwrite(io, x, ::UseProperties) where {T}
+function hashwrite(io, x, ::UseProperties)
     for key in TupleTools.sort(propertynames(x), by=string)
         hashwrite(io, key)
         hashwrite(io, getproperty(x, key))

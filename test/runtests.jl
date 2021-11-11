@@ -1,6 +1,7 @@
 using SimpleHashes
+using Aqua
 using Test
-# TODO: and Aurora or whatever it is
+Aqua.test_all(SimpleHashes)
 
 struct TestType
     a
