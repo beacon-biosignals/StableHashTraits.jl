@@ -6,14 +6,29 @@
 
 The aim of SimpleHashes is to make it easy to compute a stable hash of any Julia
 value with minimal boilerplate; here, "stable" means the value will not change
-across julia versions.
+across Julia versions.
+
+For example:
+
+
+```julia
+struct MyType
+   a
+   b
+end
+SimpleHashes.hashmethod(::MyType) = UseProperties()
+
+simplehash(MyType(1,2)) == simplehash((a=1, b=2)) # true
+```
+
+## Details
 
 There is one exported method: `simplehash`. You call this on any number of
 objects and the returned value is a hash of those objects (the argument order
 matters).
 
-You can cuztomize its behavior for particular objects by implementing the trait `SimpleHashes.hashmethod` for the
-type you'd like to customize. Your method should simply call and return the value from one of the following constructors.
+You can cuztomize its behavior for particular types by implementing the trait
+`SimpleHashes.hashmethod`. Any method of `hashmethod` should simply return one of the following values.
 
 1. `UseWrite()`: writes the object to a binary format using `write(io, x)` and
    takes a hash of that (this is the default behavior).
@@ -28,10 +43,11 @@ type you'd like to customize. Your method should simply call and return the valu
    `UseQualifiedName(UseProperites())`)
 
 This means that by default, if `write` for an object changes, so will its hash.
-The easiest way to make a hash stable is to return one of the other three
-constructors from above.
+The easiest way to make a hash stable is to use one of the other options (2-4).
 
 ## Implemented methods of `hashmethod`
 
-The fallback method of `hashmethod` returns `UseWrite()`. Functions default to `UseQualifiedName`, NamedTuples `UseProperties` and tuples
-and arrays to `UseIterate`.
+- `Any`: `UseWrite()`
+- `Function`: `UseQualifiedName`
+- `NamedTuples`: `UseProperties` 
+- `Array`, `Tuple`: `UseIterate`

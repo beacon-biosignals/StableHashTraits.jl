@@ -48,18 +48,18 @@ Retrieve the trait object that indicates how a type should be hashed using
 
 1. `UseWrite()`: writes the object to a binary format using `write(io, x)` and
    takes a hash of that (this is the default behavior).
-2. `UseIterate()`: assumes the object is iterable and finds a hash of all elements
+2. `UseIterate()`: assumes the object is iterable and finds a hash of all
+   elements
 3. `UseProperties()`: assumes a struct of some type and uses `propertynames` and
    `getproperty` to compute a hash of all fields.
-4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is
-   the type of the object. Throws an error if the name includes `#` (e.g. an
+4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T`
+   is the type of the object. Throws an error if the name includes `#` (e.g. an
    anonymous function). If you wish to include this qualified name *and* another
    method, pass one of the other three methods as an arugment (e.g.
    `UseQualifiedName(UseProperites())`)
 
 This means that by default, if `write` for an object changes, so will its hash.
-The easiest way to make a hash stable is to return one of the other three
-constructors from above.
+The easiest way to make a hash stable is to use one of the other options (2-4).
 
 ## Implemented methods of `hashmethod`
 
