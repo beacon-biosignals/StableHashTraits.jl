@@ -18,7 +18,7 @@ end
 
 struct UseProperties end
 function hashwrite(io, x, ::UseProperties)
-    for key in TupleTools.sort(propertynames(x), by=string)
+    for key in TupleTools.sort(propertynames(x); by=string)
         hashwrite(io, key)
         hashwrite(io, getproperty(x, key))
     end
@@ -29,15 +29,15 @@ struct UseQualifiedName{T}
 end
 UseQualifiedName() = UseQualifiedName(nothing)
 qualified_name(x::Function) = string(parentmodule(x), '.', nameof(x))
-qualified_name(::T) where T = string(parentmodule(T), '.', nameof(T))
-qualified_name(::Type{T}) where T = string(parentmodule(T), '.', nameof(T))
+qualified_name(::T) where {T} = string(parentmodule(T), '.', nameof(T))
+qualified_name(::Type{T}) where {T} = string(parentmodule(T), '.', nameof(T))
 function hashwrite(io, x, method::UseQualifiedName)
     str = qualified_name(x)
     if occursin(r"\.#[^.]*$", str)
         error("Annonymous types (those starting with `#`) cannot be hashed to a reliable value")
     end
     hashwrite(io, str)
-    !isnothing(method.parent) && hashwrite(io, x, method.parent)
+    return !isnothing(method.parent) && hashwrite(io, x, method.parent)
 end
 
 """
@@ -90,7 +90,7 @@ You can customize how an object is hashed using `hashmethod`.
 function simplehash(obj...)
     io = IOBuffer()
     hashwrite(io, obj)
-    crc32(take!(io))
+    return crc32(take!(io))
 end
 
 end
