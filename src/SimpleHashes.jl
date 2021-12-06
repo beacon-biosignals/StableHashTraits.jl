@@ -24,7 +24,7 @@ function simple_hash_helper(x, hash, ::UseIterate)
 end
 
 struct UseProperties{S} end
-function UseProperties(by::Symbol = :ByName)
+function UseProperties(by::Symbol=:ByName)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return UseProperties{by}()
 end
