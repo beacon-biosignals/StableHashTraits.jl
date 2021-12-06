@@ -48,6 +48,6 @@ Your hash will be stable if the output for the given method remains the same: e.
 ## Implemented methods of `hash_method`
 
 - `Any`: `UseWrite()`
-- `Function`: `UseQualifiedName`
-- `NamedTuples`: `UseProperties` 
-- `Array`, `Tuple`: `UseIterate`
+- `Function`: `UseQualifiedName()`
+- `NamedTuples`: `UseProperties()` 
+- `Array`, `Tuple`: `UseIterate()`
