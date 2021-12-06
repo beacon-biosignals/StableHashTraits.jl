@@ -5,7 +5,7 @@ export simple_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName
 using CRC32c, TupleTools, Compat
 
 struct UseWrite end
-function simple_hash_helper(x, hash, ::UseWrite) 
+function simple_hash_helper(x, hash, ::UseWrite)
     io = IOBuffer()
     write(io, x)
     return hash(take!(io))
@@ -32,7 +32,8 @@ orderproperties(::UseProperties{:ByOrder}, props) = props
 orderproperties(::UseProperties{:ByName}, props) = TupleTools.sort(props; by=string)
 function simple_hash_helper(x, hash, use::UseProperties)
     return simple_hash_helper((k => getproperty(x, k)
-                               for k in orderproperties(use, propertynames(x))), hash, UseIterate())
+                               for k in orderproperties(use, propertynames(x))), hash,
+                              UseIterate())
 end
 
 struct UseQualifiedName{T}
@@ -49,7 +50,8 @@ function simple_hash_helper(x, hash, method::UseQualifiedName)
     end
     result = simple_hash_helper(str, hash)
     if !isnothing(method.parent)
-        return hash(copy(reinterpret(UInt8, [simple_hash_helper(x, hash, method.parent)])), result)
+        return hash(copy(reinterpret(UInt8, [simple_hash_helper(x, hash, method.parent)])),
+                    result)
     else
         return result
     end
