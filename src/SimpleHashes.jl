@@ -5,13 +5,22 @@ export simple_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName
 using CRC32c, TupleTools, Compat
 
 struct UseWrite end
-hash_write(io, x, ::UseWrite) = write(io, x)
+function simple_hash_helper(x, hash, ::UseWrite) 
+    io = IOBuffer()
+    write(io, x)
+    return hash(take!(io))
+end
+
+hash_default(::typeof(crc32c)) = UInt32(0)
+hash_default(x) = UInt
 
 struct UseIterate end
-function hash_write(io, x, ::UseIterate)
+function simple_hash_helper(x, hash, ::UseIterate)
+    result = hash(UInt8[])
     for el in x
-        hash_write(io, el)
+        result = hash(copy(reinterpret(UInt8, [simple_hash_helper(el, hash)])), result)
     end
+    return result
 end
 
 struct UseProperties{S} end
@@ -21,11 +30,9 @@ function UseProperties(by::Symbol = :ByName)
 end
 orderproperties(::UseProperties{:ByOrder}, props) = props
 orderproperties(::UseProperties{:ByName}, props) = TupleTools.sort(props; by=string)
-function hash_write(io, x, use::UseProperties)
-    for key in orderproperties(use, propertynames(x))
-        hash_write(io, key)
-        hash_write(io, getproperty(x, key))
-    end
+function simple_hash_helper(x, hash, use::UseProperties)
+    return simple_hash_helper((k => getproperty(x, k)
+                               for k in orderproperties(use, propertynames(x))), hash, UseIterate())
 end
 
 struct UseQualifiedName{T}
@@ -35,13 +42,17 @@ UseQualifiedName() = UseQualifiedName(nothing)
 qualified_name(x::Function) = string(parentmodule(x), '.', nameof(x))
 qualified_name(::T) where {T} = string(parentmodule(T), '.', nameof(T))
 qualified_name(::Type{T}) where {T} = string(parentmodule(T), '.', nameof(T))
-function hash_write(io, x, method::UseQualifiedName)
+function simple_hash_helper(x, hash, method::UseQualifiedName)
     str = qualified_name(x)
     if occursin(r"\.#[^.]*$", str)
         error("Annonymous types (those starting with `#`) cannot be hashed to a reliable value")
     end
-    hash_write(io, str)
-    return !isnothing(method.parent) && hash_write(io, x, method.parent)
+    result = simple_hash_helper(str, hash)
+    if !isnothing(method.parent)
+        return hash(copy(reinterpret(UInt8, [simple_hash_helper(x, hash, method.parent)])), result)
+    else
+        return result
+    end
 end
 
 """
@@ -80,11 +91,13 @@ The easiest way to make a hash stable is to use one of the other options (2-4).
 
 """
 hash_method(::Any) = UseWrite()
-hash_method(::Union{Tuple,Array}) = UseIterate()
+hash_method(::Array) = UseIterate()
+hash_method(::Tuple) = UseIterate()
+hash_method(::Pair) = UseIterate()
 hash_method(::NamedTuple) = UseProperties()
 hash_method(::Function) = UseQualifiedName()
 
-hash_write(io, x) = hash_write(io, x, hash_method(x))
+simple_hash_helper(x, hash) = simple_hash_helper(x, hash, hash_method(x))
 
 """
     simple_hash(arg1, arg2, ...; hash = crc32c)
@@ -98,9 +111,7 @@ consider irrelevant for its hash.
 You can customize how an object is hashed using `hash_method`.
 """
 function simple_hash(obj...; hash = crc32c)
-    io = IOBuffer()
-    hash_write(io, obj)
-    return hash(take!(io))
+    return simple_hash_helper(obj, hash)
 end
 
 end
