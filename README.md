@@ -2,11 +2,12 @@
 
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
  [![GitHub Actions](https://github.com/beacon-biosignals/SimpleHashes.jl/workflows/CI/badge.svg)](https://github.com/beacon-biosignals/SimpleHashes.jl/actions/workflows/ci.yml)
+[![Code Style: YASGuide](https://img.shields.io/badge/code%20style-yas-violet.svg)](https://github.com/jrevels/YASGu
 
 
 The aim of SimpleHashes is to make it easy to compute a stable hash of any Julia
 value with minimal boilerplate; here, "stable" means the value will not change
-across Julia versions.
+across Julia versions (or between Julia).
 
 For example:
 
@@ -16,19 +17,19 @@ struct MyType
    a
    b
 end
-SimpleHashes.hashmethod(::MyType) = UseProperties()
+SimpleHashes.hash_method(::MyType) = UseProperties()
 
-simplehash(MyType(1,2)) == simplehash((a=1, b=2)) # true
+simple_hash(MyType(1,2)) == simple_hash((a=1, b=2)) # true
 ```
 
 ## Details
 
-There is one exported method: `simplehash`. You call this on any number of
+There is one exported method: `simple_hash`. You call this on any number of
 objects and the returned value is a hash of those objects (the argument order
 matters).
 
 You can cuztomize its behavior for particular types by implementing the trait
-`SimpleHashes.hashmethod`. Any method of `hashmethod` should simply return one of the following values.
+`SimpleHashes.hash_method`. Any method of `hash_method` should simply return one of the following values.
 
 1. `UseWrite()`: writes the object to a binary format using `write(io, x)` and
    takes a hash of that (this is the default behavior).
@@ -42,10 +43,9 @@ You can cuztomize its behavior for particular types by implementing the trait
    method, pass one of the other three methods as an arugment (e.g.
    `UseQualifiedName(UseProperites())`)
 
-This means that by default, if `write` for an object changes, so will its hash.
-The easiest way to make a hash stable is to use one of the other options (2-4).
+Your hash will be stable if the output for the given method remains the same: e.g. if `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the properties are the same for `UseProperties`, the hash will be the same; etc...
 
-## Implemented methods of `hashmethod`
+## Implemented methods of `hash_method`
 
 - `Any`: `UseWrite()`
 - `Function`: `UseQualifiedName`

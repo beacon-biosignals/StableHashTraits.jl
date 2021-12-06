@@ -13,17 +13,17 @@ struct TestType2
     b::Any
 end
 
-SimpleHashes.hashmethod(::TestType) = UseProperties()
-SimpleHashes.hashmethod(::TestType2) = UseQualifiedName(UseProperties())
+SimpleHashes.hash_method(::TestType) = UseProperties()
+SimpleHashes.hash_method(::TestType2) = UseQualifiedName(UseProperties())
 
 @testset "SimpleHashes.jl" begin
-    @test simplehash([1, 2, 3]) != simplehash([3, 2, 1])
-    @test simplehash((1, 2, 3)) == simplehash([1, 2, 3])
-    @test simplehash((a=1, b=2)) == simplehash((b=2, a=1))
-    @test simplehash((a=1, b=2)) != simplehash((a=2, b=1))
-    @test simplehash(sin) != simplehash(cos)
-    @test_throws ErrorException simplehash(x -> x + 1)
-    @test simplehash(TestType(1, 2)) == simplehash(TestType(1, 2))
-    @test simplehash(TestType(1, 2)) == simplehash((a=1, b=2))
-    @test simplehash(TestType2(1, 2)) != simplehash((a=1, b=2))
+    @test simple_hash([1, 2, 3]) != simple_hash([3, 2, 1])
+    @test simple_hash((1, 2, 3)) == simple_hash([1, 2, 3])
+    @test simple_hash((a=1, b=2)) == simple_hash((b=2, a=1))
+    @test simple_hash((a=1, b=2)) != simple_hash((a=2, b=1))
+    @test simple_hash(sin) != simple_hash(cos)
+    @test_throws ErrorException simple_hash(x -> x + 1)
+    @test simple_hash(TestType(1, 2)) == simple_hash(TestType(1, 2))
+    @test simple_hash(TestType(1, 2)) == simple_hash((a=1, b=2))
+    @test simple_hash(TestType2(1, 2)) != simple_hash((a=1, b=2))
 end
