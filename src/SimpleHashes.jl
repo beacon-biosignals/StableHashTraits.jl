@@ -81,15 +81,17 @@ Retrieve the trait object that indicates how a type should be hashed using
    custom struct to hash to the same value? If you don't then use
    `UseQualifiedName`.
 
-This means that by default, if `write` for an object changes, so will its hash.
-The easiest way to make a hash stable is to use one of the other options (2-4).
+Your hash will be stable if the output for the given method remains the same:
+e.g. if `write` is the same for an object that uses `UseWrite`, its hash will be
+the same; if the properties are the same for `UseProperties`, the hash will be
+the same; etc...
 
 ## Implemented methods of `hash_method`
 
 - `Any`: `UseWrite()`
 - `Function`: `UseQualifiedName()`
 - `NamedTuples`: `UseProperties()` 
-- `Array`, `Tuple`: `UseIterate()`
+- `Array`, `Tuple`, `Pair`: `UseIterate()`
 
 """
 hash_method(::Any) = UseWrite()
@@ -112,7 +114,7 @@ consider irrelevant for its hash.
 
 You can customize how an object is hashed using `hash_method`.
 """
-function simple_hash(obj...; hash = crc32c)
+function simple_hash(obj...; hash=crc32c)
     return simple_hash_helper(obj, hash)
 end
 

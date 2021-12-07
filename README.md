@@ -50,4 +50,4 @@ Your hash will be stable if the output for the given method remains the same: e.
 - `Any`: `UseWrite()`
 - `Function`: `UseQualifiedName()`
 - `NamedTuples`: `UseProperties()` 
-- `Array`, `Tuple`: `UseIterate()`
+- `Array`, `Tuple`, `Pair`: `UseIterate()`
