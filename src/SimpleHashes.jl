@@ -116,7 +116,7 @@ You can customize how an object is hashed using `hash_method`.
 
 To change the hash algorithm used, pass a different funciton to `alg`. The
 function should take one required argument (value to hash) and a second,
-optional argumen (a hash value to mix).
+optional argument (a hash value to mix).
 
 """
 function simple_hash(obj...; alg=crc32c)
