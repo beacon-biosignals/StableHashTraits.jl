@@ -104,7 +104,7 @@ hash_method(::Function) = UseQualifiedName()
 simple_hash_helper(x, hash) = simple_hash_helper(x, hash, hash_method(x))
 
 """
-    simple_hash(arg1, arg2, ...; hash = crc32c)
+    simple_hash(arg1, arg2, ...; alg=crc32c)
 
 Create a stable hash of the given objects. This is intended to remain unchanged
 across julia verison. The default fallback method is to write the object and
@@ -113,9 +113,14 @@ the most sensitive to various changes to the object that you might want to
 consider irrelevant for its hash. 
 
 You can customize how an object is hashed using `hash_method`.
+
+To change the hash algorithm used, pass a different funciton to `alg`. The
+function should take one required argument (value to hash) and a second,
+optional argumen (a hash value to mix).
+
 """
-function simple_hash(obj...; hash=crc32c)
-    return simple_hash_helper(obj, hash)
+function simple_hash(obj...; alg=crc32c)
+    return simple_hash_helper(obj, alg)
 end
 
 end
