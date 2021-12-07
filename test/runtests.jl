@@ -25,7 +25,7 @@ end
 
 SimpleHashes.hash_method(::TestType) = UseProperties()
 SimpleHashes.hash_method(::TestType2) = UseQualifiedName(UseProperties())
-SimpleHashes.hash_method(::TestType3) = UseProperties(:ByOrder)
+SimpleHashes.hash_method(::TestType3) = UseProperties(:ByName)
 SimpleHashes.hash_method(::TestType4) = UseProperties()
 
 @testset "SimpleHashes.jl" begin
@@ -36,7 +36,7 @@ SimpleHashes.hash_method(::TestType4) = UseProperties()
 
     @test simple_hash([1, 2, 3]) != simple_hash([3, 2, 1])
     @test simple_hash((1, 2, 3)) == simple_hash([1, 2, 3])
-    @test simple_hash((a=1, b=2)) == simple_hash((b=2, a=1))
+    @test simple_hash((a=1, b=2)) != simple_hash((b=2, a=1))
     @test simple_hash((a=1, b=2)) != simple_hash((a=2, b=1))
     @test simple_hash(sin) == simple_hash("Base.sin")
     @test simple_hash([:ab]) != simple_hash([:a, :b])
@@ -49,8 +49,8 @@ SimpleHashes.hash_method(::TestType4) = UseProperties()
     @test simple_hash(TestType(1, 2)) == simple_hash(TestType(1, 2))
     @test simple_hash(TestType(1, 2)) == simple_hash((a=1, b=2))
     @test simple_hash(TestType2(1, 2)) != simple_hash((a=1, b=2))
-    @test simple_hash(TestType3(1, 2)) == simple_hash(TestType3(1, 2))
-    @test simple_hash(TestType3(1, 2)) != simple_hash(TestType4(1, 2))
-    @test simple_hash(TestType(1, 2)) == simple_hash(TestType4(2, 1))
-    @test simple_hash(TestType(1, 2)) != simple_hash(TestType3(2, 1))
+    @test simple_hash(TestType4(1, 2)) == simple_hash(TestType4(1, 2))
+    @test simple_hash(TestType4(1, 2)) != simple_hash(TestType3(1, 2))
+    @test simple_hash(TestType(1, 2)) == simple_hash(TestType3(2, 1))
+    @test simple_hash(TestType(1, 2)) != simple_hash(TestType4(2, 1))
 end

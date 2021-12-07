@@ -24,7 +24,7 @@ function simple_hash_helper(x, hash, ::UseIterate)
 end
 
 struct UseProperties{S} end
-function UseProperties(by::Symbol=:ByName)
+function UseProperties(by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return UseProperties{by}()
 end
@@ -69,9 +69,9 @@ Retrieve the trait object that indicates how a type should be hashed using
    elements
 3. `UseProperties()`: assumes a struct of some type and uses `propertynames` and
    `getproperty` to compute a hash of all fields. You can further customize its
-   behavior by passing the symbol `:ByName` (sorting properties by their name
-   before hashing), which is the default, or `:ByOrder` (to hash properties in
-   the order they are listed by `propertynames`).
+   behavior by passing the symbol `:ByOrder` (to hash properties in the order
+   they are listed by `propertynames`), which is the default, or `:ByName`
+   (sorting properties by their name before hashing).
 4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T`
    is the type of the object. Throws an error if the name includes `#` (e.g. an
    anonymous function). If you wish to include this qualified name *and* another
