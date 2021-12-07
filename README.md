@@ -36,12 +36,18 @@ You can cuztomize its behavior for particular types by implementing the trait
 2. `UseIterate()`: assumes the object is iterable and finds a hash of all
    elements
 3. `UseProperties()`: assumes a struct of some type and uses `propertynames` and
-   `getproperty` to compute a hash of all fields.
+   `getproperty` to compute a hash of all fields. You can further customize its
+   behavior by passing the symbol `:ByOrder` (to hash properties in the order
+   they are listed by `propertynames`), which is the default, or `:ByName`
+   (sorting properties by their name before hashing).
 4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T`
    is the type of the object. Throws an error if the name includes `#` (e.g. an
    anonymous function). If you wish to include this qualified name *and* another
    method, pass one of the other three methods as an arugment (e.g.
-   `UseQualifiedName(UseProperites())`)
+   `UseQualifiedName(UseProperites())`). This can be used to include the type as
+   part of the hash. Do you want a named tuple with the same properties as your
+   custom struct to hash to the same value? If you don't then use
+   `UseQualifiedName`.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the properties are the same for `UseProperties`, the hash will be the same; etc...
 
