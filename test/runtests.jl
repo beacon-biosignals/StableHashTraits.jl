@@ -23,16 +23,22 @@ struct TestType4
     a::Any
 end
 
+struct TypeType
+    atype::Type
+end
+
 SimpleHashes.hash_method(::TestType) = UseProperties()
 SimpleHashes.hash_method(::TestType2) = UseQualifiedName(UseProperties())
 SimpleHashes.hash_method(::TestType3) = UseProperties(:ByName)
 SimpleHashes.hash_method(::TestType4) = UseProperties()
+SimpleHashes.hash_method(::TypeType) = UseProperties()
 
 @testset "SimpleHashes.jl" begin
     @test simple_hash([1, 2, 3]) == 0x1a366aea
     @test simple_hash((a=1, b=2)) == 0x240bb84c
     @test simple_hash(sin) == 0x7706a39f
     @test simple_hash(TestType2(1, 2)) == 0x1f99ed3b
+    @test simple_hash(TypeType(Array)) == 0xae27dba8
 
     @test simple_hash([1, 2, 3]) != simple_hash([3, 2, 1])
     @test simple_hash((1, 2, 3)) == simple_hash([1, 2, 3])

@@ -11,9 +11,6 @@ function simple_hash_helper(x, hash, ::UseWrite)
     return hash(take!(io))
 end
 
-hash_default(::typeof(crc32c)) = UInt32(0)
-hash_default(x) = UInt
-
 struct UseIterate end
 function simple_hash_helper(x, hash, ::UseIterate)
     result = hash(UInt8[])
@@ -92,6 +89,7 @@ the same; etc...
 - `Function`: `UseQualifiedName()`
 - `NamedTuples`: `UseProperties()` 
 - `Array`, `Tuple`, `Pair`: `UseIterate()`
+- `Type`: `UseQualifiedName()`
 
 """
 hash_method(::Any) = UseWrite()
@@ -100,6 +98,7 @@ hash_method(::Tuple) = UseIterate()
 hash_method(::Pair) = UseIterate()
 hash_method(::NamedTuple) = UseProperties()
 hash_method(::Function) = UseQualifiedName()
+hash_method(::Type) = UseQualifiedName()
 
 simple_hash_helper(x, hash) = simple_hash_helper(x, hash, hash_method(x))
 
