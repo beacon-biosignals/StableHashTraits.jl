@@ -92,6 +92,7 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 """
 hash_method(::Any) = UseWrite()
 hash_method(::AbstractArray) = UseIterate()
+hash_method(::AbstractRange) = UseProperties()
 hash_method(::Tuple) = UseIterate()
 hash_method(::Pair) = UseIterate()
 hash_method(::NamedTuple) = UseProperties()
