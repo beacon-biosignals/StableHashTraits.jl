@@ -1,4 +1,4 @@
-name = "SimpleHashes"
+name = "StableHashTraits"
 uuid = "c5dd0088-6c3f-4803-b00e-f31a60c170fa"
 authors = ["Beacon Biosignals, Inc."]
 version = "0.1.0"
