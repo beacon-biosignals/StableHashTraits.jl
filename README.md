@@ -8,7 +8,7 @@
 
 The aim of StableHashTraits is to make it easy to compute a stable hash of any Julia value
 with minimal boilerplate using trait-based dispatch; here, "stable" means the value will not
-change across Julia versions (or between Julia).
+change across Julia versions (or between Julia sessions).
 
 For example:
 
@@ -26,10 +26,12 @@ stable_hash(MyType(1,2)) == stable_hash((a=1, b=2)) # true
 ## Why use `stable_hash` instead of `Base.hash`?
 
 This package can be useful when:
-- you want to be ensure the hash value will not change when you update julia OR
+- you want to be ensure the hash value will not change when you update Julia or start a new session, OR
 - you want to compute a hash for an object that does not have `hash` defined. 
 
-It isn't inteded for secure hashing.
+This is useful for content-addressed caching, in which e.g. some function of a value is stored at a location determined by a hash. Given the value, one can recompute the hash to determine where to look to see if the function evaluation on that value has already been cached.
+
+It isn't intended for secure hashing.
 
 ## Details
 
