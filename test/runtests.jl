@@ -1,7 +1,7 @@
-using SimpleHashes
+using StableHashTraits
 using Aqua
 using Test
-Aqua.test_all(SimpleHashes)
+Aqua.test_all(StableHashTraits)
 
 struct TestType
     a::Any
@@ -27,36 +27,46 @@ struct TypeType
     atype::Type
 end
 
-SimpleHashes.hash_method(::TestType) = UseProperties()
-SimpleHashes.hash_method(::TestType2) = UseQualifiedName(UseProperties())
-SimpleHashes.hash_method(::TestType3) = UseProperties(:ByName)
-SimpleHashes.hash_method(::TestType4) = UseProperties()
-SimpleHashes.hash_method(::TypeType) = UseProperties()
+struct TestType5
+    bob::String
+end
 
-@testset "SimpleHashes.jl" begin
-    @test simple_hash([1, 2, 3]) == 0x1a366aea
-    @test simple_hash((a=1, b=2)) == 0x240bb84c
-    @test simple_hash(sin) == 0x7706a39f
-    @test simple_hash(TestType2(1, 2)) == 0x1f99ed3b
-    @test simple_hash(TypeType(Array)) == 0xae27dba8
+StableHashTraits.hash_method(::TestType) = UseProperties()
+StableHashTraits.hash_method(::TestType2) = UseQualifiedName(UseProperties())
+StableHashTraits.hash_method(::TestType3) = UseProperties(:ByName)
+StableHashTraits.hash_method(::TestType4) = UseProperties()
+StableHashTraits.hash_method(::TypeType) = UseProperties()
+StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
 
-    @test simple_hash([1, 2, 3]) != simple_hash([3, 2, 1])
-    @test simple_hash((1, 2, 3)) == simple_hash([1, 2, 3])
-    @test simple_hash((a=1, b=2)) != simple_hash((b=2, a=1))
-    @test simple_hash((a=1, b=2)) != simple_hash((a=2, b=1))
-    @test simple_hash(sin) == simple_hash("Base.sin")
-    @test simple_hash([:ab]) != simple_hash([:a, :b])
-    @test simple_hash("a", "b") != simple_hash("ab")
-    @test simple_hash(["ab"]) != simple_hash(["a", "b"])
-    @test simple_hash(sin) != simple_hash(cos)
-    @test simple_hash(sin) != simple_hash(:sin)
-    @test simple_hash(sin) != simple_hash("sin")
-    @test_throws ErrorException simple_hash(x -> x + 1)
-    @test simple_hash(TestType(1, 2)) == simple_hash(TestType(1, 2))
-    @test simple_hash(TestType(1, 2)) == simple_hash((a=1, b=2))
-    @test simple_hash(TestType2(1, 2)) != simple_hash((a=1, b=2))
-    @test simple_hash(TestType4(1, 2)) == simple_hash(TestType4(1, 2))
-    @test simple_hash(TestType4(1, 2)) != simple_hash(TestType3(1, 2))
-    @test simple_hash(TestType(1, 2)) == simple_hash(TestType3(2, 1))
-    @test simple_hash(TestType(1, 2)) != simple_hash(TestType4(2, 1))
+@testset "StableHashTraits.jl" begin
+    @test stable_hash([1, 2, 3]) == 0x1a366aea
+    @test stable_hash((a=1, b=2)) == 0x240bb84c
+    @test stable_hash(sin) == 0x7706a39f
+    @test stable_hash(TestType2(1, 2)) == 0x1f99ed3b
+    @test stable_hash(TypeType(Array)) == 0xae27dba8
+    @test stable_hash(TestType5("bobo")) == 0x85c469dd
+    @test stable_hash(Nothing) == 0xb9695255
+    @test stable_hash(Missing) == 0xafd1df92
+
+    @test stable_hash([1, 2, 3]) != stable_hash([3, 2, 1])
+    @test stable_hash((1, 2, 3)) == stable_hash([1, 2, 3])
+    @test stable_hash((a=1, b=2)) != stable_hash((b=2, a=1))
+    @test stable_hash((a=1, b=2)) != stable_hash((a=2, b=1))
+    @test stable_hash(sin) == stable_hash("Base.sin")
+    @test stable_hash([:ab]) != stable_hash([:a, :b])
+    @test stable_hash("a", "b") != stable_hash("ab")
+    @test stable_hash(["ab"]) != stable_hash(["a", "b"])
+    @test stable_hash(sin) != stable_hash(cos)
+    @test stable_hash(sin) != stable_hash(:sin)
+    @test stable_hash(sin) != stable_hash("sin")
+    @test stable_hash(1:10) != stable_hash(collect(1:10))
+    @test stable_hash(view(collect(1:5), 1:2)) == stable_hash([1, 2])
+    @test_throws ErrorException stable_hash(x -> x + 1)
+    @test stable_hash(TestType(1, 2)) == stable_hash(TestType(1, 2))
+    @test stable_hash(TestType(1, 2)) == stable_hash((a=1, b=2))
+    @test stable_hash(TestType2(1, 2)) != stable_hash((a=1, b=2))
+    @test stable_hash(TestType4(1, 2)) == stable_hash(TestType4(1, 2))
+    @test stable_hash(TestType4(1, 2)) != stable_hash(TestType3(1, 2))
+    @test stable_hash(TestType(1, 2)) == stable_hash(TestType3(2, 1))
+    @test stable_hash(TestType(1, 2)) != stable_hash(TestType4(2, 1))
 end
