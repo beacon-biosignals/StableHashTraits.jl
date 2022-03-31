@@ -70,3 +70,9 @@ Your hash will be stable if the output for the given method remains the same: e.
 - `NamedTuples`: `UseProperties()` 
 - `AbstractArray`, `Tuple`, `Pair`: `UseIterate()`
 - `Missing`, `Nothing`: `UseQualifiedNamed()`
+
+## Hashing gotcha's
+
+Here-in is a list of things hash collisions that have been deemed to be acceptable in practice:
+
+- `stable_hash(sin) == stable_hash("Base.sin")`
