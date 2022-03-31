@@ -73,6 +73,6 @@ Your hash will be stable if the output for the given method remains the same: e.
 
 ## Hashing gotcha's
 
-Here-in is a list of things hash collisions that have been deemed to be acceptable in practice:
+Here-in is a list of hash collisions that have been deemed to be acceptable in practice:
 
 - `stable_hash(sin) == stable_hash("Base.sin")`
