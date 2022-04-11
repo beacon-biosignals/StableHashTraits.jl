@@ -55,8 +55,8 @@ You can customize its behavior for particular types by implementing the trait
 4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T`
    is the type of the object. Throws an error if the name includes `#` (e.g. an
    anonymous function). If you wish to include this qualified name *and* another
-   method, pass one of the other three methods as an arugment (e.g.
-   `UseQualifiedName(UseProperites())`). This can be used to include the type as
+   method, pass one of the other three methods as an argument (e.g.
+   `UseQualifiedName(UseProperties())`). This can be used to include the type as
    part of the hash. Do you want a named tuple with the same properties as your
    custom struct to hash to the same value? If you don't, then use
    `UseQualifiedName`.
