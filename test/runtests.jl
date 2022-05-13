@@ -47,9 +47,11 @@ StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
     @test stable_hash(TestType5("bobo")) == 0x85c469dd
     @test stable_hash(Nothing) == 0xb9695255
     @test stable_hash(Missing) == 0xafd1df92
+    @test stable_hash(v"0.1.0") == 0x50cda5b5
 
     @test stable_hash([1, 2, 3]) != stable_hash([3, 2, 1])
     @test stable_hash((1, 2, 3)) == stable_hash([1, 2, 3])
+    @test stable_hash(v"0.1.0") != stable_hash(v"0.1.2")
     @test stable_hash((a=1, b=2)) != stable_hash((b=2, a=1))
     @test stable_hash((a=1, b=2)) != stable_hash((a=2, b=1))
     @test stable_hash(sin) == stable_hash("Base.sin")
