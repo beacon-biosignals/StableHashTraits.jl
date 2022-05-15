@@ -89,6 +89,7 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 - `NamedTuples`: `UseProperties()` 
 - `AbstractArray`, `Tuple`, `Pair`: `UseIterate()`
 - `Missing`, `Nothing`: `UseQualifiedNamed()`
+- `VersionNumber`: `UseProperties()`
 """
 hash_method(::Any) = UseWrite()
 hash_method(::AbstractArray) = UseIterate()
@@ -100,6 +101,7 @@ hash_method(::Function) = UseQualifiedName()
 hash_method(::Type) = UseQualifiedName()
 hash_method(::Nothing) = UseQualifiedName()
 hash_method(::Missing) = UseQualifiedName()
+hash_method(::VersionNumber) = UseProperties()
 
 stable_hash_helper(x, hash) = stable_hash_helper(x, hash, hash_method(x))
 

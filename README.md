@@ -70,6 +70,7 @@ Your hash will be stable if the output for the given method remains the same: e.
 - `NamedTuples`: `UseProperties()` 
 - `AbstractArray`, `Tuple`, `Pair`: `UseIterate()`
 - `Missing`, `Nothing`: `UseQualifiedNamed()`
+- `VersionNumber`: `UseProperties()`
 
 ## Hashing gotcha's
 
