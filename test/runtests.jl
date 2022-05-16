@@ -73,7 +73,7 @@ StableHashTraits.hash_method(::TestType, ::MyContext) = UseProperties(UsePropert
     @test stable_hash(TestType4(1, 2)) != stable_hash(TestType3(1, 2))
     @test stable_hash(TestType(1, 2)) == stable_hash(TestType3(2, 1))
     @test stable_hash(TestType(1, 2)) != stable_hash(TestType4(2, 1))
-    @test stable_hash(TestType(1, 2), context=MyContext()) == stable_hash(TestType2(1, 2))
-    @test stable_hash(TestType(1, 2), context=MyContext()) == 
-          stable_hash(TestType2(1, 2), context=MyContext())
+    @test stable_hash(TestType(1, 2); context=MyContext()) == stable_hash(TestType2(1, 2))
+    @test stable_hash(TestType(1, 2); context=MyContext()) ==
+          stable_hash(TestType2(1, 2); context=MyContext())
 end
