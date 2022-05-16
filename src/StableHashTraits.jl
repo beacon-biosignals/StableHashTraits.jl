@@ -5,10 +5,25 @@ export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName
 using CRC32c, TupleTools, Compat
 
 struct UseWrite end
+"""
+    StableHashTraits.write(io, x, [context])
+
+Writes contents of `x` to an `io` buffer to be hashed during a call to `stable_hash`.
+Fall back methods are defined as follows:
+
+    write(io, x, context) = write(io, x)
+    write(io, x) = Base.write(io, x)
+
+Users of `StableHashTraits` can overwrite either the 2 or 3 arugment version for 
+their types to customize the behavior of `stable_hash`. 
+
+See also: [`StableHashTraits.hash_method`](@ref).
+"""
+write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
 function stable_hash_helper(x, hash, context, ::UseWrite)
     io = IOBuffer()
-    write(io, x)
+    write(io, x, context)
     return hash(take!(io))
 end
 
@@ -99,19 +114,26 @@ package or from Base. This is type piracy, and can easily lead to two different 
 defining the same method: in this case, the method which gets used depends on the order of
 `using` statements... yuck.
 
-To avoid this problem, it is possible define a two argument version of `hash_method`. This
-second arugment can be anything you want, so long as it is a type you have defined. A pass
-through method means that if you haven't defined a method for your context it falls back to
-the default single-argument `hash_method`. For example:
+To avoid this problem, it is possible define a two argument version of `hash_method` (and/or
+a three argument version of `StableHashTraits.write`). This final arugment can be anything
+you want, so long as it is a type you have defined. For example:
 
     using DataFrames
     struct MyContext end
     StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByName)
     stable_hash(DataFrames(a=1:2, b=1:2), context=MyContext())
 
+By default the context is `StableHashTraits.GlobalContext` and just two methods are defined.
+
+    hash_method(x, context) = hash_method(x)
+    StableHashTraits.write(io, x, context) = StableHashTraits.write(io, x)
+
+In this way, you only need to define methods for the types that have non-default behavior
+for your context; furthermore, those who have no need of a particular context can simply
+define the one-argument version of `hash_method` and/or two argument version of `write`.
+
 ```
 """
-hash_method(x, context) = hash_method(x)
 hash_method(::Any) = UseWrite()
 hash_method(::AbstractArray) = UseIterate()
 hash_method(::AbstractRange) = UseProperties()
@@ -124,8 +146,11 @@ hash_method(::Nothing) = UseQualifiedName()
 hash_method(::Missing) = UseQualifiedName()
 hash_method(::VersionNumber) = UseProperties()
 
+struct GlobalContext end
+hash_method(x, context) = hash_method(x)
+
 """
-    stable_hash(arg1, arg2, ...; context=nothing, alg=crc32c)
+    stable_hash(arg1, arg2, ...; context=StableHashTraits.GlobalContext(), alg=crc32c)
 
 Create a stable hash of the given objects. This is intended to remain unchanged
 across julia verisons. The default fallback method is to write the object and
@@ -139,10 +164,11 @@ To change the hash algorithm used, pass a different funciton to `alg`. The
 function should take one required argument (value to hash) and a second,
 optional argument (a hash value to mix).
 
-The `context` value gets passed as the second argument to [`hash_method`](@ref).
+The `context` value gets passed as the second argument to [`hash_method`](@ref),
+and the third argument to [`StableHashTraits.write`](@ref)
 
 """
-function stable_hash(obj...; context, alg=crc32c)
+function stable_hash(obj...; context=GlobalContext(), alg=crc32c)
     return stable_hash_helper(x, alg, context, hash_method(x, context))
 end
 
