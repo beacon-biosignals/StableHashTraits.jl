@@ -169,7 +169,7 @@ and the third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(obj...; context=GlobalContext(), alg=crc32c)
-    return stable_hash_helper(x, alg, context, hash_method(x, context))
+    return stable_hash_helper(obj, alg, context, hash_method(obj, context))
 end
 
 end
