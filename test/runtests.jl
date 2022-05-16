@@ -35,8 +35,10 @@ StableHashTraits.hash_method(::TestType) = UseProperties()
 StableHashTraits.hash_method(::TestType2) = UseQualifiedName(UseProperties())
 StableHashTraits.hash_method(::TestType3) = UseProperties(:ByName)
 StableHashTraits.hash_method(::TestType4) = UseProperties()
-StableHashTraits.hash_method(::TypeType) = UseProperties()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
+
+struct MyContext end
+StableHashTraits.hash_method(::TestType, ::MyContext) = UseProperties(UseProperties())
 
 @testset "StableHashTraits.jl" begin
     @test stable_hash([1, 2, 3]) == 0x1a366aea
@@ -71,4 +73,7 @@ StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
     @test stable_hash(TestType4(1, 2)) != stable_hash(TestType3(1, 2))
     @test stable_hash(TestType(1, 2)) == stable_hash(TestType3(2, 1))
     @test stable_hash(TestType(1, 2)) != stable_hash(TestType4(2, 1))
+    @test stable_hash(TestType(1, 2), context=MyContext()) == stable_hash(TestType2(1, 2))
+    @test stable_hash(TestType(1, 2), context=MyContext()) == 
+          stable_hash(TestType2(1, 2), context=MyContext())
 end
