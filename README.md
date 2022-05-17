@@ -102,3 +102,4 @@ define the one-argument version of `hash_method` and/or two argument version of 
 Here-in is a list of hash collisions that have been deemed to be acceptable in practice:
 
 - `stable_hash(sin) == stable_hash("Base.sin")`
+- `[1,2,3] == (1,2,3)`
