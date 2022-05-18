@@ -72,8 +72,34 @@ Your hash will be stable if the output for the given method remains the same: e.
 - `Missing`, `Nothing`: `UseQualifiedNamed()`
 - `VersionNumber`: `UseProperties()`
 
+## Avoiding Type Piracy
+
+It can be very tempting to define `hash_method` for types that were defined by another
+package or from Base. This is type piracy, and can easily lead to two different packags
+defining the same method: in this case, the method which gets used depends on the order of
+`using` statements... yuck.
+
+To avoid this problem, it is possible define a two argument version of `hash_method` (and/or
+a three argument version of `StableHashTraits.write`). This final arugment can be anything
+you want, so long as it is a type you have defined. For example:
+
+    using DataFrames
+    struct MyContext end
+    StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByName)
+    stable_hash(DataFrames(a=1:2, b=1:2); context=MyContext())
+
+By default the context is `StableHashTraits.GlobalContext` and just two methods are defined.
+
+    hash_method(x, context) = hash_method(x)
+    StableHashTraits.write(io, x, context) = StableHashTraits.write(io, x)
+
+In this way, you only need to define methods for the types that have non-default behavior
+for your context; furthermore, those who have no need of a particular context can simply
+define the one-argument version of `hash_method` and/or two argument version of `write`.
+
 ## Hashing gotcha's
 
 Here-in is a list of hash collisions that have been deemed to be acceptable in practice:
 
 - `stable_hash(sin) == stable_hash("Base.sin")`
+- `[1,2,3] == (1,2,3)`
