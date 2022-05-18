@@ -86,7 +86,7 @@ you want, so long as it is a type you have defined. For example:
     using DataFrames
     struct MyContext end
     StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByName)
-    stable_hash(DataFrames(a=1:2, b=1:2), context=MyContext())
+    stable_hash(DataFrames(a=1:2, b=1:2); context=MyContext())
 
 By default the context is `StableHashTraits.GlobalContext` and just two methods are defined.
 

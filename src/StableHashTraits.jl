@@ -14,7 +14,7 @@ Fall back methods are defined as follows:
     write(io, x, context) = write(io, x)
     write(io, x) = Base.write(io, x)
 
-Users of `StableHashTraits` can overwrite either the 2 or 3 arugment version for 
+Users of `StableHashTraits` can overwrite either the 2 or 3 argument version for 
 their types to customize the behavior of `stable_hash`. 
 
 See also: [`StableHashTraits.hash_method`](@ref).
@@ -114,14 +114,14 @@ package or from Base. This is type piracy, and can easily lead to two different 
 defining the same method: in this case, the method which gets used depends on the order of
 `using` statements... yuck.
 
-To avoid this problem, it is possible define a two argument version of `hash_method` (and/or
-a three argument version of `StableHashTraits.write`). This final arugment can be anything
-you want, so long as it is a type you have defined. For example:
+To avoid this problem, it is possible to define a two argument version of `hash_method`
+(and/or a three argument version of `StableHashTraits.write`). This final arugment can be
+anything you want, so long as it is a type you have defined. For example:
 
     using DataFrames
     struct MyContext end
     StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByName)
-    stable_hash(DataFrames(a=1:2, b=1:2), context=MyContext())
+    stable_hash(DataFrames(a=1:2, b=1:2); context=MyContext())
 
 By default the context is `StableHashTraits.GlobalContext` and just two methods are defined.
 
@@ -160,7 +160,7 @@ consider irrelevant for its hash.
 
 You can customize how an object is hashed using `hash_method`.
 
-To change the hash algorithm used, pass a different funciton to `alg`. The
+To change the hash algorithm used, pass a different function to `alg`. The
 function should take one required argument (value to hash) and a second,
 optional argument (a hash value to mix).
 
