@@ -9,6 +9,6 @@ Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
 TupleTools = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
 
 [compat]
-Compat = "3"
+Compat = "3, 4"
 TupleTools = "1"
 julia = "1.6"
