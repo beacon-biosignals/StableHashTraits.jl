@@ -71,6 +71,8 @@ Your hash will be stable if the output for the given method remains the same: e.
 - `AbstractArray`, `Tuple`, `Pair`: `UseIterate()`
 - `Missing`, `Nothing`: `UseQualifiedNamed()`
 - `VersionNumber`: `UseProperties()`
+- `UUID`: `UseProperties()`
+- `Dates.AbstractTime`: `UseProperties()`
 
 ## Avoiding Type Piracy
 
