@@ -2,7 +2,7 @@ module StableHashTraits
 
 export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName
 
-using CRC32c, TupleTools, Compat
+using CRC32c, TupleTools, Compat, UUIDs, Dates
 
 struct UseWrite end
 """
@@ -106,6 +106,8 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 - `AbstractArray`, `Tuple`, `Pair`: `UseIterate()`
 - `Missing`, `Nothing`: `UseQualifiedNamed()`
 - `VersionNumber`: `UseProperties()`
+- `UUID`: `UseProperties()`
+- `Dates.AbstractTime`: `UseProperties()`
 
 ## Avoiding Type Piracy
 
@@ -145,6 +147,8 @@ hash_method(::Type) = UseQualifiedName()
 hash_method(::Nothing) = UseQualifiedName()
 hash_method(::Missing) = UseQualifiedName()
 hash_method(::VersionNumber) = UseProperties()
+hash_method(::UUID) = UseProperties()
+hash_method(::Dates.AbstractTime) = UseProperties()
 
 struct GlobalContext end
 hash_method(x, context) = hash_method(x)

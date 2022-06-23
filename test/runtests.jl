@@ -1,6 +1,8 @@
 using StableHashTraits
 using Aqua
 using Test
+using Dates
+using UUIDs
 Aqua.test_all(StableHashTraits)
 
 struct TestType
@@ -51,6 +53,11 @@ StableHashTraits.hash_method(::TestType, ::MyContext) = UseQualifiedName(UseProp
     @test stable_hash(Nothing) == 0xb9695255
     @test stable_hash(Missing) == 0xafd1df92
     @test stable_hash(v"0.1.0") == 0x50cda5b5
+    @test stable_hash(UUID("8d70055f-1864-48ff-8a94-2c16d4e1d1cd")) == 0x81d55a52
+    @test stable_hash(Date("2002-01-01")) == 0x1e1a60e2
+    @test stable_hash(Time("12:00")) == 0xbe0d1056
+    @test stable_hash(TimePeriod(Nanosecond(0))) == 0x4bf33649
+    @test stable_hash(Hour(1) + Minute(2)) == 0xffe46034
 
     @test stable_hash([1, 2, 3]) != stable_hash([3, 2, 1])
     @test stable_hash((1, 2, 3)) == stable_hash([1, 2, 3])
