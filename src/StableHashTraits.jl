@@ -9,7 +9,7 @@ using SHA: SHA
 ##### Hash Function API 
 #####
 
-# SHA functions need to `update!` an context object for each object ot hash and then
+# SHA functions need to `update!` an context object for each object to hash and then
 # `digest!` to get a final result. Many simpler hashing functions just take a second
 # argument that is the output of a previous call to that function. We convert these generic
 # functional hashes to match the interface of `SHA`, since it is the more general case.
@@ -72,6 +72,13 @@ end
 
 struct UseIterate end
 function stable_hash_helper(x, hash, context, ::UseIterate)
+    # this branch for isempty is not strictly necessary, (there are more elegant solutions)
+    # but it is consistent with an older, less generic implementation of this method and
+    # therefore avoids breaking changes to the hash value
+    if isempty(x) 
+        update!(hash, UInt8[])
+        return hash
+    end
     for el in x
         val = stable_hash_helper(el, similar_hasher(hash), context,
                                  hash_method(el, context))
