@@ -75,7 +75,7 @@ function stable_hash_helper(x, hash, context, ::UseIterate)
     # this branch for isempty is not strictly necessary, (there are more elegant solutions)
     # but it is consistent with an older, less generic implementation of this method and
     # therefore avoids breaking changes to the hash value
-    if isempty(x) 
+    if isempty(x)
         update!(hash, UInt8[])
         return hash
     end
