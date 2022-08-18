@@ -3,6 +3,40 @@ module StableHashTraits
 export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName
 
 using CRC32c, TupleTools, Compat, UUIDs, Dates
+using SHA: SHA
+
+#####
+##### Hash Function API 
+#####
+
+# SHA functions need to `update!` an context object for each object to hash and then
+# `digest!` to get a final result. Many simpler hashing functions just take a second
+# argument that is the output of a previous call to that function. We convert these generic
+# functional hashes to match the interface of `SHA`, since it is the more general case.
+mutable struct GenericFunHash{F,T}
+    hasher::F
+    hash::Union{T,Nothing}
+    GenericFunHash(fn) = new{typeof(fn),typeof(fn(""))}(fn, nothing)
+end
+setup_hash(fn) = GenericFunHash(fn)
+function update!(fn::GenericFunHash, bytes)
+    return fn.hash = isnothing(fn.hash) ? fn.hasher(bytes) : fn.hasher(bytes, fn.hash)
+end
+digest!(fn::GenericFunHash) = fn.hash
+similar_hasher(fn::GenericFunHash) = GenericFunHash(fn.hasher)
+
+# TODO: support more sha versions?
+setup_hash(::typeof(SHA.sha256)) = SHA.SHA2_256_CTX()
+setup_hash(::typeof(SHA.sha1)) = SHA.SHA1_CTX()
+similar_hasher(ctx::SHA.SHA_CTX) = typeof(ctx)()
+update!(sha::SHA.SHA_CTX, bytes) = SHA.update!(sha, bytes)
+digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
+
+#####
+##### Hash Methods 
+#####
+
+# These are the various methods to compute a hash from an object
 
 struct UseWrite end
 """
@@ -24,17 +58,35 @@ write(io, x) = Base.write(io, x)
 function stable_hash_helper(x, hash, context, ::UseWrite)
     io = IOBuffer()
     write(io, x, context)
-    return hash(take!(io))
+    update!(hash, take!(io))
+    return hash
+end
+
+function recursive_hash!(hash, result)
+    interior_hash = digest!(result)
+    # digest will return nothing if no objects have been added to the hash when using
+    # GenericFunHash; in this case, don't update the hash at all
+    if !isnothing(interior_hash)
+        update!(hash, copy(reinterpret(UInt8, vcat(interior_hash))))
+    end
+    return hash
 end
 
 struct UseIterate end
 function stable_hash_helper(x, hash, context, ::UseIterate)
-    result = hash(UInt8[])
-    for el in x
-        val = stable_hash_helper(el, hash, context, hash_method(el, context))
-        result = hash(copy(reinterpret(UInt8, [val])), result)
+    # this branch for isempty is not strictly necessary, (there are more elegant solutions)
+    # but it is consistent with an older, less generic implementation of this method and
+    # therefore avoids breaking changes to the hash value
+    if isempty(x)
+        update!(hash, UInt8[])
+        return hash
     end
-    return result
+    for el in x
+        val = stable_hash_helper(el, similar_hasher(hash), context,
+                                 hash_method(el, context))
+        recursive_hash!(hash, val)
+    end
+    return hash
 end
 
 struct UseProperties{S} end
@@ -62,14 +114,21 @@ function stable_hash_helper(x, hash, context, method::UseQualifiedName)
     if occursin(r"\.#[^.]*$", str)
         error("Annonymous types (those starting with `#`) cannot be hashed to a reliable value")
     end
-    result = stable_hash_helper(str, hash, context, hash_method(str, context))
+    hash = stable_hash_helper(str, similar_hasher(hash), context, hash_method(str, context))
     if !isnothing(method.parent)
-        val = stable_hash_helper(x, hash, context, method.parent)
-        return hash(copy(reinterpret(UInt8, [val])), result)
+        val = stable_hash_helper(x, similar_hasher(hash), context, method.parent)
+        recursive_hash!(hash, val)
+        return hash
     else
-        return result
+        return hash
     end
 end
+
+#####
+##### Hash method trait 
+#####
+
+# The way you indicate which method a given object uses to compute a hash.
 
 """
     hash_method(x, [context])
@@ -156,24 +215,24 @@ hash_method(x, context) = hash_method(x)
 """
     stable_hash(arg1, arg2, ...; context=StableHashTraits.GlobalContext(), alg=crc32c)
 
-Create a stable hash of the given objects. This is intended to remain unchanged
-across julia verisons. The default fallback method is to write the object and
-compute the CRC of the written data. This method is the most generic but also
-the most sensitive to various changes to the object that you might want to
-consider irrelevant for its hash. 
+Create a stable hash of the given objects. This is intended to remain unchanged across julia
+verisons. The default fallback method is to write the object and compute the CRC of the
+written data. This method is the most generic but also the most sensitive to various changes
+to the object that you might want to consider irrelevant for its hash. 
 
 You can customize how an object is hashed using `hash_method`.
 
-To change the hash algorithm used, pass a different function to `alg`. The
-function should take one required argument (value to hash) and a second,
-optional argument (a hash value to mix).
+To change the hash algorithm used, pass a different function to `alg`. The function should
+take one required argument (value to hash) and a second, optional argument (a hash value to
+mix). Additionally `sha1` and `sha256` are supported (from the standard library `SHA`).
 
-The `context` value gets passed as the second argument to [`hash_method`](@ref),
-and the third argument to [`StableHashTraits.write`](@ref)
+The `context` value gets passed as the second argument to [`hash_method`](@ref), and the
+third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(obj...; context=GlobalContext(), alg=crc32c)
-    return stable_hash_helper(obj, alg, context, hash_method(obj, context))
+    return digest!(stable_hash_helper(obj, setup_hash(alg), context,
+                                      hash_method(obj, context)))
 end
 
 end
