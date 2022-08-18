@@ -62,12 +62,20 @@ function stable_hash_helper(x, hash, context, ::UseWrite)
     return hash
 end
 
+function recursive_hash!(hash, result)
+    interior_hash = digest!(result)
+    if !isnothing(interior_hash)
+        update!(hash, copy(reinterpret(UInt8, vcat(interior_hash))))
+    end
+    return hash
+end
+
 struct UseIterate end
 function stable_hash_helper(x, hash, context, ::UseIterate)
     for el in x
         val = stable_hash_helper(el, similar_hasher(hash), context,
                                  hash_method(el, context))
-        update!(hash, copy(reinterpret(UInt8, vcat(digest!(val)))))
+        recursive_hash!(hash, val)
     end
     return hash
 end
@@ -100,7 +108,7 @@ function stable_hash_helper(x, hash, context, method::UseQualifiedName)
     hash = stable_hash_helper(str, similar_hasher(hash), context, hash_method(str, context))
     if !isnothing(method.parent)
         val = stable_hash_helper(x, similar_hasher(hash), context, method.parent)
-        update!(hash, copy(reinterpret(UInt8, vcat(digest!(val)))))
+        recursive_hash!(hash, val)
         return hash
     else
         return hash
