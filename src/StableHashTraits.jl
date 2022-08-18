@@ -5,6 +5,40 @@ export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName
 using CRC32c, TupleTools, Compat, UUIDs, Dates
 using SHA: SHA
 
+#####
+##### Hash Function API 
+#####
+
+# SHA functions need to `update!` an context object for each object ot hash and then
+# `digest!` to get a final result. Many simpler hashing functions just take a second
+# argument that is the output of a previous call to that function. We convert these generic
+# functional hashes to match the interface of `SHA`, since it is the more general case.
+mutable struct GenericFunHash{F,T}
+    hasher::F
+    hash::Union{T,Nothing}
+    GenericFunHash(fn) = new{typeof(fn),typeof(fn(""))}(fn, nothing)
+end
+setup_hash(fn) = GenericFunHash(fn)
+function update!(fn::GenericFunHash, bytes)
+    return fn.hash = isnothing(fn.hash) ? fn.hasher(bytes) : fn.hasher(bytes, fn.hash)
+end
+digest!(fn::GenericFunHash) = fn.hash
+similar_hasher(fn::GenericFunHash) = GenericFunHash(fn.hasher)
+
+setup_hash(::typeof(SHA.sha256)) = SHA.SHA2_256_CTX()
+setup_hash(::typeof(SHA.sha1)) = SHA.SHA1_CTX()
+similar_hasher(::SHA.SHA2_256_CTX) = SHA.SHA2_256_CTX()
+similar_hasher(::SHA.SHA1_CTX) = SHA.SHA1_CTX()
+# TODO: support more sha versions?
+update!(sha, bytes) = SHA.update!(sha, bytes)
+digest!(sha) = SHA.digest!(sha)
+
+#####
+##### Hash Methods 
+#####
+
+# These are the various methods to compute a hash from an object
+
 struct UseWrite end
 """
     StableHashTraits.write(io, x, [context])
@@ -32,7 +66,8 @@ end
 struct UseIterate end
 function stable_hash_helper(x, hash, context, ::UseIterate)
     for el in x
-        val = stable_hash_helper(el, similar_hasher(hash), context, hash_method(el, context))
+        val = stable_hash_helper(el, similar_hasher(hash), context,
+                                 hash_method(el, context))
         update!(hash, copy(reinterpret(UInt8, vcat(digest!(val)))))
     end
     return hash
@@ -63,7 +98,8 @@ function stable_hash_helper(x, hash, context, method::UseQualifiedName)
     if occursin(r"\.#[^.]*$", str)
         error("Annonymous types (those starting with `#`) cannot be hashed to a reliable value")
     end
-    type_result = stable_hash_helper(str, similar_hasher(hash), context, hash_method(str, context))
+    type_result = stable_hash_helper(str, similar_hasher(hash), context,
+                                     hash_method(str, context))
     if !isnothing(method.parent)
         val = stable_hash_helper(x, hash, context, method.parent)
         update!(hash, copy(reinterpret(UInt8, vcat(digest!(type_result)))))
@@ -73,6 +109,12 @@ function stable_hash_helper(x, hash, context, method::UseQualifiedName)
         return type_result
     end
 end
+
+#####
+##### Hash method trait 
+#####
+
+# The way you indicate which method a given object uses to compute a hash.
 
 """
     hash_method(x, [context])
@@ -156,28 +198,6 @@ hash_method(::Dates.AbstractTime) = UseProperties()
 struct GlobalContext end
 hash_method(x, context) = hash_method(x)
 
-# SHA functions need to update a `update!` an context object and then `digest!` it to
-# generate a hash from multiple objects. Many simpler hashing functions just take a second
-# argument that is the output of a previous call to that function. We convert these generic
-# functional hashes to match the interface of `SHA`, since it is the more general interface.
-mutable struct GenericFunHash{F, T}
-    hasher::F
-    hash::Union{T, Nothing}
-    GenericFunHash(fn) = new{typeof(fn), typeof(fn(""))}(fn, nothing)
-end
-setup_hash(fn) = GenericFunHash(fn)
-update!(fn::GenericFunHash, bytes) = fn.hash = isnothing(fn.hash) ? fn.hasher(bytes) : fn.hasher(bytes, fn.hash)
-digest!(fn::GenericFunHash) = fn.hash
-similar_hasher(fn::GenericFunHash) = GenericFunHash(fn.hasher)
-
-setup_hash(::typeof(SHA.sha256)) = SHA.SHA2_256_CTX()
-setup_hash(::typeof(SHA.sha1)) = SHA.SHA1_CTX()
-similar_hasher(::SHA.SHA2_256_CTX) = SHA.SHA2_256_CTX()
-similar_hasher(::SHA.SHA1_CTX) = SHA.SHA1_CTX()
-# TODO: support more sha versions?
-update!(sha, bytes) = SHA.update!(sha, bytes)
-digest!(sha) = SHA.digest!(sha)
-
 """
     stable_hash(arg1, arg2, ...; context=StableHashTraits.GlobalContext(), alg=crc32c)
 
@@ -197,7 +217,8 @@ third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(obj...; context=GlobalContext(), alg=crc32c)
-    return digest!(stable_hash_helper(obj, setup_hash(alg), context, hash_method(obj, context)))
+    return digest!(stable_hash_helper(obj, setup_hash(alg), context,
+                                      hash_method(obj, context)))
 end
 
 end
