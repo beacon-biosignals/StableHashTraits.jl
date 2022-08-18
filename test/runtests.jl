@@ -78,7 +78,7 @@ StableHashTraits.hash_method(::TestType, ::MyContext) = UseQualifiedName(UseProp
              0xcc, 0x45, 0x62, 0xc0, 0x02, 0x4b]
     @test stable_hash(sin; alg=sha256) == bytes
 
-    # get some code coverage (and reference tests) for sha256
+    # get some code coverage (and reference tests) for sha1
     bytes = [0x2e, 0xa6, 0x1b, 0xde, 0xfe, 0x6e, 0x0a, 0x91, 0x07, 0xb0, 0x3d, 0x82, 0xf6,
              0x55, 0xd7, 0x97, 0x7a, 0x8c, 0x8a, 0x60]
     @test stable_hash([1, 2, 3]; alg=sha1) == bytes
