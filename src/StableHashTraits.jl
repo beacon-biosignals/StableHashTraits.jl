@@ -67,6 +67,7 @@ function stable_hash_helper(x, hash, context, ::UseIterate)
     for el in x
         val = stable_hash_helper(el, similar_hasher(hash), context,
                                  hash_method(el, context))
+        @show val
         update!(hash, copy(reinterpret(UInt8, vcat(digest!(val)))))
     end
     return hash
