@@ -3,6 +3,7 @@ using Aqua
 using Test
 using Dates
 using UUIDs
+using SHA
 Aqua.test_all(StableHashTraits)
 
 struct TestType
@@ -47,17 +48,22 @@ StableHashTraits.hash_method(::TestType, ::MyContext) = UseQualifiedName(UseProp
     @test stable_hash([1, 2, 3]) == 0x1a366aea
     @test stable_hash((a=1, b=2)) == 0x240bb84c
     @test stable_hash(sin) == 0x7706a39f
-    @test stable_hash(TestType2(1, 2)) == 0x1f99ed3b
+    @test stable_hash(TestType2(1, 2)) == 0x8c28b28a
     @test stable_hash(TypeType(Array)) == 0xae27dba8
     @test stable_hash(TestType5("bobo")) == 0x85c469dd
     @test stable_hash(Nothing) == 0xb9695255
     @test stable_hash(Missing) == 0xafd1df92
-    @test stable_hash(v"0.1.0") == 0x50cda5b5
+    @test stable_hash(v"0.1.0") == 0xc2b143c9
     @test stable_hash(UUID("8d70055f-1864-48ff-8a94-2c16d4e1d1cd")) == 0x81d55a52
     @test stable_hash(Date("2002-01-01")) == 0x1e1a60e2
     @test stable_hash(Time("12:00")) == 0xbe0d1056
     @test stable_hash(TimePeriod(Nanosecond(0))) == 0x4bf33649
     @test stable_hash(Hour(1) + Minute(2)) == 0xffe46034
+
+    bytes = [0xe2, 0x4c, 0xcd, 0x9d, 0xed, 0xaf, 0x29, 0xa7, 0x70, 0x82, 0x2f, 0x5c, 0x30, 
+             0x01, 0xd6, 0xa4, 0x45, 0x35, 0x18, 0x1d, 0xdd, 0x0f, 0x5c, 0x45, 0xb1, 0xd2, 
+             0x67, 0xa9, 0x92, 0x19, 0x52, 0x3f]
+    @test stable_hash([1,2,3], alg=sha256) == bytes
 
     @test stable_hash([1, 2, 3]) != stable_hash([3, 2, 1])
     @test stable_hash((1, 2, 3)) == stable_hash([1, 2, 3])
