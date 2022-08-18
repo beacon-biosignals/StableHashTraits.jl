@@ -25,13 +25,12 @@ end
 digest!(fn::GenericFunHash) = fn.hash
 similar_hasher(fn::GenericFunHash) = GenericFunHash(fn.hasher)
 
+# TODO: support more sha versions?
 setup_hash(::typeof(SHA.sha256)) = SHA.SHA2_256_CTX()
 setup_hash(::typeof(SHA.sha1)) = SHA.SHA1_CTX()
-similar_hasher(::SHA.SHA2_256_CTX) = SHA.SHA2_256_CTX()
-similar_hasher(::SHA.SHA1_CTX) = SHA.SHA1_CTX()
-# TODO: support more sha versions?
-update!(sha, bytes) = SHA.update!(sha, bytes)
-digest!(sha) = SHA.digest!(sha)
+similar_hasher(ctx::SHA.SHA_CTX) = typeof(ctx)()
+update!(sha::SHA.SHA_CTX, bytes) = SHA.update!(sha, bytes)
+digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 
 #####
 ##### Hash Methods 
@@ -98,15 +97,13 @@ function stable_hash_helper(x, hash, context, method::UseQualifiedName)
     if occursin(r"\.#[^.]*$", str)
         error("Annonymous types (those starting with `#`) cannot be hashed to a reliable value")
     end
-    type_result = stable_hash_helper(str, similar_hasher(hash), context,
-                                     hash_method(str, context))
+    hash = stable_hash_helper(str, similar_hasher(hash), context, hash_method(str, context))
     if !isnothing(method.parent)
-        val = stable_hash_helper(x, hash, context, method.parent)
-        update!(hash, copy(reinterpret(UInt8, vcat(digest!(type_result)))))
+        val = stable_hash_helper(x, similar_hasher(hash), context, method.parent)
         update!(hash, copy(reinterpret(UInt8, vcat(digest!(val)))))
         return hash
     else
-        return type_result
+        return hash
     end
 end
 

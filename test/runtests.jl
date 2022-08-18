@@ -48,12 +48,12 @@ StableHashTraits.hash_method(::TestType, ::MyContext) = UseQualifiedName(UseProp
     @test stable_hash([1, 2, 3]) == 0x1a366aea
     @test stable_hash((a=1, b=2)) == 0x240bb84c
     @test stable_hash(sin) == 0x7706a39f
-    @test stable_hash(TestType2(1, 2)) == 0x8c28b28a
+    @test stable_hash(TestType2(1, 2)) == 0x1f99ed3b
     @test stable_hash(TypeType(Array)) == 0xae27dba8
     @test stable_hash(TestType5("bobo")) == 0x85c469dd
     @test stable_hash(Nothing) == 0xb9695255
     @test stable_hash(Missing) == 0xafd1df92
-    @test stable_hash(v"0.1.0") == 0xc2b143c9
+    @test stable_hash(v"0.1.0") == 0x50cda5b5
     @test stable_hash(UUID("8d70055f-1864-48ff-8a94-2c16d4e1d1cd")) == 0x81d55a52
     @test stable_hash(Date("2002-01-01")) == 0x1e1a60e2
     @test stable_hash(Time("12:00")) == 0xbe0d1056
