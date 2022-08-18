@@ -64,6 +64,8 @@ end
 
 function recursive_hash!(hash, result)
     interior_hash = digest!(result)
+    # digest will return nothing if no objects have been added to the hash when using
+    # GenericFunHash; in this case, don't update the hash at all
     if !isnothing(interior_hash)
         update!(hash, copy(reinterpret(UInt8, vcat(interior_hash))))
     end
