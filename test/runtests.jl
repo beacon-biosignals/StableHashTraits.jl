@@ -45,7 +45,7 @@ struct MyContext end
 StableHashTraits.hash_method(::TestType, ::MyContext) = UseQualifiedName(UseProperties())
 
 @testset "StableHashTraits.jl" begin
-    @test stable_hash(()) = 0x48674bc7
+    @test stable_hash(()) == 0x48674bc7
     @test stable_hash([1, 2, 3]) == 0x1a366aea
     @test stable_hash((a=1, b=2)) == 0x240bb84c
     @test stable_hash(sin) == 0x7706a39f
