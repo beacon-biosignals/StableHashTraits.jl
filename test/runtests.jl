@@ -92,6 +92,8 @@ StableHashTraits.hash_method(::TestType, ::MyContext) = UseQualifiedName(UseProp
     @test stable_hash(sin; alg=sha1) == bytes
 
     # various (in)equalities
+    @test stable_hash([]) != stable_hash([(), (), ()])
+    @test stable_hash([(), ()]) != stable_hash([(), (), ()])
     @test stable_hash([1, 2, 3]) != stable_hash([3, 2, 1])
     @test stable_hash((1, 2, 3)) == stable_hash([1, 2, 3])
     @test stable_hash(v"0.1.0") != stable_hash(v"0.1.2")
