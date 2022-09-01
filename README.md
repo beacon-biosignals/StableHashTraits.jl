@@ -33,20 +33,6 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 
 It isn't intended for secure hashing.
 
-## Breaking changes
-
-### In 0.2:
-
-- Hashes changed for any object `x` such that:
-   - `Table.istable(x) == true`
-   - `x` is not a `DataFrame` (these previosuly errored)
-   - `x` is not a `NamedTuple` of tables columns (these have the same hash as before)
-   - `x` is not an `AbstractArray` of `NamedTuple` rows (these have the same hash as before)
-
-Most such tables would have previously used `UseWrite`, and if this method managed to
-succefully generate a hash, it would be different than the newly introduced hash method used
-now (`UseTables`).
-
 ## Details
 
 There is one exported method: `stable_hash`. You call this on any number of
@@ -93,6 +79,20 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 - `VersionNumber`: `UseProperties()`
 - `UUID`: `UseProperties()`
 - `Dates.AbstractTime`: `UseProperties()`
+
+## Breaking changes
+
+### In 0.2:
+
+- Hashes changed for any object `x` such that:
+   - `Table.istable(x) == true`
+   - `x` is not a `DataFrame` (these previosuly errored)
+   - `x` is not a `NamedTuple` of tables columns (these have the same hash as before)
+   - `x` is not an `AbstractArray` of `NamedTuple` rows (these have the same hash as before)
+   - `x` can be succefully written to an IO buffer via `Base.write` or
+     `StableHashTraits.write`
+
+Any such table now uses the method `UseTable`, rather than `UseWrite`, and so would have the same hash as a `DataFrame` or `NamedTuple` with the same column contents.
 
 ## Avoiding Type Piracy
 
