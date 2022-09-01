@@ -113,6 +113,7 @@ StableHashTraits.hash_method(::NonTableStruct) = UseProperties()
     @test stable_hash([(), ()]) != stable_hash([(), (), ()])
     @test stable_hash(DataFrame(; x=1:10, y=1:10)) ==
           stable_hash(NonTableStruct(1:10, 1:10))
+    @test stable_hash(1:10) == stable_hash((;start=1, stop=10))
     @test stable_hash([1, 2, 3]) != stable_hash([3, 2, 1])
     @test stable_hash((1, 2, 3)) == stable_hash([1, 2, 3])
     @test stable_hash(v"0.1.0") != stable_hash(v"0.1.2")

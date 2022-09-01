@@ -84,7 +84,7 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 ### In 0.2:
 
-To support hasing of all tables (`Tables.istable(x) == true`), hashes changed for such
+To support hasing of all tables (`Tables.istable(x) == true`), hashes have changed for such
 objects when:
    1. calling `stable_hash(x)` did not previously error
    1. `x` is not a `DataFrame` (these previosuly errored)
@@ -131,5 +131,6 @@ define the one-argument version of `hash_method` and/or two argument version of 
 Here-in is a list of hash collisions that have been deemed to be acceptable in practice:
 
 - `stable_hash(sin) == stable_hash("Base.sin")`
-- `[1,2,3] == (1,2,3)`
+- `stable_hash([1,2,3]) == stable_hash((1,2,3))`
 - `stable_hash(DataFrame(x=1:10)) == stable_hash((; x=collect(1:10)))`
+- `stable_hash(1:10) == stable_hash((;start=1, stop=10))`
