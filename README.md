@@ -42,30 +42,36 @@ matters).
 You can customize its behavior for particular types by implementing the trait
 `StableHashTraits.hash_method`. Any method of `hash_method` should simply return one of the following values.
 
-1. `UseWrite()`: writes the object to a binary format using `StableHashTraits.write(io, x)` and
-   takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)` falls
-   back to `Base.write(io, x)` if no specialized methods are defined for x.
-2. `UseIterate()`: assumes the object is iterable and finds a hash of all
-   elements
+1. `UseWrite()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
+    and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
+    falls back to `Base.write(io, x)` if no specialized methods are defined for x.
+2. `UseIterate()`: assumes the object is iterable and finds a hash of all elements
 3. `UseProperties()`: assumes a struct of some type and uses `propertynames` and
-   `getproperty` to compute a hash of all fields. You can further customize its
-   behavior by passing the symbol `:ByOrder` (to hash properties in the order
-   they are listed by `propertynames`), which is the default, or `:ByName`
-   (sorting properties by their name before hashing).
-4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T`
-   is the type of the object. Throws an error if the name includes `#` (e.g. an
-   anonymous function). If you wish to include this qualified name *and* another
-   method, pass one of the other three methods as an argument (e.g.
-   `UseQualifiedName(UseProperties())`). This can be used to include the type as
-   part of the hash. Do you want a named tuple with the same properties as your
-   custom struct to hash to the same value? If you don't, then use
-   `UseQualifiedName`.
+    `getproperty` to compute a hash of all fields. You can further customize its behavior by
+    passing the symbol `:ByOrder` (to hash properties in the order they are listed by
+    `propertynames`), which is the default, or `:ByName` (sorting properties by their name
+    before hashing).
+4. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
+   `Tables.columnnames` to compute a hash of each columns content and name, ala
+   `UseProperties`. This method should rarely need to be specified by the user, as the
+   fallback method for `Any` should normally handle this case.
+4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is the type
+    of the object. Throws an error if the name includes `#` (e.g. an anonymous function). If
+    you wish to include this qualified name *and* another method, pass one of the other
+    methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be used to
+    include the type as part of the hash. Do you want a named tuple with the same properties
+    as your custom struct to hash to the same value? If you don't, then use
+    `UseQualifiedName`.
 
-Your hash will be stable if the output for the given method remains the same: e.g. if `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the properties are the same for `UseProperties`, the hash will be the same; etc...
+Your hash will be stable if the output for the given method remains the same: e.g. if
+`write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
+properties are the same for `UseProperties`, the hash will be the same; etc...
 
 ## Implemented methods of `hash_method`
 
-- `Any`: `UseWrite()`
+- `Any`: either
+    - `UseWrite()` OR
+    - `UseTable()` for any object `x` where `Tables.istable(x)` is true
 - `Function`: `UseQualifiedName()`
 - `NamedTuples`: `UseProperties()` 
 - `AbstractArray`, `Tuple`, `Pair`: `UseIterate()`
@@ -73,6 +79,27 @@ Your hash will be stable if the output for the given method remains the same: e.
 - `VersionNumber`: `UseProperties()`
 - `UUID`: `UseProperties()`
 - `Dates.AbstractTime`: `UseProperties()`
+
+## Breaking changes
+
+### In 0.2:
+
+To support hasing of all tables (`Tables.istable(x) == true`), hashes have changed for such
+objects when:
+   1. calling `stable_hash(x)` did not previously error
+   1. `x` is not a `DataFrame` (these previosuly errored)
+   2. `x` is not a `NamedTuple` of tables columns (these have the same hash as before)
+   3. `x` is not an `AbstractArray` of `NamedTuple` rows (these have the same hash as before)
+   4. `x` can be succefully written to an IO buffer via `Base.write` or
+     `StableHashTraits.write` (otherwise it previosuly errored)
+   5. `x` has no specialized `stable_hash` method defined for it (otherwise
+   the hash will be the same)
+
+Any such table now uses the method `UseTable`, rather than `UseWrite`, and so would have the
+same hash as a `DataFrame` or `NamedTuple` with the same column contents instead of its
+previous hash value. For example if you had a custom table type `MyCustomTable` for which
+you only defined a `StableHashTraits.write` method and no `hash_method`, its hash will be
+changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 
 ## Avoiding Type Piracy
 
@@ -104,4 +131,6 @@ define the one-argument version of `hash_method` and/or two argument version of 
 Here-in is a list of hash collisions that have been deemed to be acceptable in practice:
 
 - `stable_hash(sin) == stable_hash("Base.sin")`
-- `[1,2,3] == (1,2,3)`
+- `stable_hash([1,2,3]) == stable_hash((1,2,3))`
+- `stable_hash(DataFrame(x=1:10)) == stable_hash((; x=collect(1:10)))`
+- `stable_hash(1:10) == stable_hash((;start=1, stop=10))`
