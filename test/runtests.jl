@@ -4,6 +4,7 @@ using Test
 using Dates
 using UUIDs
 using SHA
+using DataFrames
 Aqua.test_all(StableHashTraits)
 
 struct TestType
@@ -43,6 +44,12 @@ StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
 
 struct MyContext end
 StableHashTraits.hash_method(::TestType, ::MyContext) = UseQualifiedName(UseProperties())
+
+struct NonTableStruct
+    x::Vector{Int}
+    y::Vector{Int}
+end
+StableHashTraits.hash_method(::NonTableStruct) = UseProperties()
 
 @testset "StableHashTraits.jl" begin
     # reference tests to ensure hash consistency
@@ -94,6 +101,7 @@ StableHashTraits.hash_method(::TestType, ::MyContext) = UseQualifiedName(UseProp
     # various (in)equalities
     @test stable_hash([]) != stable_hash([(), (), ()])
     @test stable_hash([(), ()]) != stable_hash([(), (), ()])
+    @test stable_hash(DataFrame(x=1:10, y=1:10)) == stable_hash(NonTableStruct(1:10, 1:10))
     @test stable_hash([1, 2, 3]) != stable_hash([3, 2, 1])
     @test stable_hash((1, 2, 3)) == stable_hash([1, 2, 3])
     @test stable_hash(v"0.1.0") != stable_hash(v"0.1.2")

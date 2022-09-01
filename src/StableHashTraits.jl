@@ -2,7 +2,7 @@ module StableHashTraits
 
 export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName
 
-using CRC32c, TupleTools, Compat, UUIDs, Dates
+using CRC32c, TupleTools, Compat, UUIDs, Dates, Tables
 using SHA: SHA
 
 #####
@@ -97,9 +97,14 @@ end
 orderproperties(::UseProperties{:ByOrder}, props) = props
 orderproperties(::UseProperties{:ByName}, props) = TupleTools.sort(props; by=string)
 function stable_hash_helper(x, hash, context, use::UseProperties)
-    return stable_hash_helper((k => getproperty(x, k)
-                               for k in orderproperties(use, propertynames(x))), hash,
-                              context, UseIterate())
+    vals = (k => getproperty(x, k) for k in orderproperties(use, propertynames(x)))
+    return stable_hash_helper(vals, hash, context, UseIterate())
+end
+
+struct UseTable end
+function stable_hash_helper(x, hash, context, ::UseTable)
+    vals = (k => v for (k, v) in zip(Tables.columnnames(x), Tables.columns(x)))
+    return stable_hash_helper(vals, hash, context, UseIterate())
 end
 
 struct UseQualifiedName{T}
@@ -145,6 +150,10 @@ You should return one of the following values.
     passing the symbol `:ByOrder` (to hash properties in the order they are listed by
     `propertynames`), which is the default, or `:ByName` (sorting properties by their name
     before hashing).
+4. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
+   `Tables.columnnames` to compute a hash of each column and name, ala `UseProperties`. This
+   method should rarely need to be specified by the user, as the fallback method for `Any`
+   should normally handle this case.
 4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is the type
     of the object. Throws an error if the name includes `#` (e.g. an anonymous function). If
     you wish to include this qualified name *and* another method, pass one of the other
@@ -159,7 +168,9 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 ## Implemented methods of `hash_method`
 
-- `Any`: `UseWrite()`
+- `Any`: either
+    - `UseWrite()` OR
+    - `UseTable()` for any type where `Tables.istable(type)` is true
 - `Function`: `UseQualifiedName()`
 - `NamedTuples`: `UseProperties()` 
 - `AbstractArray`, `Tuple`, `Pair`: `UseIterate()`
@@ -195,7 +206,7 @@ define the one-argument version of `hash_method` and/or two argument version of 
 
 ```
 """
-hash_method(::Any) = UseWrite()
+hash_method(x::Any) = Tables.istable(x) ? UseTable() : UseWrite()
 hash_method(::AbstractArray) = UseIterate()
 hash_method(::AbstractRange) = UseProperties()
 hash_method(::Tuple) = UseIterate()
