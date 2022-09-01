@@ -103,7 +103,8 @@ end
 
 struct UseTable end
 function stable_hash_helper(x, hash, context, ::UseTable)
-    vals = (k => v for (k, v) in zip(Tables.columnnames(x), Tables.columns(x)))
+    cols = Tables.columns(x)
+    vals = (k => v for (k, v) in zip(Tables.columnnames(cols), cols))
     return stable_hash_helper(vals, hash, context, UseIterate())
 end
 
@@ -151,15 +152,15 @@ You should return one of the following values.
     `propertynames`), which is the default, or `:ByName` (sorting properties by their name
     before hashing).
 4. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
-   `Tables.columnnames` to compute a hash of each column and name, ala `UseProperties`. This
-   method should rarely need to be specified by the user, as the fallback method for `Any`
-   should normally handle this case.
+   `Tables.columnnames` to compute a hash of each columns content and name, ala
+   `UseProperties`. This method should rarely need to be specified by the user, as the
+   fallback method for `Any` should normally handle this case.
 4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is the type
     of the object. Throws an error if the name includes `#` (e.g. an anonymous function). If
     you wish to include this qualified name *and* another method, pass one of the other
-    three methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be
-    used to include the type as part of the hash. Do you want a named tuple with the same
-    properties as your custom struct to hash to the same value? If you don't, then use
+    methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be used to
+    include the type as part of the hash. Do you want a named tuple with the same properties
+    as your custom struct to hash to the same value? If you don't, then use
     `UseQualifiedName`.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
@@ -170,7 +171,7 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 - `Any`: either
     - `UseWrite()` OR
-    - `UseTable()` for any type where `Tables.istable(type)` is true
+    - `UseTable()` for any object `x` where `Tables.istable(x)` is true
 - `Function`: `UseQualifiedName()`
 - `NamedTuples`: `UseProperties()` 
 - `AbstractArray`, `Tuple`, `Pair`: `UseIterate()`
