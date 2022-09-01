@@ -84,15 +84,22 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 ### In 0.2:
 
-- Hashes changed for any object `x` such that:
-   - `Table.istable(x) == true`
-   - `x` is not a `DataFrame` (these previosuly errored)
-   - `x` is not a `NamedTuple` of tables columns (these have the same hash as before)
-   - `x` is not an `AbstractArray` of `NamedTuple` rows (these have the same hash as before)
-   - `x` can be succefully written to an IO buffer via `Base.write` or
-     `StableHashTraits.write`
+To support hasing of all tables (`Tables.istable(x) == true`), hashes changed for such
+objects when:
+   1. calling `stable_hash(x)` did not previously error
+   1. `x` is not a `DataFrame` (these previosuly errored)
+   2. `x` is not a `NamedTuple` of tables columns (these have the same hash as before)
+   3. `x` is not an `AbstractArray` of `NamedTuple` rows (these have the same hash as before)
+   4. `x` can be succefully written to an IO buffer via `Base.write` or
+     `StableHashTraits.write` (otherwise it previosuly errored)
+   5. `x` has no specialized `stable_hash` method defined for it (otherwise
+   the hash will be the same)
 
-Any such table now uses the method `UseTable`, rather than `UseWrite`, and so would have the same hash as a `DataFrame` or `NamedTuple` with the same column contents.
+Any such table now uses the method `UseTable`, rather than `UseWrite`, and so would have the
+same hash as a `DataFrame` or `NamedTuple` with the same column contents instead of its
+previous hash value. For example if you had a custom table type `MyCustomTable` for which
+you only defined a `StableHashTraits.write` method and no `hash_method`, its hash will be
+changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 
 ## Avoiding Type Piracy
 
