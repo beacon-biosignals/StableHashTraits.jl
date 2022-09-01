@@ -68,7 +68,7 @@ StableHashTraits.hash_method(::NonTableStruct) = UseProperties()
     @test stable_hash(Time("12:00")) == 0xbe0d1056
     @test stable_hash(TimePeriod(Nanosecond(0))) == 0x4bf33649
     @test stable_hash(Hour(1) + Minute(2)) == 0xffe46034
-    @test stable_hash(DataFrame(; x=1:10, y=1:10)) = 0x2281617d
+    @test stable_hash(DataFrame(; x=1:10, y=1:10)) == 0x2281617d
 
     # get some code coverage (and reference tests) for sha256
     bytes = [0xe2, 0x4c, 0xcd, 0x9d, 0xed, 0xaf, 0x29, 0xa7, 0x70, 0x82, 0x2f, 0x5c, 0x30,
