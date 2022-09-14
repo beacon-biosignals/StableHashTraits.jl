@@ -135,8 +135,8 @@ struct UseSize{T}
 end
 function stable_hash_helper(x, hash, context, method::UseSize)
     sz = size(x)
-    hash = hash_stable_hash_helper(sz, similar_hasher(hash), context, 
-                                      hash_method(sz, context))
+    hash = stable_hash_helper(sz, similar_hasher(hash), context, 
+                              hash_method(sz, context))
     val = stable_hash_helper(x, similar_hasher(hash), context, method.parent)
     recursive_hash!(hash, val)
     return hash
