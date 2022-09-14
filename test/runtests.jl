@@ -55,6 +55,7 @@ StableHashTraits.hash_method(::NonTableStruct) = UseProperties()
     # reference tests to ensure hash consistency
     @test stable_hash(()) == 0x48674bc7
     @test stable_hash([1, 2, 3]) == 0x1a366aea
+    @test stable_hash([1 2; 3 4]) == 
     @test stable_hash((a=1, b=2)) == 0x240bb84c
     @test stable_hash(sin) == 0x7706a39f
     @test stable_hash(TestType2(1, 2)) == 0x1f99ed3b
@@ -110,6 +111,9 @@ StableHashTraits.hash_method(::NonTableStruct) = UseProperties()
 
     # various (in)equalities
     @test stable_hash([]) != stable_hash([(), (), ()])
+    @test stable_hash([1 2; 3 4]) != stable_hash(vec([1 2; 3 4]))
+    @test stable_hash([1 2; 3 4]) == stable_hash([1 3; 2 4]')
+    @test stable_hash(reshape(1:10, 2, 5)) != stable_hash(reshape(1:10, 5, 2))
     @test stable_hash([(), ()]) != stable_hash([(), (), ()])
     @test stable_hash(DataFrame(; x=1:10, y=1:10)) ==
           stable_hash(NonTableStruct(1:10, 1:10))
