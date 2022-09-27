@@ -62,6 +62,8 @@ You can customize its behavior for particular types by implementing the trait
     include the type as part of the hash. Do you want a named tuple with the same properties
     as your custom struct to hash to the same value? If you don't, then use
     `UseQualifiedName`.
+5. `UseSize(method)`: hash the result of calling `size` on the object and use 
+    `method` to hash the contents of the value (e.g. `UseIterate`).
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
@@ -74,13 +76,20 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
     - `UseTable()` for any object `x` where `Tables.istable(x)` is true
 - `Function`: `UseQualifiedName()`
 - `NamedTuples`: `UseProperties()` 
-- `AbstractArray`, `Tuple`, `Pair`: `UseIterate()`
+- `AbstractVector`, `Tuple`, `Pair`: `UseIterate()`
+- `AbstractArray`: `UseSize(UseIterate())`
 - `Missing`, `Nothing`: `UseQualifiedNamed()`
 - `VersionNumber`: `UseProperties()`
 - `UUID`: `UseProperties()`
 - `Dates.AbstractTime`: `UseProperties()`
 
 ## Breaking changes
+
+### In 0.3:
+
+To prevent reshaped arrays from having the same hash (`stable_hash([1 2; 3 4]) ==
+stable_hash(vec([1 2; 3 4]))`) the hashes for all arrays with more than 1 dimension have
+changed.
 
 ### In 0.2:
 

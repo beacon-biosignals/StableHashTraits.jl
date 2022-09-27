@@ -55,6 +55,7 @@ StableHashTraits.hash_method(::NonTableStruct) = UseProperties()
     # reference tests to ensure hash consistency
     @test stable_hash(()) == 0x48674bc7
     @test stable_hash([1, 2, 3]) == 0x1a366aea
+    @test stable_hash([1 2; 3 4]) == 0x62398575
     @test stable_hash((a=1, b=2)) == 0x240bb84c
     @test stable_hash(sin) == 0x7706a39f
     @test stable_hash(TestType2(1, 2)) == 0x1f99ed3b
@@ -91,6 +92,11 @@ StableHashTraits.hash_method(::NonTableStruct) = UseProperties()
              0xa4, 0x8d, 0x29, 0x02, 0x1f, 0x6a]
     @test stable_hash(DataFrame(; x=1:10, y=1:10); alg=sha256) == bytes
 
+    bytes = [0xe1, 0x11, 0x53, 0xb9, 0xa6, 0x3d, 0x36, 0x2b, 0x2c, 0x02, 0x91, 0x1b, 0xfe,
+             0x3d, 0xbb, 0xc8, 0xa8, 0x29, 0x44, 0x55, 0x03, 0x70, 0x68, 0xd7, 0x19, 0x6d,
+             0x92, 0xa0, 0x92, 0xd4, 0x1e, 0xdb]
+    @test stable_hash([1 2; 3 4]; alg=sha256) == bytes
+
     # get some code coverage (and reference tests) for sha1
     bytes = [0x2e, 0xa6, 0x1b, 0xde, 0xfe, 0x6e, 0x0a, 0x91, 0x07, 0xb0, 0x3d, 0x82, 0xf6,
              0x55, 0xd7, 0x97, 0x7a, 0x8c, 0x8a, 0x60]
@@ -108,8 +114,15 @@ StableHashTraits.hash_method(::NonTableStruct) = UseProperties()
              0x28, 0x86, 0xe0, 0x4e, 0x10, 0x69, 0x85]
     @test stable_hash(DataFrame(; x=1:10, y=1:10); alg=sha1) == bytes
 
+    bytes = [0xc2, 0xea, 0x81, 0x6d, 0x33, 0x07, 0xf2, 0xdf, 0xb7, 0xd2, 0xb1, 0xa6, 0xaa,
+             0x1d, 0xc9, 0x6b, 0x37, 0xeb, 0xd8, 0x2b]
+    @test stable_hash([1 2; 3 4]; alg=sha1) == bytes
+
     # various (in)equalities
     @test stable_hash([]) != stable_hash([(), (), ()])
+    @test stable_hash([1 2; 3 4]) != stable_hash(vec([1 2; 3 4]))
+    @test stable_hash([1 2; 3 4]) == stable_hash([1 3; 2 4]')
+    @test stable_hash(reshape(1:10, 2, 5)) != stable_hash(reshape(1:10, 5, 2))
     @test stable_hash([(), ()]) != stable_hash([(), (), ()])
     @test stable_hash(DataFrame(; x=1:10, y=1:10)) ==
           stable_hash(NonTableStruct(1:10, 1:10))

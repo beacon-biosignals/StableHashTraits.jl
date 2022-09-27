@@ -130,6 +130,17 @@ function stable_hash_helper(x, hash, context, method::UseQualifiedName)
     end
 end
 
+struct UseSize{T}
+    parent::T
+end
+function stable_hash_helper(x, hash, context, method::UseSize)
+    sz = size(x)
+    hash = stable_hash_helper(sz, similar_hasher(hash), context, hash_method(sz, context))
+    val = stable_hash_helper(x, similar_hasher(hash), context, method.parent)
+    recursive_hash!(hash, val)
+    return hash
+end
+
 #####
 ##### Hash method trait 
 #####
@@ -162,6 +173,8 @@ You should return one of the following values.
     include the type as part of the hash. Do you want a named tuple with the same properties
     as your custom struct to hash to the same value? If you don't, then use
     `UseQualifiedName`.
+5. `UseSize(method)`: hash the result of calling `size` on the object and use 
+    `method` to hash the contents of the value (e.g. `UseIterate`).
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
@@ -174,7 +187,8 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
     - `UseTable()` for any object `x` where `Tables.istable(x)` is true
 - `Function`: `UseQualifiedName()`
 - `NamedTuples`: `UseProperties()` 
-- `AbstractArray`, `Tuple`, `Pair`: `UseIterate()`
+- `AbstractVector`, `Tuple`, `Pair`: `UseIterate()`
+- `AbstractArray`: `UseSize(UseIterate())`
 - `Missing`, `Nothing`: `UseQualifiedNamed()`
 - `VersionNumber`: `UseProperties()`
 - `UUID`: `UseProperties()`
@@ -208,7 +222,8 @@ define the one-argument version of `hash_method` and/or two argument version of 
 ```
 """
 hash_method(x::Any) = Tables.istable(x) ? UseTable() : UseWrite()
-hash_method(::AbstractArray) = UseIterate()
+hash_method(::AbstractVector) = UseIterate()
+hash_method(::AbstractArray) = UseSize(UseIterate())
 hash_method(::AbstractRange) = UseProperties()
 hash_method(::Tuple) = UseIterate()
 hash_method(::Pair) = UseIterate()
