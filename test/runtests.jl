@@ -51,6 +51,24 @@ struct NonTableStruct
 end
 StableHashTraits.hash_method(::NonTableStruct) = UseProperties()
 
+struct NestedObject{T}
+    x::T
+    index::Int
+end
+
+struct BasicHashObject
+    x::AbstractRange
+    y::String
+end
+StableHashTraits.hash_method(x::BasicHashObject) = UseProperties()
+struct CustomHashObject
+    x::AbstractRange
+    y::String
+end
+function StableHashTraits.transform(val::CustomHashObject)
+    return (with_hash_method(val.x, UseIterate()), with_hash_method(val.y, UseIterate()))
+end
+
 @testset "StableHashTraits.jl" begin
     # reference tests to ensure hash consistency
     @test stable_hash(()) == 0x48674bc7
@@ -119,6 +137,7 @@ StableHashTraits.hash_method(::NonTableStruct) = UseProperties()
     @test stable_hash([1 2; 3 4]; alg=sha1) == bytes
 
     # various (in)equalities
+    @test stable_hash(CustomHashObject(1:5, "foo")) != stable_hash(BasicHashObject(1:5, "foo"))
     @test stable_hash([]) != stable_hash([(), (), ()])
     @test stable_hash([1 2; 3 4]) != stable_hash(vec([1 2; 3 4]))
     @test stable_hash([1 2; 3 4]) == stable_hash([1 3; 2 4]')

@@ -1,6 +1,6 @@
 module StableHashTraits
 
-export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName
+export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName, with_hash_method
 
 using CRC32c, TupleTools, Compat, UUIDs, Dates, Tables
 using SHA: SHA
@@ -73,6 +73,46 @@ function recursive_hash!(hash, result)
 end
 
 struct UseIterate end
+
+"""
+    StableHashTraits.transform(x, [context])
+
+Before hashing object `x`, it is first passed through `transform`; the result of this call
+is what is actually hashed. The fallback method is the identity function (`transform(x) =
+x`).
+
+!!! note "Optional Context"
+
+    As with all other methods, you can specify a context---an aribtrary object---in which the
+    given transform applies, but you need not implement a method that uses context unless you
+    want to (since the fallback method is `transform(x, context) = transform(x)`).
+
+The purpose of `transform` is to provide flexibility about which hash methods get applied to
+what parts of an object you can use a combination of `transform` and `with_hash_method`. The
+`transform` function is applied before selecting a hash method and defualts to `transform(x)
+= x`, `with_hash_method(x, method)` forces use of `method` for object `x`. Used together,
+you can request that various parts of your object get hashed in any way you wish. For
+example:
+
+```julia
+struct MyObject
+    x::AbstractRange
+    y::String
+end
+function StableHashTraits.transform(val::MyObject)
+    return (with_hash_method(val.x, UseIterate()), with_hash_method(val.y, UseIterate()))
+end
+```
+
+This would hash `MyObject` by iterating over the numbers within the range defined by `x` and
+then iterating over the characters specified in `y`. 
+
+"""
+transform(x, context) = transform(x)
+transform(x) = x
+# NOTE: we need only implement this for `UseIterate` because all hash methods that
+# need to hash multiple subcomponents make use of of the `UseIterate` method.
+
 function stable_hash_helper(x, hash, context, ::UseIterate)
     # this branch for isempty is not strictly necessary, (there are more elegant solutions)
     # but it is consistent with an older, less generic implementation of this method and
@@ -82,8 +122,9 @@ function stable_hash_helper(x, hash, context, ::UseIterate)
         return hash
     end
     for el in x
-        val = stable_hash_helper(el, similar_hasher(hash), context,
-                                 hash_method(el, context))
+        el_ = transform(el, context)
+        val = stable_hash_helper(el_, similar_hasher(hash), context,
+                                 hash_method(el_, context))
         recursive_hash!(hash, val)
     end
     return hash
@@ -142,6 +183,26 @@ function stable_hash_helper(x, hash, context, method::UseSize)
 end
 
 #####
+##### Forced Hash Methods 
+#####
+
+struct WithMethod{T, M}
+    val::T
+    method::M
+end
+hash_method(x::WithMethod) = x
+function stable_hash_helper(x, hash, context, _::WithMethod)
+    return stable_hash_helper(x.val, hash, context, x.method)
+end
+"""
+    with_hash_method(x, method)
+
+For an object which might normally be hashed by some other method, force is to be hashed
+using the given hash method.
+"""
+with_hash_method(x, method) = WithMethod(x, method)
+
+#####
 ##### Hash method trait 
 #####
 
@@ -173,8 +234,8 @@ You should return one of the following values.
     include the type as part of the hash. Do you want a named tuple with the same properties
     as your custom struct to hash to the same value? If you don't, then use
     `UseQualifiedName`.
-5. `UseSize(method)`: hash the result of calling `size` on the object and use 
-    `method` to hash the contents of the value (e.g. `UseIterate`).
+5. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
+    hash the contents of the value (e.g. `UseIterate`).
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
@@ -194,30 +255,32 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 - `UUID`: `UseProperties()`
 - `Dates.AbstractTime`: `UseProperties()`
 
-## Avoiding Type Piracy
+For more complicated scenarios where a simple definition of `hash_method` will not
+suffice, refer to the documentaiton of `transform` and `write`.
+
+## Avoiding Type Piracy Using a Context Object
 
 It can be very tempting to define `hash_method` for types that were defined by another
 package or from Base. This is type piracy, and can easily lead to two different packags
 defining the same method: in this case, the method which gets used depends on the order of
 `using` statements... yuck.
 
-To avoid this problem, it is possible to define a two argument version of `hash_method`
-(and/or a three argument version of `StableHashTraits.write`). This final arugment can be
-anything you want, so long as it is a type you have defined. For example:
+To avoid this problem, it is possible to define a version of any method you specialize (e.g.
+`hash_method`, `transform` and/or `write`) with one additional argument. This final arugment
+can be anything you want, so long as it is a type you have defined. For example:
 
     using DataFrames
     struct MyContext end
-    StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByName)
+    StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByOrder)
     stable_hash(DataFrames(a=1:2, b=1:2); context=MyContext())
 
-By default the context is `StableHashTraits.GlobalContext` and just two methods are defined.
-
-    hash_method(x, context) = hash_method(x)
-    StableHashTraits.write(io, x, context) = StableHashTraits.write(io, x)
+By default the context is `StableHashTraits.GlobalContext` and fall back methods are defined
+that pass through to the methods without a context argument (e.g. `hash_method(x, context) =
+hash_method(x)`)
 
 In this way, you only need to define methods for the types that have non-default behavior
-for your context; furthermore, those who have no need of a particular context can simply
-define the one-argument version of `hash_method` and/or two argument version of `write`.
+for your context; furthermore, those who have no need of a particular context objects can
+simply define methods without it.
 
 ```
 """
