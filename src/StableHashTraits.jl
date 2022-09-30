@@ -88,11 +88,9 @@ x`).
     want to (since the fallback method is `transform(x, context) = transform(x)`).
 
 The purpose of `transform` is to provide flexibility about which hash methods get applied to
-what parts of an object you can use a combination of `transform` and `with_hash_method`. The
-`transform` function is applied before selecting a hash method and defualts to `transform(x)
-= x`, `with_hash_method(x, method)` forces use of `method` for object `x`. Used together,
-you can request that various parts of your object get hashed in any way you wish. For
-example:
+what parts of an object. `with_hash_method(x, method)` forces use of `method` for object `x`.
+Used together, you can request that various parts of your object get hashed in any way you
+wish. For example:
 
 ```julia
 struct MyObject
