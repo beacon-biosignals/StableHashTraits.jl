@@ -297,6 +297,7 @@ hash_method(::VersionNumber) = UseProperties()
 hash_method(::UUID) = UseProperties()
 hash_method(::Dates.AbstractTime) = UseProperties()
 # TODO: improve the API so context knows about the algorithm
+# c.f. https://github.com/beacon-biosignals/StableHashTraits.jl/issues/17
 transform(x::Set, context) = sort!(map(x -> stable_hash(x; context), collect(x)))
 
 struct GlobalContext end
