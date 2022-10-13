@@ -321,8 +321,7 @@ third argument to [`StableHashTraits.write`](@ref)
 function stable_hash(args...; context=GlobalContext(), alg=crc32c)
     # we always choose `UseIterate` here because that's how we want to hash multiple args,
     # regardless of how tuple hashing is defined.
-    return digest!(stable_hash_helper(args, setup_hash(alg), context,
-                                      UseIterate()))
+    return digest!(stable_hash_helper(args, setup_hash(alg), context, UseIterate()))
 end
 
 end
