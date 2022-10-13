@@ -125,6 +125,13 @@ StableHashTraits.hash_method(x, context::CustomContext) = hash_method(x, context
 
 This would ensure that the range (`x`) gets hashed by iterating of its contents, preserving
 the behavior for all other objects that were true in the prior context.
+
+## Methods of `transform`
+
+```julia
+transform(x::Set, context) = sort!(map(xᵢ -> stable_hash(xᵢ; context), collect(x)))
+````
+
 """
 transform(x, context) = transform(x), context
 transform(x) = x
