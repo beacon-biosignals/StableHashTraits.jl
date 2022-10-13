@@ -296,6 +296,8 @@ hash_method(::Missing) = UseQualifiedName()
 hash_method(::VersionNumber) = UseProperties()
 hash_method(::UUID) = UseProperties()
 hash_method(::Dates.AbstractTime) = UseProperties()
+# TODO: improve the API so context knows about the algorithm
+transform(x::Set, context) = sort!(map(x -> stable_hash(x; context), collect(x)))
 
 struct GlobalContext end
 hash_method(x, context) = hash_method(x)
