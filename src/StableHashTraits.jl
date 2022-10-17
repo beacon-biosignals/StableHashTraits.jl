@@ -129,7 +129,10 @@ the behavior for all other objects that were true in the prior context.
 ## Methods of `transform`
 
 ```julia
-transform(x::Set, context) = sort!(map(xᵢ -> stable_hash(xᵢ; context), collect(x)))
+function transform(x::Set)
+    return (with_hash_method("StableHashTraits_Set", UseWrite()),
+            with_hash_method(sort!(collect(x)), UseIterate()))
+end
 ````
 
 """
@@ -303,9 +306,10 @@ hash_method(::Missing) = UseQualifiedName()
 hash_method(::VersionNumber) = UseProperties()
 hash_method(::UUID) = UseProperties()
 hash_method(::Dates.AbstractTime) = UseProperties()
-# TODO: improve the API so context knows about the algorithm
-# c.f. https://github.com/beacon-biosignals/StableHashTraits.jl/issues/17
-transform(x::Set, context) = sort!([stable_hash(xᵢ; context) for xᵢ in x])
+function transform(x::Set)
+    return (with_hash_method("StableHashTraits_Set", UseWrite()),
+            with_hash_method(sort!(collect(x)), UseIterate()))
+end
 
 struct GlobalContext end
 hash_method(x, context) = hash_method(x)
