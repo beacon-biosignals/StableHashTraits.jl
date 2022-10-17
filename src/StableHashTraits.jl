@@ -87,11 +87,9 @@ x`).
     given transform applies, but you need not implement a method that uses context unless you
     want to (since the fallback method is `transform(x, context) = transform(x)`).
 
-The purpose of `transform` is to provide flexibility about which hash methods get applied to
-what parts of an object. `with_hash_method(x, method)` forces use of `method` for object `x`.
-Used together, you can request that various parts of your object get hashed in any way you
-wish. For example:
-
+In practice, the return value of `transform` is normally a tuple of multuple
+calls to [`with_hash_method`](@ref). For example:
+    
 ```julia
 struct MyObject
     x::AbstractRange
