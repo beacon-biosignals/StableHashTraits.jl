@@ -184,7 +184,7 @@ end
 ##### Forced Hash Methods 
 #####
 
-struct WithMethod{T, M}
+struct WithMethod{T,M}
     val::T
     method::M
 end
