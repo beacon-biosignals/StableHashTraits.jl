@@ -125,6 +125,13 @@ StableHashTraits.hash_method(x, context::CustomContext) = hash_method(x, context
 
 This would ensure that the range (`x`) gets hashed by iterating of its contents, preserving
 the behavior for all other objects that were true in the prior context.
+
+## Methods of `transform`
+
+```julia
+transform(x::Set) = ("StableHashTraits.Set", sort!(collect(x)))
+````
+
 """
 transform(x, context) = transform(x), context
 transform(x) = x
@@ -296,6 +303,7 @@ hash_method(::Missing) = UseQualifiedName()
 hash_method(::VersionNumber) = UseProperties()
 hash_method(::UUID) = UseProperties()
 hash_method(::Dates.AbstractTime) = UseProperties()
+transform(x::Set) = ("StableHashTraits.Set", sort!(collect(x)))
 
 struct GlobalContext end
 hash_method(x, context) = hash_method(x)
