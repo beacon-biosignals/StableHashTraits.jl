@@ -253,8 +253,8 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 - `UUID`: `UseProperties()`
 - `Dates.AbstractTime`: `UseProperties()`
 
-For more complicated scenarios where a simple definition of `hash_method` will not
-suffice, refer to the documentaiton of `transform` and `write`.
+For more complicated scenarios where impleneting `hash_method` will not suffice, refer to
+the documentaiton of `transform` and `write`.
 
 ## Avoiding Type Piracy Using a Context Object
 
@@ -264,7 +264,7 @@ defining the same method: in this case, the method which gets used depends on th
 `using` statements... yuck.
 
 To avoid this problem, it is possible to define a version of any method you specialize (e.g.
-`hash_method`, `transform` and/or `write`) with one additional argument. This final arugment
+`hash_method`, `transform` and/or `write`) with one additional argument. This final argument
 can be anything you want, so long as it is a type you have defined. For example:
 
     using DataFrames
