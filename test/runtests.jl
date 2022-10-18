@@ -72,7 +72,9 @@ function StableHashTraits.transform(val::CustomHashObject, context)
     return (val.x, val.y), CustomContext(context)
 end
 StableHashTraits.hash_method(x::AbstractRange, ::CustomContext) = UseIterate()
-StableHashTraits.hash_method(x, context::CustomContext) = StableHashTraits.hash_method(x, context.old_context)
+function StableHashTraits.hash_method(x, context::CustomContext)
+    return StableHashTraits.hash_method(x, context.old_context)
+end
 
 @testset "StableHashTraits.jl" begin
     # reference tests to ensure hash consistency
