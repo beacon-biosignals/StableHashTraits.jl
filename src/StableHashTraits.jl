@@ -129,10 +129,7 @@ the behavior for all other objects that were true in the prior context.
 ## Methods of `transform`
 
 ```julia
-function transform(x::Set)
-    return (with_hash_method("StableHashTraits_Set", UseWrite()),
-            with_hash_method(sort!(collect(x)), UseIterate()))
-end
+transform(x::Set) = ("StableHashTraits.Set", sort!(collect(x)))
 ````
 
 """
