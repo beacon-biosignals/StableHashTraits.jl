@@ -106,7 +106,7 @@ then iterating over the characters specified in `y`.
 """
 transform(x, context) = transform(x)
 transform(x) = x
-# NOTE: we need only implement this for `UseIterate` because all hash methods that
+# NOTE: we need only call `transform` in `UseIterate` because all other hash methods that
 # need to hash multiple subcomponents make use of of the `UseIterate` method.
 
 function stable_hash_helper(x, hash, context, ::UseIterate)
