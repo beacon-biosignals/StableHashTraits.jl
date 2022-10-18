@@ -84,7 +84,8 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 - `Dates.AbstractTime`: `UseProperties()`
 
 For more complicated scenarios where impleneting `hash_method` will not suffice, refer to
-the documentaiton of `transform` and `write`.
+the documentaiton of `transform` and `write`. For instance `Set` objects are supported using
+`transform`.
 
 ## Breaking changes
 
