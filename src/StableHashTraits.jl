@@ -1,6 +1,6 @@
 module StableHashTraits
 
-export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName, with_hash_method
+export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName
 
 using CRC32c, TupleTools, Compat, UUIDs, Dates, Tables
 using SHA: SHA
@@ -85,26 +85,28 @@ x`).
 
     As with all other methods, you can specify a context---an aribtrary object---in which the
     given transform applies, but you need not implement a method that uses context unless you
-    want to (since the fallback method is `transform(x, context) = transform(x)`).
+    want to. If you do accept context, transform should return a tuple of the transformed object
+    and the context, also possibly transformed. The fallback method is 
+    `transform(x, context) = (transform(x), context)`.
 
-In practice, the return value of `transform` is normally a tuple of multuple
-calls to [`with_hash_method`](@ref). For example:
+In practice, the return value of `transform` is normally a tuple of some subset of values
+from the object.
     
 ```julia
 struct MyObject
     x::AbstractRange
-    y::String
+    y::Vector{Float64}
+    note::String
 end
 function StableHashTraits.transform(val::MyObject)
-    return (with_hash_method(val.x, UseIterate()), with_hash_method(val.y, UseIterate()))
+    return (val.x, val.y)
 end
 ```
 
-This would hash `MyObject` by iterating over the numbers within the range defined by `x` and
-then iterating over the characters specified in `y`. 
+This would hash `MyObject` by hasing the data (x and y), but not the notes about that data.
 
 """
-transform(x, context) = transform(x)
+transform(x, context) = transform(x), context
 transform(x) = x
 # NOTE: we need only call `transform` in `UseIterate` because all other hash methods that
 # need to hash multiple subcomponents make use of of the `UseIterate` method.
@@ -118,9 +120,9 @@ function stable_hash_helper(x, hash, context, ::UseIterate)
         return hash
     end
     for el in x
-        el_ = transform(el, context)
+        el_, context_ = transform(el, context)
         val = stable_hash_helper(el_, similar_hasher(hash), context,
-                                 hash_method(el_, context))
+                                 hash_method(el_, context_))
         recursive_hash!(hash, val)
     end
     return hash
@@ -177,26 +179,6 @@ function stable_hash_helper(x, hash, context, method::UseSize)
     recursive_hash!(hash, val)
     return hash
 end
-
-#####
-##### Forced Hash Methods 
-#####
-
-struct WithMethod{T,M}
-    val::T
-    method::M
-end
-hash_method(x::WithMethod) = x
-function stable_hash_helper(x, hash, context, _::WithMethod)
-    return stable_hash_helper(x.val, hash, context, x.method)
-end
-"""
-    with_hash_method(x, method)
-
-For an object which might normally be hashed by some other method, force is to be hashed
-using the given hash method.
-"""
-with_hash_method(x, method) = WithMethod(x, method)
 
 #####
 ##### Hash method trait 
