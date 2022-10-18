@@ -73,6 +73,64 @@ function recursive_hash!(hash, result)
 end
 
 struct UseIterate end
+
+"""
+    StableHashTraits.transform(x, [context])
+
+Before hashing object `x`, it is first passed through `transform`; the result of this call
+is what is actually hashed. The fallback method is the identity function (`transform(x) =
+x`).
+
+!!! note "Optional Context"
+
+    As with all other methods, you can specify a context---an aribtrary object---in which the
+    given transform applies, but you need not implement a method that uses context unless you
+    want to. If you do accept context, transform should return a tuple of the transformed object
+    and the context, also possibly transformed. The fallback method is 
+    `transform(x, context) = (transform(x), context)`.
+
+In practice, the return value of `transform` is normally a tuple of some subset of values
+from the object.
+    
+```julia
+struct MyObject
+    x::AbstractRange
+    y::Vector{Float64}
+    note::String
+end
+function StableHashTraits.transform(val::MyObject)
+    return (val.x, val.y)
+end
+```
+
+This would hash `MyObject` by hasing the data (x and y), but not the notes about that data.
+
+
+By changing the context, you can change how something in that object gets hashed.
+
+```julia
+struct CustomHashObject
+    x::AbstractRange
+    y::Vector{Float64}
+end
+struct CustomContext{T}
+    old_context::T
+end
+function StableHashTraits.transform(val::CustomHashObject, context)
+    return (val.x, val.y), CustomContext(context)
+end
+StableHashTraits.hash_method(x::AbstractRange, ::CustomContext) = UseIterate()
+StableHashTraits.hash_method(x, context::CustomContext) = hash_method(x, context.old_context)
+```
+
+This would ensure that the range (`x`) gets hashed by iterating of its contents, preserving
+the behavior for all other objects that were true in the prior context.
+"""
+transform(x, context) = transform(x), context
+transform(x) = x
+# NOTE: we need only call `transform` in `UseIterate` because all other hash methods that
+# need to hash multiple subcomponents make use of of the `UseIterate` method.
+
 function stable_hash_helper(x, hash, context, ::UseIterate)
     # this branch for isempty is not strictly necessary, (there are more elegant solutions)
     # but it is consistent with an older, less generic implementation of this method and
@@ -82,8 +140,9 @@ function stable_hash_helper(x, hash, context, ::UseIterate)
         return hash
     end
     for el in x
-        val = stable_hash_helper(el, similar_hasher(hash), context,
-                                 hash_method(el, context))
+        el_, context_ = transform(el, context)
+        val = stable_hash_helper(el_, similar_hasher(hash), context,
+                                 hash_method(el_, context_))
         recursive_hash!(hash, val)
     end
     return hash
@@ -173,8 +232,8 @@ You should return one of the following values.
     include the type as part of the hash. Do you want a named tuple with the same properties
     as your custom struct to hash to the same value? If you don't, then use
     `UseQualifiedName`.
-5. `UseSize(method)`: hash the result of calling `size` on the object and use 
-    `method` to hash the contents of the value (e.g. `UseIterate`).
+5. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
+    hash the contents of the value (e.g. `UseIterate`).
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
@@ -194,30 +253,32 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 - `UUID`: `UseProperties()`
 - `Dates.AbstractTime`: `UseProperties()`
 
-## Avoiding Type Piracy
+For more complicated scenarios where impleneting `hash_method` will not suffice, refer to
+the documentaiton of `transform` and `write`.
+
+## Avoiding Type Piracy Using a Context Object
 
 It can be very tempting to define `hash_method` for types that were defined by another
 package or from Base. This is type piracy, and can easily lead to two different packags
 defining the same method: in this case, the method which gets used depends on the order of
 `using` statements... yuck.
 
-To avoid this problem, it is possible to define a two argument version of `hash_method`
-(and/or a three argument version of `StableHashTraits.write`). This final arugment can be
-anything you want, so long as it is a type you have defined. For example:
+To avoid this problem, it is possible to define a version of any method you specialize (e.g.
+`hash_method`, `transform` and/or `write`) with one additional argument. This final argument
+can be anything you want, so long as it is a type you have defined. For example:
 
     using DataFrames
     struct MyContext end
-    StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByName)
+    StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByOrder)
     stable_hash(DataFrames(a=1:2, b=1:2); context=MyContext())
 
-By default the context is `StableHashTraits.GlobalContext` and just two methods are defined.
-
-    hash_method(x, context) = hash_method(x)
-    StableHashTraits.write(io, x, context) = StableHashTraits.write(io, x)
+By default the context is `StableHashTraits.GlobalContext` and fall back methods are defined
+that pass through to the methods without a context argument (e.g. `hash_method(x, context) =
+hash_method(x)`)
 
 In this way, you only need to define methods for the types that have non-default behavior
-for your context; furthermore, those who have no need of a particular context can simply
-define the one-argument version of `hash_method` and/or two argument version of `write`.
+for your context; furthermore, those who have no need of a particular context objects can
+simply define methods without it.
 
 ```
 """
@@ -257,9 +318,10 @@ The `context` value gets passed as the second argument to [`hash_method`](@ref),
 third argument to [`StableHashTraits.write`](@ref)
 
 """
-function stable_hash(obj...; context=GlobalContext(), alg=crc32c)
-    return digest!(stable_hash_helper(obj, setup_hash(alg), context,
-                                      hash_method(obj, context)))
+function stable_hash(args...; context=GlobalContext(), alg=crc32c)
+    # we always choose `UseIterate` here because that's how we want to hash multiple args,
+    # regardless of how tuple hashing is defined.
+    return digest!(stable_hash_helper(args, setup_hash(alg), context, UseIterate()))
 end
 
 end

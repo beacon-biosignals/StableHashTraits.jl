@@ -62,8 +62,8 @@ You can customize its behavior for particular types by implementing the trait
     include the type as part of the hash. Do you want a named tuple with the same properties
     as your custom struct to hash to the same value? If you don't, then use
     `UseQualifiedName`.
-5. `UseSize(method)`: hash the result of calling `size` on the object and use 
-    `method` to hash the contents of the value (e.g. `UseIterate`).
+5. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
+    hash the contents of the value (e.g. `UseIterate`).
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
@@ -82,6 +82,9 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 - `VersionNumber`: `UseProperties()`
 - `UUID`: `UseProperties()`
 - `Dates.AbstractTime`: `UseProperties()`
+
+For more complicated scenarios where impleneting `hash_method` will not suffice, refer to
+the documentaiton of `transform` and `write`.
 
 ## Breaking changes
 
@@ -117,23 +120,22 @@ package or from Base. This is type piracy, and can easily lead to two different 
 defining the same method: in this case, the method which gets used depends on the order of
 `using` statements... yuck.
 
-To avoid this problem, it is possible define a two argument version of `hash_method` (and/or
-a three argument version of `StableHashTraits.write`). This final arugment can be anything
-you want, so long as it is a type you have defined. For example:
+To avoid this problem, it is possible to define a version of any method you specialize (e.g.
+`hash_method`, `transform` and/or `write`) with one additional argument. This final argument
+can be anything you want, so long as it is a type you have defined. For example:
 
     using DataFrames
     struct MyContext end
-    StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByName)
+    StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByOrder)
     stable_hash(DataFrames(a=1:2, b=1:2); context=MyContext())
 
-By default the context is `StableHashTraits.GlobalContext` and just two methods are defined.
-
-    hash_method(x, context) = hash_method(x)
-    StableHashTraits.write(io, x, context) = StableHashTraits.write(io, x)
+By default the context is `StableHashTraits.GlobalContext` and fall back methods are defined
+that pass through to the methods without a context argument (e.g. `hash_method(x, context) =
+hash_method(x)`)
 
 In this way, you only need to define methods for the types that have non-default behavior
-for your context; furthermore, those who have no need of a particular context can simply
-define the one-argument version of `hash_method` and/or two argument version of `write`.
+for your context; furthermore, those who have no need of a particular context objects can
+simply define methods without it.
 
 ## Hashing gotcha's
 
