@@ -59,17 +59,20 @@ end
 struct BasicHashObject
     x::AbstractRange
     y::Vector{Float64}
-    notes::String
 end
 StableHashTraits.hash_method(x::BasicHashObject) = UseProperties()
 struct CustomHashObject
     x::AbstractRange
     y::Vector{Float64}
-    notes::String
 end
-function StableHashTraits.transform(val::CustomHashObject)
-    return (val.x, val.y)
+struct CustomContext{T}
+    old_context::T
 end
+function StableHashTraits.transform(val::CustomHashObject, context)
+    return (val.x, val.y), CustomContext(context)
+end
+StableHashTraits.hash_method(x::AbstractRange, ::CustomContext) = UseIterate()
+StableHashTraits.hash_method(x, context::CustomContext) = StableHashTraits.hash_method(x, context.old_context)
 
 @testset "StableHashTraits.jl" begin
     # reference tests to ensure hash consistency
@@ -139,8 +142,8 @@ end
     @test stable_hash([1 2; 3 4]; alg=sha1) == bytes
 
     # various (in)equalities
-    @test stable_hash(CustomHashObject(1:5, 1:10, "foo")) !=
-          stable_hash(BasicHashObject(1:5, 1:10, "foo"))
+    @test stable_hash(CustomHashObject(1:5, 1:10)) !=
+          stable_hash(BasicHashObject(1:5, 1:10))
     @test stable_hash([]) != stable_hash([(), (), ()])
     @test stable_hash([1 2; 3 4]) != stable_hash(vec([1 2; 3 4]))
     @test stable_hash([1 2; 3 4]) == stable_hash([1 3; 2 4]')

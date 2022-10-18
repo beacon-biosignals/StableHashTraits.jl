@@ -105,6 +105,26 @@ end
 
 This would hash `MyObject` by hasing the data (x and y), but not the notes about that data.
 
+
+By changing the context, you can change how something in that object gets hashed.
+
+```julia
+struct CustomHashObject
+    x::AbstractRange
+    y::Vector{Float64}
+end
+struct CustomContext{T}
+    old_context::T
+end
+function StableHashTraits.transform(val::CustomHashObject, context)
+    return (val.x, val.y), CustomContext(context)
+end
+StableHashTraits.hash_method(x::AbstractRange, ::CustomContext) = UseIterate()
+StableHashTraits.hash_method(x, context::CustomContext) = hash_method(x, context.old_context)
+```
+
+This would ensure that the range (`x`) gets hashed by iterating of its contents, preserving
+the behavior for all other objects that were true in the prior context.
 """
 transform(x, context) = transform(x), context
 transform(x) = x
