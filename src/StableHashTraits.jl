@@ -306,10 +306,7 @@ hash_method(::Missing) = UseQualifiedName()
 hash_method(::VersionNumber) = UseProperties()
 hash_method(::UUID) = UseProperties()
 hash_method(::Dates.AbstractTime) = UseProperties()
-function transform(x::Set)
-    return (with_hash_method("StableHashTraits_Set", UseWrite()),
-            with_hash_method(sort!(collect(x)), UseIterate()))
-end
+transform(x::Set) = ("StableHashTraits.Set", sort!(collect(x)))
 
 struct GlobalContext end
 hash_method(x, context) = hash_method(x)
