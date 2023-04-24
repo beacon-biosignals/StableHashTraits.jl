@@ -160,10 +160,11 @@ function UseProperties(by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return UseProperties{by}()
 end
+stable_hash_propertynames(x, context) = propertynames(x)
 orderproperties(::UseProperties{:ByOrder}, props) = props
 orderproperties(::UseProperties{:ByName}, props) = TupleTools.sort(props; by=string)
 function stable_hash_helper(x, hash, context, use::UseProperties)
-    vals = (k => getproperty(x, k) for k in orderproperties(use, propertynames(x)))
+    vals = (k => getproperty(x, k) for k in orderproperties(use, stable_hash_propertynames(x, context)))
     return stable_hash_helper(vals, hash, context, UseIterate())
 end
 

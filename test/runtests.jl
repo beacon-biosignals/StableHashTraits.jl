@@ -76,6 +76,14 @@ function StableHashTraits.hash_method(x, context::CustomContext)
     return StableHashTraits.hash_method(x, context.old_context)
 end
 
+struct IgnoreFieldStruct
+    field1::String
+    field2::Int
+end
+StableHashTraits.hash_method(::IgnoreFieldStruct, ::MyContext) = UseProperties()
+StableHashTraits.stable_hash_propertynames(x::IgnoreFieldStruct, ::MyContext) = filter(p -> p ∉ [:field2], propertynames(x))
+
+
 @testset "StableHashTraits.jl" begin
     # reference tests to ensure hash consistency
     @test stable_hash(()) == 0x48674bc7
@@ -190,4 +198,5 @@ end
     @test stable_hash(TestType(1, 2); context=MyContext()) != stable_hash(TestType(1, 2))
     @test stable_hash(TestType2(1, 2); context=MyContext()) ==
           stable_hash(TestType2(1, 2); context=MyContext())
+    @test stable_hash(IgnoreFieldStruct("field1", 10); context=MyContext()) == stable_hash(IgnoreFieldStruct("field1", 20); context=MyContext())
 end
