@@ -65,16 +65,13 @@ struct CustomHashObject
     x::AbstractRange
     y::Vector{Float64}
 end
-struct CustomContext{T}
-    old_context::T
+struct CustomContext end
+function StableHashTraits.hash_method(::CustomHashObject)
+    return StableHashTraits.ReplaceContext(CustomContext(), UseProperties())
 end
-function StableHashTraits.transform(val::CustomHashObject, context)
-    return (val.x, val.y), CustomContext(context)
-end
-StableHashTraits.hash_method(x::AbstractRange, ::CustomContext) = UseIterate()
-function StableHashTraits.hash_method(x, context::CustomContext)
-    return StableHashTraits.hash_method(x, context.old_context)
-end
+StableHashTraits.hash_method(::AbstractRange, ::CustomContext) = UseIterate()
+
+# TODO: test recursive uses of UseTransform, and property error handling of `UseTransform(identity)`
 
 @testset "StableHashTraits.jl" begin
     # reference tests to ensure hash consistency
