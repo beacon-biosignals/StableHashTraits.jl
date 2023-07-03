@@ -12,7 +12,6 @@ change across Julia versions (or between Julia sessions).
 
 For example:
 
-
 ```julia
 struct MyType
    a
