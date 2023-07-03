@@ -1,6 +1,7 @@
 module StableHashTraits
 
-export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName
+export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName, UseSize, 
+    UseTransform, UseHeader, UseAndReplaceContext
 
 using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA
@@ -74,10 +75,8 @@ end
 
 struct UseIterate end
 
-# NOTE: we need only call `transform` in `UseIterate` because all other hash methods that
-# need to hash multiple subcomponents make use of of the `UseIterate` method.
-
 function stable_hash_helper(x, hash, context, ::UseIterate)
+    update!(hash, UInt8[])
     for el in x
         val = stable_hash_helper(el, similar_hasher(hash), context, hash_method(el, context))
         recursive_hash!(hash, val)
@@ -153,12 +152,12 @@ struct UseTransform{F}
     fn::F
 end
 function stable_hash_helper(x, hash, context, method::UseTransform)
-    y = transfrom(x, method, context)
+    y = transform(x, method, context)
     return stable_hash_helper(y, hash, context, hash_method(y, context))
 end
 
 transform(x, _, _) = x
-function transform(x, t::UseTransform, c) 
+function transform(x, t::UseTransform, context)
     result = t.fn(x)
     if typeof(result) == typeof(x)
         # this would almost certainly lead to a StackOverflowError
@@ -171,40 +170,34 @@ end
 
 """
 
-    StableHashTraits.ReplaceContext{T}(new_context, parent)
+    UseAndReplaceContext(method, old_context -> new_context)
 
-A special hash method that modifies the prexisting context if it matches `T`. If not
-specified `T` defualts to `StableHashTraits.GlobalContext`. The context is not modified
-if it isn't of type `T`
-    
-In either case, once the context is changed, use `parent` method to hash the object.
-(The new context only applies to the contents of the object, if any)
+A special hash method that changes the context when hashing the contents of an object.
+The first argument is a callable which transforms the old context to the new, and
+`method` defines how the object itself should be hashed.
 
-DO NOT do this:
+!!! note "It is best to nest the old context.
 
-    hash_method(::MyObject, ::T) where T = ReplaceContext{T}(MyContext(), UseProperties())
+    In practice you generally only want to modify how hashing works for a subset 
+    of the types, and then fallback to the old context. This can be achived by
+    nesting the old context, as follows:
 
-The design of `ReplaceContext` is intended to limit the cases where the context is
-overwritten to some explicitly defined subset of types. Instead you should usually define:
+    ```julia
+        struct MyContext{P}
+            parent::P
+        end
 
-    hash_method(::MyObject) = ReplaceContext(MyContext(), UseProperties())
-    
+        StableHashTraits.hash_method(::MyContainedType, ::MyContext) = UseWrite()
+        StableHashTraits.hash_method(x::Any, c::MyContext) = StableHashTraits.hash_method(x, c.parent)
+        StableHashTraits.hash_method(::MyContainerType) = UseAndReplaceContext(UseIterate(), MyContext)
+    ```
 """
-struct ReplaceContext{P,C,M}
-    context::C
+struct UseAndReplaceContext{F,M}
     parent::M
+    contextfn::F
 end
-ReplaceContext(context, parent) = ReplaceContext{GlobalContext}(context, parent)
-function ReplaceContext{P}(context, parent) where P
-    return ReplaceContext{P,typeof(context),typeof(parent)}(context, parent)
-end
-function stable_hash_helper(x, hash, context, method::ReplaceContext)
-    return stable_phash_helper(x, hash, context, method.parent)
-    
-end
-function stable_hash_helper(x, hash, ::C, method::ReplaceContext{C}) where C
-    new_method = hash_method(x, method.parent)
-    return stable_hash_helper(x, hash, method.context, new_method)
+function stable_hash_helper(x, hash, context, method::UseAndReplaceContext)
+    return stable_hash_helper(x, hash, method.contextfn(context), method.parent)
 end
 
 #####
@@ -241,9 +234,10 @@ You should return one of the following values.
     `UseQualifiedName`.
 5. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
     hash the contents of the value (e.g. `UseIterate`).
-6. `UseTransform(fn -> body)`: before hashing the result, transform it by the given function;
-   to help avoid stack overflows this cannot return an object of the same type.
-7. `UseHeader(str::String, method)`: prefix the hash created by `method` with a hash of `str`.
+6. `UseTransform(fn -> body)`: before hashing the result, transform it by the given
+   function; to help avoid stack overflows this cannot return an object of the same type.
+7. `UseHeader(str::String, method)`: prefix the hash created by `method` with a hash of
+   `str`.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
@@ -255,11 +249,12 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
     - `UseWrite()` for primitive types
     - `UseTable()` for any object `x` where `Tables.istable(x)` is true
     - `UseQualifiedName(UseProerties())` for all other objects
-- `Function`: `UseHeader("StableHashTraits.FunctionHash", UseQualifiedName())`
+- `Function`: `UseHeader("Base.Function", UseQualifiedName())`
+- `AbstractString`: `UseWrite()`
 - `AbstractVector`, `Tuple`, `Pair`: `UseIterate()`
 - `AbstractArray`: `UseSize(UseIterate())`
 - `AbstractRange`: `UseProperties()`
-- `Set`: `UseQualifiedName(UseTransform(sort! ∘ collect))`
+- `AbstractSet`: `UseHeader("Base.AbstractSet", UseTransform(sort! ∘ collect))`
 
 ## Avoiding Type Piracy Using a Context Object
 
@@ -285,22 +280,34 @@ In this way, you only need to define methods for the types that have non-default
 for your context; furthermore, those who have no need of a particular context objects can
 simply define methods without it.
 
-It is also possible to change the context so it is different only while hashing 
-the contents of a particular object, using [`StableHashTraits.ReplaceContext`](@ref).
+You can also next contexts, by having an appropriate fallback for `Any`, as follows.
+
+    struct MyNestingContext{P}
+        parent::P
+    end
+    StableHashTraits.hash_method(x::Any, c::MyNestingContext) = StableHashTraits.hash_method(x, c.parent)
+    StableHashTraits.hash_method(x::MyType, c::MyNestingCOntext) = UseIterate()
+
+## Changing the `hash_method` for the contents of an object
+
+It possible to use contexts to change how the contents of an object gets hashed. 
+See [`UseAndReplaceContext`](@ref) for details.
+
 """
 function hash_method(x::T) where T 
     Tables.istable(x) && return UseTable() 
     Base.isprimitivetype(T) && return UseWrite()
     return UseQualifiedName(UseProperties())
 end
-hash_method(::AbstractVector) = UseIterate()
+hash_method(x::AbstractVector) = Tables.istable(x) ? UseTable() : UseIterate()
 hash_method(::AbstractRange) = UseProperties()
 hash_method(::AbstractArray) = UseSize(UseIterate())
+hash_method(::AbstractString) = UseWrite()
 hash_method(::Tuple) = UseIterate()
 hash_method(::Pair) = UseIterate()
 hash_method(::Type) = UseQualifiedName()
-hash_method(::Function) = UseHeader("StableHashTrait.Function", UseQualifiedName())
-hash_method(::Set) = UseQualifiedName(UseTransform(sort! ∘ collect))
+hash_method(::Function) = UseHeader("Base.Function", UseQualifiedName())
+hash_method(::AbstractSet) = UseHeader("Base.AbstractSet", UseTransform(sort! ∘ collect))
 
 struct GlobalContext end
 hash_method(x, context) = hash_method(x)
