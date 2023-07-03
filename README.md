@@ -93,7 +93,7 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 ## Breaking changes
 
-### In 0.4:
+### In 1.0:
 
 This is a very breaking release, almost all values hash differently. However,
 far fewer manual defintiions of `hash_method` become necessary. The fallback
