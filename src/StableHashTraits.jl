@@ -1,7 +1,7 @@
 module StableHashTraits
 
-export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName, UseSize, 
-    UseTransform, UseHeader, UseAndReplaceContext
+export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName, UseSize,
+       UseTransform, UseHeader, UseAndReplaceContext
 
 using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA
@@ -78,7 +78,8 @@ struct UseIterate end
 function stable_hash_helper(x, hash, context, ::UseIterate)
     update!(hash, UInt8[])
     for el in x
-        val = stable_hash_helper(el, similar_hasher(hash), context, hash_method(el, context))
+        val = stable_hash_helper(el, similar_hasher(hash), context,
+                                 hash_method(el, context))
         recursive_hash!(hash, val)
     end
     return hash
@@ -115,7 +116,7 @@ function stable_hash_helper(x, hash, context, method::UseQualifiedName)
     if occursin(r"\.#[^.]*$", str)
         error("Annonymous types (those starting with `#`) cannot be hashed to a reliable value")
     end
-    _stable_hash_header(str, x, hash, context, method.parent)
+    return _stable_hash_header(str, x, hash, context, method.parent)
 end
 
 struct UseSize{T}
@@ -134,7 +135,7 @@ struct UseHeader{T}
     parent::T
 end
 function stable_hash_helper(x, hash, context, method::UseHeader)
-    _stable_hash_header(method.str, x, hash, context, method.parent)
+    return _stable_hash_header(method.str, x, hash, context, method.parent)
 end
 
 function _stable_hash_header(str, x, hash, context, method)
@@ -161,8 +162,8 @@ function transform(x, t::UseTransform, context)
     result = t.fn(x)
     if typeof(result) == typeof(x)
         # this would almost certainly lead to a StackOverflowError
-        throw(ArgumentError("The function passed to `UseTransform` returns an object of the "*
-                            "same type as its input.") )
+        throw(ArgumentError("The function passed to `UseTransform` returns an object of the " *
+                            "same type as its input."))
     else
         return transform(result, hash_method(result, context), context)
     end
@@ -293,8 +294,8 @@ It possible to use contexts to change how the contents of an object gets hashed.
 See [`UseAndReplaceContext`](@ref) for details.
 
 """
-function hash_method(x::T) where T 
-    Tables.istable(x) && return UseTable() 
+function hash_method(x::T) where {T}
+    Tables.istable(x) && return UseTable()
     Base.isprimitivetype(T) && return UseWrite()
     return UseQualifiedName(UseProperties())
 end
