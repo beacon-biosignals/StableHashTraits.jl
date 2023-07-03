@@ -180,7 +180,7 @@ The first argument is a callable which transforms the old context to the new, an
 !!! note "It is best to nest the old context.
 
     In practice you generally only want to modify how hashing works for a subset 
-    of the types, and then fallback to the old context. This can be achived by
+    of the types, and then fallback to the old context. This can be achieved by
     nesting the old context, as follows:
 
     ```julia
