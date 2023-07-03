@@ -42,6 +42,11 @@ matters).
 You can customize its behavior for particular types by implementing the trait
 `StableHashTraits.hash_method`. Any method of `hash_method` should simply return one of the following values.
 
+    hash_method(x, [context])
+
+Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
+You should return one of the following values.
+
 1. `UseWrite()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
     and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
     falls back to `Base.write(io, x)` if no specialized methods are defined for x.
@@ -59,11 +64,14 @@ You can customize its behavior for particular types by implementing the trait
     of the object. Throws an error if the name includes `#` (e.g. an anonymous function). If
     you wish to include this qualified name *and* another method, pass one of the other
     methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be used to
-    include the type as part of the hash. Do you want a named tuple with the same properties
-    as your custom struct to hash to the same value? If you don't, then use
-    `UseQualifiedName`.
+    include the type as part of the hash. Do you want objects with the same field names and
+    values but different types to hash to different values? Then specify `UseQualifiedName`.
 5. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
     hash the contents of the value (e.g. `UseIterate`).
+6. `UseTransform(fn -> body)`: before hashing the result, transform it by the given
+   function; to help avoid stack overflows this cannot return an object of the same type.
+7. `UseHeader(str::String, method)`: prefix the hash created by `method` with a hash of
+   `str`.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
@@ -71,23 +79,24 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 ## Implemented methods of `hash_method`
 
-- `Any`: either
-    - `UseWrite()` OR
+- `Any`: 
+    - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
     - `UseTable()` for any object `x` where `Tables.istable(x)` is true
-- `Function`: `UseQualifiedName()`
-- `NamedTuples`: `UseProperties()` 
+    - `UseQualifiedName(UseProerties())` for all other objects
+- `Function`: `UseHeader("Base.Function", UseQualifiedName())`
+- `AbstractString`: `UseWrite()`
 - `AbstractVector`, `Tuple`, `Pair`: `UseIterate()`
 - `AbstractArray`: `UseSize(UseIterate())`
-- `Missing`, `Nothing`: `UseQualifiedNamed()`
-- `VersionNumber`: `UseProperties()`
-- `UUID`: `UseProperties()`
-- `Dates.AbstractTime`: `UseProperties()`
-
-For more complicated scenarios where impleneting `hash_method` will not suffice, refer to
-the documentaiton of `transform` and `write`. For instance `Set` objects are supported using
-`transform`.
+- `AbstractRange`: `UseProperties()`
+- `AbstractSet`: `UseHeader("Base.AbstractSet", UseTransform(sort! ∘ collect))`
 
 ## Breaking changes
+
+### In 0.4:
+
+This is a very breaking release, almost all values hash differently. However,
+far fewer manual defintiions of `hash_method` become necessary. The fallback
+for `Any` should handle many more cases.
 
 ### In 0.3:
 
@@ -114,7 +123,7 @@ previous hash value. For example if you had a custom table type `MyCustomTable` 
 you only defined a `StableHashTraits.write` method and no `hash_method`, its hash will be
 changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 
-## Avoiding Type Piracy
+## Avoiding Type Piracy Using a Context Object
 
 It can be very tempting to define `hash_method` for types that were defined by another
 package or from Base. This is type piracy, and can easily lead to two different packags
@@ -138,11 +147,22 @@ In this way, you only need to define methods for the types that have non-default
 for your context; furthermore, those who have no need of a particular context objects can
 simply define methods without it.
 
+You can also next contexts, by having an appropriate fallback for `Any`, as follows.
+
+    struct MyNestingContext{P}
+        parent::P
+    end
+    StableHashTraits.hash_method(x::Any, c::MyNestingContext) = StableHashTraits.hash_method(x, c.parent)
+    StableHashTraits.hash_method(x::MyType, c::MyNestingCOntext) = UseIterate()
+
+## Changing the `hash_method` for the contents of an object
+
+It possible to use contexts to change how the contents of an object gets hashed. 
+See [`UseAndReplaceContext`](@ref) for details.
+
 ## Hashing gotcha's
 
 Here-in is a list of hash collisions that have been deemed to be acceptable in practice:
 
-- `stable_hash(sin) == stable_hash("Base.sin")`
 - `stable_hash([1,2,3]) == stable_hash((1,2,3))`
 - `stable_hash(DataFrame(x=1:10)) == stable_hash((; x=collect(1:10)))`
-- `stable_hash(1:10) == stable_hash((;start=1, stop=10))`

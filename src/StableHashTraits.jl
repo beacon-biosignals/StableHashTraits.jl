@@ -229,9 +229,8 @@ You should return one of the following values.
     of the object. Throws an error if the name includes `#` (e.g. an anonymous function). If
     you wish to include this qualified name *and* another method, pass one of the other
     methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be used to
-    include the type as part of the hash. Do you want a named tuple with the same properties
-    as your custom struct to hash to the same value? If you don't, then use
-    `UseQualifiedName`.
+    include the type as part of the hash. Do you want objects with the same field names and
+    values but different types to hash to different values? Then specify `UseQualifiedName`.
 5. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
     hash the contents of the value (e.g. `UseIterate`).
 6. `UseTransform(fn -> body)`: before hashing the result, transform it by the given
@@ -245,8 +244,8 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 ## Implemented methods of `hash_method`
 
-- `Any`: either
-    - `UseWrite()` for primitive types
+- `Any`: 
+    - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
     - `UseTable()` for any object `x` where `Tables.istable(x)` is true
     - `UseQualifiedName(UseProerties())` for all other objects
 - `Function`: `UseHeader("Base.Function", UseQualifiedName())`
