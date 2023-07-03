@@ -20,7 +20,13 @@ struct MyType
 end
 StableHashTraits.hash_method(::MyType) = UseProperties()
 
-stable_hash(MyType(1,2)) == stable_hash((a=1, b=2)) # true
+struct MyOtherType
+   a
+   b
+end
+StableHashTraits.hash_method(::MyOtherType) = UseProperties()
+
+stable_hash(MyType(1,2)) == stable_hash(MyOtherType(1, 2)) # true
 ```
 
 ## Why use `stable_hash` instead of `Base.hash`?
