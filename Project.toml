@@ -1,7 +1,7 @@
 name = "StableHashTraits"
 uuid = "c5dd0088-6c3f-4803-b00e-f31a60c170fa"
 authors = ["Beacon Biosignals, Inc."]
-version = "0.4.0"
+version = "1.0"
 
 [deps]
 CRC32c = "8bf52ea8-c179-5cab-976a-9e18b702a9bc"

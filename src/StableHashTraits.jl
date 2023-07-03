@@ -280,7 +280,7 @@ In this way, you only need to define methods for the types that have non-default
 for your context; furthermore, those who have no need of a particular context objects can
 simply define methods without it.
 
-You can also next contexts, by having an appropriate fallback for `Any`, as follows.
+You can also nest contexts, by having an appropriate fallback for `Any`, as follows.
 
     struct MyNestingContext{P}
         parent::P
@@ -295,8 +295,8 @@ See [`UseAndReplaceContext`](@ref) for details.
 
 """
 function hash_method(x::T) where {T}
-    Tables.istable(x) && return UseTable()
     Base.isprimitivetype(T) && return UseWrite()
+    Tables.istable(x) && return UseTable()
     return UseQualifiedName(UseProperties())
 end
 hash_method(x::AbstractVector) = Tables.istable(x) ? UseTable() : UseIterate()
