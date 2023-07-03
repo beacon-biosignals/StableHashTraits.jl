@@ -262,8 +262,8 @@ package or from Base. This is type piracy, and can easily lead to two different 
 defining the same method: in this case, the method which gets used depends on the order of
 `using` statements... yuck.
 
-To avoid this problem, it is possible to define a version of any method you specialize (e.g.
-`hash_method`, `transform` and/or `write`) with one additional argument. This final argument
+To avoid this problem, it is possible to define a version of any method you specialize (
+`hash_method` or `write`) with one additional argument. This final argument
 can be anything you want, so long as it is a type you have defined. For example:
 
     using DataFrames

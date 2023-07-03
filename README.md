@@ -42,11 +42,6 @@ matters).
 You can customize its behavior for particular types by implementing the trait
 `StableHashTraits.hash_method`. Any method of `hash_method` should simply return one of the following values.
 
-    hash_method(x, [context])
-
-Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
-You should return one of the following values.
-
 1. `UseWrite()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
     and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
     falls back to `Base.write(io, x)` if no specialized methods are defined for x.
@@ -130,8 +125,7 @@ package or from Base. This is type piracy, and can easily lead to two different 
 defining the same method: in this case, the method which gets used depends on the order of
 `using` statements... yuck.
 
-To avoid this problem, it is possible to define a version of any method you specialize (e.g.
-`hash_method`, `transform` and/or `write`) with one additional argument. This final argument
+To avoid this problem, it is possible to define a version of any method you specialize ( `hash_method` or `write`) with one additional argument. This final argument
 can be anything you want, so long as it is a type you have defined. For example:
 
     using DataFrames
@@ -158,7 +152,7 @@ You can also next contexts, by having an appropriate fallback for `Any`, as foll
 ## Changing the `hash_method` for the contents of an object
 
 It possible to use contexts to change how the contents of an object gets hashed. 
-See [`UseAndReplaceContext`](@ref) for details.
+See `UseAndReplaceContext` for details.
 
 ## Hashing gotcha's
 
