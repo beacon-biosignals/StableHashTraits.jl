@@ -88,8 +88,6 @@ function StableHashTraits.hash_method(x::GoodTransform)
     return UseTransform(x -> GoodTransform(string(x.count)))
 end
 
-# TODO: test recursive uses of UseTransform, and property error handling of `UseTransform(identity)`
-
 @testset "StableHashTraits.jl" begin
     # reference tests to ensure hash consistency
     @test stable_hash(()) == 0x48674bc7
@@ -110,6 +108,7 @@ end
     @test stable_hash(TimePeriod(Nanosecond(0))) == 0x58536b6d
     @test stable_hash(Hour(1) + Minute(2)) == 0x4783c75c
     @test stable_hash(DataFrame(; x=1:10, y=1:10)) == 0xa043bc39
+    @test stable_hash(Dict(:a => "1", :b => "2")) == 0x06b11ffa4
 
     # get some code coverage (and reference tests) for sha256
     bytes = [0xe2, 0x4c, 0xcd, 0x9d, 0xed, 0xaf, 0x29, 0xa7, 0x70, 0x82, 0x2f, 0x5c, 0x30,
@@ -169,7 +168,8 @@ end
 
     # various (in)equalities
     @test_throws ArgumentError stable_hash(BadTransform())
-    @test stable_hash(GoodTransform(2)) == stable_hash(GoodTransform("-0.2")) # verify that transform can be called recurisvely
+    # verifies that transform can be called recurisvely
+    @test stable_hash(GoodTransform(2)) == stable_hash(GoodTransform("-0.2")) 
     @test stable_hash(GoodTransform(3)) != stable_hash(GoodTransform("-0.2"))
     @test stable_hash((; x=collect(1:10), y=collect(1:10))) ==
           stable_hash([(; x=i, y=i) for i in 1:10])

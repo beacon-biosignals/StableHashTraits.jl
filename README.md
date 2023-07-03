@@ -86,7 +86,7 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
     - `UseQualifiedName(UseProerties())` for all other objects
 - `Function`: `UseHeader("Base.Function", UseQualifiedName())`
 - `AbstractString`: `UseWrite()`
-- `AbstractVector`, `Tuple`, `Pair`: `UseIterate()`
+- `AbstractVector`, `Tuple`, `Pair`, `AbstractDict`: `UseIterate()`
 - `AbstractArray`: `UseSize(UseIterate())`
 - `AbstractRange`: `UseProperties()`
 - `AbstractSet`: `UseHeader("Base.AbstractSet", UseTransform(sort! ∘ collect))`
