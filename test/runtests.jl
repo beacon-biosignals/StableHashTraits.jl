@@ -169,7 +169,7 @@ end
     # various (in)equalities
     @test_throws ArgumentError stable_hash(BadTransform())
     # verifies that transform can be called recurisvely
-    @test stable_hash(GoodTransform(2)) == stable_hash(GoodTransform("-0.2")) 
+    @test stable_hash(GoodTransform(2)) == stable_hash(GoodTransform("-0.2"))
     @test stable_hash(GoodTransform(3)) != stable_hash(GoodTransform("-0.2"))
     @test stable_hash((; x=collect(1:10), y=collect(1:10))) ==
           stable_hash([(; x=i, y=i) for i in 1:10])
