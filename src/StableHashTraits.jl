@@ -265,7 +265,7 @@ Both `hash_method` and `StableHashTraits.write` (the method called for `UseWrite
 one additional argument, which is the context; it's default value (when calling
 `stable_hash`) is `StableHashTraits.GlobalContext`. The context argument can be any object
 you want, and the fallback methods that accept this final argument simply call the method
-with a context argument (e.g. `hash_method(x, context) = hash_method(x)`).
+without a context argument (e.g. `hash_method(x, context) = hash_method(x)`).
 
 For example:
 
