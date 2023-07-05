@@ -274,7 +274,7 @@ For example:
     StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByName)
     stable_hash(DataFrames(a=1:2, b=1:2); context=MyContext())
 
-Because the fallbacks call a method without the context boject, you only need to define
+Because the fallbacks call a method without the context object, you only need to define
 methods for the types that have non-default behavior for your context; furthermore, those
 who do not need to use context can simply define methods without it.
 
