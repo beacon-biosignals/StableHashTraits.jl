@@ -256,29 +256,27 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 - `AbstractRange`: `UseProperties()`
 - `AbstractSet`: `UseHeader("Base.AbstractSet", UseTransform(sort! ∘ collect))`
 
-## Avoiding Type Piracy Using a Context Object
+## Customizing hashes with contexts
 
-It can be very tempting to define `hash_method` for types that were defined by another
-package or from Base. This is type piracy, and can easily lead to two different packags
-defining the same method: in this case, the method which gets used depends on the order of
-`using` statements... yuck.
+You can customize how hashes are computed within a given scope using a context object.
+This is also a very useful way to avoid type piracy.
 
-To avoid this problem, it is possible to define a version of any method you specialize (
-`hash_method` or `write`) with one additional argument. This final argument
-can be anything you want, so long as it is a type you have defined. For example:
+Both `hash_method` and `StableHashTraits.write` (the method called for `UseWrite`) accept
+one additional argument, which is the context; it's default value (when calling
+`stable_hash`) is `StableHashTraits.GlobalContext`. The context argument can be any object
+you want, and the fallback methods that accept this final argument simply call the method
+with a context argument (e.g. `hash_method(x, context) = hash_method(x)`).
+
+For example:
 
     using DataFrames
     struct MyContext end
-    StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByOrder)
+    StableHashTraits.hash_method(::DataFrame, ::MyContext) = UseProperties(:ByName)
     stable_hash(DataFrames(a=1:2, b=1:2); context=MyContext())
 
-By default the context is `StableHashTraits.GlobalContext` and fall back methods are defined
-that pass through to the methods without a context argument (e.g. `hash_method(x, context) =
-hash_method(x)`)
-
-In this way, you only need to define methods for the types that have non-default behavior
-for your context; furthermore, those who have no need of a particular context objects can
-simply define methods without it.
+Because the fallbacks call a method without the context boject, you only need to define
+methods for the types that have non-default behavior for your context; furthermore, those
+who do not need to use context can simply define methods without it.
 
 You can also nest contexts, by having an appropriate fallback for `Any`, as follows.
 
@@ -288,10 +286,11 @@ You can also nest contexts, by having an appropriate fallback for `Any`, as foll
     StableHashTraits.hash_method(x::Any, c::MyNestingContext) = StableHashTraits.hash_method(x, c.parent)
     StableHashTraits.hash_method(x::MyType, c::MyNestingCOntext) = UseIterate()
 
-## Changing the `hash_method` for the contents of an object
+## Customizing hashes within an object
 
-It possible to use contexts to change how the contents of an object gets hashed. 
-See [`UseAndReplaceContext`](@ref) for details.
+Contexts can be changed not only when you call `stable_hash` but also when you 
+hash the contents of a particular object. See the docstring of [`UseAndReplaceContext`](@ref)
+for details. 
 
 """
 function hash_method(x::T) where {T}
