@@ -1,8 +1,7 @@
 module StableHashTraits
 
-export stable_hash, UseWrite, UseIterate, UseProperties, UseQualifiedName, UseSize,
-       UseTransform, UseHeader, UseAndReplaceContext, HashVersion
-
+export stable_hash, UseWrite, UseIterate, UseFields, UseProperties, UseTable, 
+       UseQualifiedName, UseSize, UseTransform, UseHeader, UseAndReplaceContext, HashVersion
 using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA
 
@@ -77,8 +76,9 @@ struct UseIterate end
 stable_hash_helper(x, hash, context, ::UseIterate) = hash_foreach(identity, hash, context, x)
 function hash_foreach(fn, hash, context, args...)
     update!(hash, UInt8[])
-    foreach(args...) do as
-        val = stable_hash_helper(fn(as...), similar_hasher(hash), context,
+    foreach(args...) do as...
+        el = fn(as...)
+        val = stable_hash_helper(el, similar_hasher(hash), context,
                                  hash_method(el, context))
         recursive_hash!(hash, val)
     end
@@ -105,7 +105,7 @@ function UseFields(by::Symbol=:ByOrder)
 end
 orderfields(::UseFields{:ByOrder}, props) = props
 orderfields(::UseFields{:ByName}, props) = TupleTools.sort(props; by=string)
-function stable_hash_helper(x::T, hash, context, use::UseFields) with T
+function stable_hash_helper(x::T, hash, context, use::UseFields) where T
     return hash_foreach(hash, context, orderfields(use, fieldnames(T))) do k
         return k => getfield(x, k)
     end
@@ -114,11 +114,11 @@ end
 struct UseTable end
 function stable_hash_helper(x, hash, context, ::UseTable)
     cols = Tables.columns(x)
-    return hash_foreach(Pair, hash, context, Tabls.columnnames(x), cols)
+    return hash_foreach(Pair, hash, context, Tables.columnnames(cols), cols)
 end
 
 struct UseQualifiedName{T}
-    parent::T
+    parent_context::T
 end
 UseQualifiedName() = UseQualifiedName(nothing)
 qualified_name(x::Function) = string(parentmodule(x), '.', nameof(x))
@@ -129,37 +129,41 @@ function stable_hash_helper(x, hash, context, method::UseQualifiedName)
     if occursin(r"\.#[^.]*$", str)
         error("Annonymous types (those starting with `#`) cannot be hashed to a reliable value")
     end
-    return _stable_hash_header(str, x, hash, context, method.parent)
+    return _stable_hash_header(str, x, hash, context, method.parent_context)
 end
 
 struct UseSize{T}
-    parent::T
+    parent_context::T
 end
 function stable_hash_helper(x, hash, context, method::UseSize)
     sz = size(x)
     hash = stable_hash_helper(sz, similar_hasher(hash), context, hash_method(sz, context))
-    val = stable_hash_helper(x, similar_hasher(hash), context, method.parent)
+    val = stable_hash_helper(x, similar_hasher(hash), context, method.parent_context)
     recursive_hash!(hash, val)
     return hash
 end
 
 struct UseHeader{T}
     str::String
-    parent::T
+    parent_context::T
 end
 function stable_hash_helper(x, hash, context, method::UseHeader)
-    return _stable_hash_header(method.str, x, hash, context, method.parent)
+    return _stable_hash_header(method.str, x, hash, context, method.parent_context)
 end
 
-function _stable_hash_header(str, x, hash, context, method)
-    hash = stable_hash_helper(str, similar_hasher(hash), context, hash_method(str, context))
-    if !isnothing(method)
-        val = stable_hash_helper(x, similar_hasher(hash), context, method)
-        recursive_hash!(hash, val)
-        return hash
-    else
-        return hash
-    end
+strip_qualifier(x::UseQualifiedName) = x.parent_context
+strip_qualifier(x::UseHeader) = x.parent_context
+strip_qualifier(x) = x
+function _stable_hash_header(str::String, x, hash, context, method)
+    # we do not qualify the type of the header value (it will always be a string)
+    # because that leads to an infinite recursion
+    hash = stable_hash_helper(str, similar_hasher(hash), context, 
+                              strip_qualifier(hash_method(str, context)))
+    isnothing(method) && return hash
+
+    val = stable_hash_helper(x, similar_hasher(hash), context, method)
+    recursive_hash!(hash, val)
+    return hash
 end
 
 struct UseTransform{F}
@@ -186,9 +190,9 @@ end
 
     UseAndReplaceContext(method, old_context -> new_context)
 
-A special hash method that changes the context when hashing the contents of an object.
-The first argument is a callable which transforms the old context to the new, and
-`method` defines how the object itself should be hashed.
+A special hash method that changes the context when hashing the contents of an object. The
+`method` defines how the object itself should be hashed and the second argument is a
+callable which transforms the old context to the new.
 
 !!! note It is best to nest the old context.
 
@@ -198,25 +202,44 @@ The first argument is a callable which transforms the old context to the new, an
 
     ```julia
         struct MyContext{P}
-            parent::P
+            parent_context::P
         end
+        StableHashTraits.parent_context(x::MyContext) = x.parent_context
 
         StableHashTraits.hash_method(::MyContainedType, ::MyContext) = UseWrite()
-        StableHashTraits.hash_method(x::Any, c::MyContext) = StableHashTraits.hash_method(x, c.parent)
         StableHashTraits.hash_method(::MyContainerType) = UseAndReplaceContext(UseIterate(), MyContext)
     ```
 """
 struct UseAndReplaceContext{F,M}
-    parent::M
+    parent_context::M
     contextfn::F
 end
 function stable_hash_helper(x, hash, context, method::UseAndReplaceContext)
-    return stable_hash_helper(x, hash, method.contextfn(context), method.parent)
+    return stable_hash_helper(x, hash, method.contextfn(context), method.parent_context)
 end
 
 #####
 ##### Hash method trait 
 #####
+
+"""
+    StableHashTraits.parent_context(context)
+
+Return the parent_context context of the given context object. (See [`hash_method`](@ref) for
+details of using context). The default method falls back to returning `HashVersion{1}`, but
+this is flagged as a deprecation warning; in the future it is expected that all contexts
+define this method.
+
+If your context is expected to be the root context (akin to `HashVersion{1}`), then 
+`parent_context` should return `nothing` so that the single argument fallback for `hash_method`
+can be called.
+"""
+function parent_context(x::Any)
+    Base.depwarn("You should explicitly define a `parent_context` method for context "*
+                 "`$x`. See details in the docstring of `hash_method`.",
+                 :parent_context)
+    return HashVersion{1}()
+end
 
 # The way you indicate which method a given object used to compute a hash.
 
@@ -235,11 +258,6 @@ You should return one of the following values.
    passing the symbol `:ByOrder` (to hash properties in the order they are listed by
    `propertynames`), which is the default, or `:ByName` (sorting properties by their name
    before hashing).
-3. `UseProperties()`: same as `UseField` but using `propertynames` and `getproperty` in lieu
-   of `fieldnames` and `getfield`
-4. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
-   `Tables.columnnames` to compute a hash of each columns content and name, ala
-   `UseFields`. 
 4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is the type
     of the object. Throws an error if the name includes `#` (e.g. an anonymous function). If
     you wish to include this qualified name *and* another method, pass one of the other
@@ -252,6 +270,10 @@ You should return one of the following values.
    function; to help avoid stack overflows this cannot return an object of the same type.
 7. `UseHeader(str::String, method)`: prefix the hash created by `method` with a hash of
    `str`.
+8. `UseProperties()`: same as `UseField` but using `propertynames` and `getproperty` in lieu
+   of `fieldnames` and `getfield`
+9. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
+   `Tables.columnnames` to compute a hash of each columns content and name, ala `UseFields`. 
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
@@ -261,13 +283,15 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 - `Any`: 
     - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `UseQualifiedName(UseFields())` for all other objects
+    - `UseQualifiedName(UseFields(:ByName))` for all other objects
+- `NamedTuple`: `UseQualifiedName(UseFields())`
 - `Function`: `UseHeader("Base.Function", UseQualifiedName())`
 - `AbstractString`: `UseWrite()`
 - `Tuple`, `Pair`: `UseQualifiedName(UseIterate())`
 - `AbstractArray`: `UseHeader("Base.AbstractArray", UseSize(UseIterate()))`
 - `AbstractRange`: `UseQualifiedName(UseFields())`
 - `AbstractSet`: `UseHeader("Base.AbstractSet", UseTransform(sort! ∘ collect))`
+
 
 ## Customizing hash computations with contexts
 
@@ -278,42 +302,56 @@ is passed as the second argument to `stable_hash`. By default it is equal to
 defined.
 
 This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
-is the method called for `UseWrite`, and which falls back to `Base.write`). But to make it 
-easy to define methods that apply to all contexts, the methods 
-`hash_method(x, context) = hash_method(x)` and 
-`StableHashTraits.write(io, x, context) = StableHashTraits.write(io, x)` are defined.
+is the method called for `UseWrite`, and which falls back to `Base.write`). Because of the
+way the default context (`HashVersion{1}`) is defined, you normally don't have to include
+this context as an argument when you define a method of `hash_context` or `write` because
+there are appropriate fallback methods.
 
-Normally when you define a hash context it should accept a parent context that serves as a
-fallback. For example, here is how we could write a `hash_method` that treats all table
-types as equivalent. 
+When you define a hash context it should normally accept a parent_context context that
+serves as a fallback, and return this parent_context in an implementation of the method
+`StableHashTratis.parent_context`. For example, here is how we could write a context that
+treats all named tuples with the same keys as equivalent. 
 
 ```julia
-using Tables: istable
-struct TablesAreEqual{T}
+struct NamedTuplesEq{T}
     parent::T
 end
-function StableHashTraits.hash_method(x::T, c::TablesAreEqual) where T 
-    return istable(T) ? UseTable() : hash_method(x, c.parent)
+StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
+function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
+    return UseHeader("Base.NamedTuple", UseFields(:ByName))
 end
-stable_hash(DataFrames(a=1:2, b=1:2), TablesAreEqual(HashVersion{1}()))
+c = NamedTuplesEq(HashVersion{1}())
+stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
 ```
 
-If you do not make use of a fallback you will have to define a new `hash_method` for every
-type you want to hash in your new context.
+If you did not define a method of `parent_context`, your context would need to implement a
+method for `AbstractRange` for the call to `stable_hash` to succeede.
 
 ### Customizing hashes within an object
 
 Contexts can be changed not only when you call `stable_hash` but also when you hash the
-contents of a particular object. This lets you change how hasing occurs within
-the object. See the docstring of `UseAndReplaceContext` for details. 
+contents of a particular object. This lets you change how hasing occurs within the object.
+See the docstring of [`UseAndReplaceContext`](@ref) for details. 
 """
-function hash_method(::T, ::HashVersion{1}) where {T}
+hash_method(x, context) = hash_method(x, parent_context(context))
+hash_method(x, ::Nothing) = hash_method(x)
+hash_method(::Any) = nothing
+
+struct HashVersion{V} end
+# NOTE: this doesn't quite work, this prevents falling back to single-argument version of
+# `hash_method`
+function hash_method(x::T, ::HashVersion{1}) where T
+    default_method = hash_method(x)
+    isnothing(default_method) || return default_method
     Base.isprimitivetype(T) && return UseWrite()
-    return UseQualifiedName(UseFields())
+    # merely reordering a struct's fields should be considered an implementation detail, and
+    # should not change the hash
+    return UseQualifiedName(UseFields(:ByName)) 
 end
-hash_method(::AbstractRange, ::HashVersion{1}) = UseQualifiedName(UseFields())
-hash_method(::AbstractArray, ::HashVersion{1}) = UseHeader("Base.AbstractArray", UseSize(UseIterate()))
-hash_method(::AbstractString, ::HashVersion{1}) = UseWrite()
+hash_method(::NamedTuple, ::HashVersion{1}) = UseQualifiedName(UseFields())
+hash_method(::AbstractRange, ::HashVersion{1}) = UseQualifiedName(UseFields(:ByName))
+hash_method(::AbstractArray, ::HashVersion{1}) = UseQualifiedName(UseSize(UseIterate()))
+hash_method(::AbstractString, ::HashVersion{1}) = UseQualifiedName(UseWrite())
 hash_method(::AbstractDict, ::HashVersion{1}) = UseQualifiedName(UseIterate())
 hash_method(::Tuple, ::HashVersion{1}) = UseQualifiedName(UseIterate())
 hash_method(::Pair, ::HashVersion{1}) = UseQualifiedName(UseIterate())
@@ -321,15 +359,24 @@ hash_method(::Type, ::HashVersion{1}) = UseQualifiedName()
 hash_method(::Function, ::HashVersion{1}) = UseHeader("Base.Function", UseQualifiedName())
 hash_method(::AbstractSet, ::HashVersion{1}) = UseQualifiedName(UseTransform(sort! ∘ collect))
 
-struct HashVersion{V} end
-hash_method(x, context) = hash_method(x)
+"""
+    HashVersion{1}()
+
+The default `hash_context` used by `stable_hash`. There is currently only one version (`1`)
+and it is the default version. By explicitly passing this context to `stable_hash` you
+ensure that hash values for these fallback methods will not change even if new fallbacks are
+defined. This is a "root" context, meaning that `parnet(::HashVersion) = nothing`. If
+no method is defined for a type in this context, it will fallback to the single-argument
+version of `hash_context`.
+"""
+parent_context(::HashVersion) = nothing
 
 """
     stable_hash(x, context=HashVersion{1}(); alg=crc32c)
 
 Create a stable hash of the given objects. As long as the context remains the same, this is
 intended to remain unchanged across julia verisons. How each object is hashed is determined
-by [`hash_method`](@ref), which aims to have sensible defaults.
+by [`hash_method`](@ref), which aims to have sensible fallbacks.
 
 To ensure the greattest stability, explicitly pass the context object. Even if the fallback
 methods change in a future release, the hash you get by passing an explicit `HashVersin{N}`
@@ -345,7 +392,7 @@ third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(x, context=HashVersion{1}(); alg=crc32c)
-    return digest!(stable_hash_helper(args, setup_hash(alg), context, 
+    return digest!(stable_hash_helper(x, setup_hash(alg), context, 
                                       hash_method(x, context)))
 end
 

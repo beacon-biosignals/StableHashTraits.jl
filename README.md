@@ -13,13 +13,17 @@ change across Julia versions (or between Julia sessions).
 For example:
 
 ```julia
-struct MyType{T}
+using StableHashTraits
+using Dates
+
+struct MyType
    data::Vector{UInt8}
    metadata::Dict{Symbol, Any}
 end
-stable_hash(::MyType) = UseTransform(x -> x.data) # ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
-a = MyType(read("myfile.txt"), Dict(:read => Dates.now()))
-b = MyType(read("myfile.txt"), Dict(:read => Dates.now()))
+# ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
+StableHashTraits.stable_hash(::MyType) = UseTransform(x -> x.data) 
+a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
+b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 stable_hash(a) == stable_hash(b) # true
 ```
 
@@ -28,7 +32,7 @@ stable_hash(a) == stable_hash(b) # true
 This package can be useful when:
 - you want to be ensure the hash value will not change when you update Julia or start a new session, OR
 - you want to compute a hash for an object that does not have `hash` defined. 
-- you want to customize how the hash works within a specific context
+- you want to customize how the hash works, but only within a specific scope.
 
 This is useful for content-addressed caching, in which e.g. some function of a value is stored at a location determined by a hash. Given the value, one can recompute the hash to determine where to look to see if the function evaluation on that value has already been cached.
 
@@ -36,10 +40,10 @@ It isn't intended for secure hashing.
 
 ## Details
 
-There is one exported method: `stable_hash`. You call this on the object you want to hash, and, as an optional second argument, you pass the context that determines how hasing occurs (the defaults to `HashVersion{1}`).
+There is one exported method: `stable_hash`. You call this on the object you want to hash, and, as an optional second argument, you pass the context that determines how hasing occurs (this defaults to `HashVersion{1}`).
 
-You can customize its behavior for particular types by implementing the trait
-`StableHashTraits.hash_method`. Any method of `hash_method` should simply return one of the following values.
+You can customize the has behavior for particular types by implementing the trait
+`StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional second argument, the context. Any method of `hash_method` should simply return one of the following values.
 
 1. `UseWrite()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
     and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
@@ -76,7 +80,8 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 - `Any`: 
     - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `UseQualifiedName(UseFields())` for all other objects
+    - `UseQualifiedName(UseFields(:ByName))` for all other objects
+- `NamedTuple`: `UseQualifiedName(UseFields())`
 - `Function`: `UseHeader("Base.Function", UseQualifiedName())`
 - `AbstractString`: `UseWrite()`
 - `Tuple`, `Pair`: `UseQualifiedName(UseIterate())`
@@ -88,19 +93,21 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 ### In 1.0:
 
-This is a very breaking release, almost all values hash differently and the API has changed.
+This is a very breaking release, almost all values hash differently and the API has changes.
 However, far fewer manual defintiions of `hash_method` become necessary. The fallback for
 `Any` should handle many more cases. 
 
 API Changes:
 
 - `transform` has been split into `UseTransform` and `UseAndReplaceContext`
-- `stable_hash` no longer accepts mutlipel objects to hash (wrap them in a tuple instead);
-  it now accepts a single object to hash, and the second position argument is the context
+- `stable_hash` no longer accepts mutliple objects to hash (wrap them in a tuple instead);
+  it now accepts a single object to hash, and the second positional argument is the context
   (see below for details on contexts).
-- The fallback methods above are defined within a specific context (`HashContext{1}`). To
-make use of a custom context you almost certianly want to allow for nesting (see below
-examples)
+- The fallback methods above are defined within a specific context (`HashContext{1}`). Any
+  contexts you make should should define a `StableHashTraits.parent_context` method that returns
+  e.g. `HashContext{1}` so that the fallback implementation for any methods of `hash_method`
+  you don't implement work properly. (A default version of `parent_context` raises a deprecation
+  warning and returns `HashContext{1}`). Refer to the discussion below about contexts.
 
 ### In 0.3:
 
@@ -136,31 +143,33 @@ is passed as the second argument to `stable_hash`. By default it is equal to
 defined.
 
 This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
-is the method called for `UseWrite`, and which falls back to `Base.write`). But to make it 
-easy to define methods that apply to all contexts, the methods 
-`hash_method(x, context) = hash_method(x)` and 
-`StableHashTraits.write(io, x, context) = StableHashTraits.write(io, x)` are defined.
+is the method called for `UseWrite`, and which falls back to `Base.write`). Because of the
+way the default context (`HashVersion{1}`) is defined, you normally don't have to include
+this context as an argument when you define a method of `hash_context` or `write` because
+there are appropriate fallback methods.
 
-Normally when you define a hash context it should accept a parent context that serves as a
-fallback. For example, here is how we could write a `hash_method` that treats all table
-types as equivalent. 
+When you define a hash context it should normally accept a parent_context context that
+serves as a fallback, and return this parent_context in an implementation of the method
+`StableHashTratis.parent_context`. For example, here is how we could write a context that
+treats all named tuples with the same keys as equivalent. 
 
 ```julia
-using Tables: istable
-struct TablesAreEqual{T}
+struct NamedTuplesEq{T}
     parent::T
 end
-function StableHashTraits.hash_method(x::T, c::TablesAreEqual) where T 
-    return istable(T) ? UseTable() : hash_method(x, c.parent)
+StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
+function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
+    return UseHeader("Base.NamedTuple", UseFields(:ByName))
 end
-stable_hash(DataFrames(a=1:2, b=1:2), TablesAreEqual(HashVersion{1}()))
+c = NamedTuplesEq(HashVersion{1}())
+stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
 ```
 
-If you do not make use of a fallback you will have to define a new `hash_method` for every
-type you want to hash in your new context.
+If you did not define a method of `parent_context`, your context would need to implement a
+method for `AbstractRange` for the call to `stable_hash` to succeede.
 
 ### Customizing hashes within an object
 
-Contexts can be changed not only when you call `stable_hash` but also when you hash the
-contents of a particular object. This lets you change how hasing occurs within
-the object. See the docstring of `UseAndReplaceContext` for details. 
+Contexts can be customized not only when you call `stable_hash` but also when you hash the
+contents of a particular object. This lets you change how hasing occurs within the object.
+See the docstring of `UseAndReplaceContext` for details. 
