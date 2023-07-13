@@ -90,17 +90,18 @@ end
 
 struct TablesEq end
 StableHashTraits.parent_context(::TablesEq) = HashVersion{1}()
-function StableHashTraits.hash_method(x::T, c::TablesEq) where T
-    return Tables.istable(T) ? UseTable() : StableHashTraits.hash_method(x, HashVersion{1}())
+function StableHashTraits.hash_method(x::T, c::TablesEq) where {T}
+    return Tables.istable(T) ? UseTable() :
+           StableHashTraits.hash_method(x, HashVersion{1}())
 end
 
 struct ViewsEq end
 StableHashTraits.parent_context(::ViewsEq) = HashVersion{1}()
 function StableHashTraits.hash_method(::AbstractArray, ::ViewsEq)
-    UseHeader("Base.AbstractArray", UseSize(UseIterate()))
+    return UseHeader("Base.AbstractArray", UseSize(UseIterate()))
 end
 function StableHashTraits.hash_method(::AbstractString, ::ViewsEq)
-    UseHeader("Base.AbstractString", UseWrite())
+    return UseHeader("Base.AbstractString", UseWrite())
 end
 
 struct MyOldContext end
@@ -134,7 +135,7 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = UseIterate()
     @test_reference "references/ref21.txt" stable_hash(sin; alg=sha256)
     @test_reference "references/ref22.txt" stable_hash(Set(1:3); alg=sha256)
     @test_reference "references/ref23.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
-                                                            TablesEq(); alg=sha256)
+                                                       TablesEq(); alg=sha256)
     @test_reference "references/ref24.txt" stable_hash([1 2; 3 4]; alg=sha256)
 
     # get some code coverage (and reference tests) for sha1
@@ -143,7 +144,7 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = UseIterate()
     @test_reference "references/ref27.txt" stable_hash(sin; alg=sha1)
     @test_reference "references/ref28.txt" stable_hash(Set(1:3); alg=sha1)
     @test_reference "references/ref29.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
-                                                            TablesEq(); alg=sha1)
+                                                       TablesEq(); alg=sha1)
     @test_reference "references/ref30.txt" stable_hash([1 2; 3 4]; alg=sha1)
 
     # verifies that transform can be called recurisvely
@@ -165,12 +166,12 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = UseIterate()
           stable_hash(NonTableStruct(1:10, 1:10))
     @test stable_hash(DataFrame(; x=1:10, y=1:10), TablesEq()) ==
           stable_hash(NonTableStruct(1:10, 1:10), TablesEq())
-          
+
     @test stable_hash(CustomHashObject(1:5, 1:10)) !=
           stable_hash(BasicHashObject(1:5, 1:10))
     @test stable_hash(Set(1:20)) == stable_hash(Set(reverse(1:20)))
     @test stable_hash([]) != stable_hash([(), (), ()])
-    
+
     @test stable_hash([1 2; 3 4]) != stable_hash(vec([1 2; 3 4]))
     @test stable_hash([1 2; 3 4]) != stable_hash([1 3; 2 4]')
     @test stable_hash([1 2; 3 4]) != stable_hash([1 3; 2 4])
@@ -191,19 +192,19 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = UseIterate()
     @test stable_hash((1, 2, 3)) != stable_hash([1, 2, 3])
 
     @test stable_hash(v"0.1.0") != stable_hash(v"0.1.2")
-    
+
     @test stable_hash((a=1, b=2)) != stable_hash((b=2, a=1))
     @test stable_hash((a=1, b=2)) != stable_hash((a=2, b=1))
     @test stable_hash([:ab]) != stable_hash([:a, :b])
     @test stable_hash("a", "b") != stable_hash("ab")
     @test stable_hash(["ab"]) != stable_hash(["a", "b"])
-    
+
     @test stable_hash(sin) != stable_hash(cos)
     @test stable_hash(sin) != stable_hash(:sin)
     @test stable_hash(sin) != stable_hash("sin")
     @test stable_hash(sin) != stable_hash("Base.sin")
     @test_throws ErrorException stable_hash(x -> x + 1)
-    
+
     @test stable_hash(TestType(1, 2)) == stable_hash(TestType(1, 2))
     @test stable_hash(TestType(1, 2)) != stable_hash((a=1, b=2))
     @test stable_hash(TestType2(1, 2)) != stable_hash((a=1, b=2))
@@ -212,8 +213,10 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = UseIterate()
     @test stable_hash(TestType(1, 2)) == stable_hash(TestType3(2, 1))
     @test stable_hash(TestType(1, 2)) != stable_hash(TestType4(2, 1))
 
-    @test (@test_deprecated(r"`parent_context`", stable_hash([1, 2], MyOldContext()))) != stable_hash([1, 2])
-    @test (@test_deprecated(r"`parent_context`", stable_hash("12", MyOldContext()))) == stable_hash("12")
+    @test (@test_deprecated(r"`parent_context`", stable_hash([1, 2], MyOldContext()))) !=
+          stable_hash([1, 2])
+    @test (@test_deprecated(r"`parent_context`", stable_hash("12", MyOldContext()))) ==
+          stable_hash("12")
 end
 
 @testset "Aqua" begin

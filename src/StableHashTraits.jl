@@ -1,6 +1,6 @@
 module StableHashTraits
 
-export stable_hash, UseWrite, UseIterate, UseFields, UseProperties, UseTable, 
+export stable_hash, UseWrite, UseIterate, UseFields, UseProperties, UseTable,
        UseQualifiedName, UseSize, UseTransform, UseHeader, UseAndReplaceContext, HashVersion
 using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA
@@ -73,14 +73,16 @@ function recursive_hash!(hash, result)
 end
 
 struct UseIterate end
-stable_hash_helper(x, hash, context, ::UseIterate) = hash_foreach(identity, hash, context, x)
+function stable_hash_helper(x, hash, context, ::UseIterate)
+    return hash_foreach(identity, hash, context, x)
+end
 function hash_foreach(fn, hash, context, args...)
     update!(hash, UInt8[])
     foreach(args...) do as...
         el = fn(as...)
         val = stable_hash_helper(el, similar_hasher(hash), context,
                                  hash_method(el, context))
-        recursive_hash!(hash, val)
+        return recursive_hash!(hash, val)
     end
     return hash
 end
@@ -105,7 +107,7 @@ function UseFields(by::Symbol=:ByOrder)
 end
 orderfields(::UseFields{:ByOrder}, props) = props
 orderfields(::UseFields{:ByName}, props) = TupleTools.sort(props; by=string)
-function stable_hash_helper(x::T, hash, context, use::UseFields) where T
+function stable_hash_helper(x::T, hash, context, use::UseFields) where {T}
     return hash_foreach(hash, context, orderfields(use, fieldnames(T))) do k
         return k => getfield(x, k)
     end
@@ -157,7 +159,7 @@ strip_qualifier(x) = x
 function _stable_hash_header(str::String, x, hash, context, method)
     # we do not qualify the type of the header value (it will always be a string)
     # because that leads to an infinite recursion
-    hash = stable_hash_helper(str, similar_hasher(hash), context, 
+    hash = stable_hash_helper(str, similar_hasher(hash), context,
                               strip_qualifier(hash_method(str, context)))
     isnothing(method) && return hash
 
@@ -235,7 +237,7 @@ If your context is expected to be the root context (akin to `HashVersion{1}`), t
 can be called.
 """
 function parent_context(x::Any)
-    Base.depwarn("You should explicitly define a `parent_context` method for context "*
+    Base.depwarn("You should explicitly define a `parent_context` method for context " *
                  "`$x`. See details in the docstring of `hash_method`.",
                  :parent_context)
     return HashVersion{1}()
@@ -340,13 +342,13 @@ hash_method(::Any) = nothing
 struct HashVersion{V} end
 # NOTE: this doesn't quite work, this prevents falling back to single-argument version of
 # `hash_method`
-function hash_method(x::T, ::HashVersion{1}) where T
+function hash_method(x::T, ::HashVersion{1}) where {T}
     default_method = hash_method(x)
     isnothing(default_method) || return default_method
     Base.isprimitivetype(T) && return UseWrite()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
-    return UseQualifiedName(UseFields(:ByName)) 
+    return UseQualifiedName(UseFields(:ByName))
 end
 hash_method(::NamedTuple, ::HashVersion{1}) = UseQualifiedName(UseFields())
 hash_method(::AbstractRange, ::HashVersion{1}) = UseQualifiedName(UseFields(:ByName))
@@ -357,7 +359,9 @@ hash_method(::Tuple, ::HashVersion{1}) = UseQualifiedName(UseIterate())
 hash_method(::Pair, ::HashVersion{1}) = UseQualifiedName(UseIterate())
 hash_method(::Type, ::HashVersion{1}) = UseQualifiedName()
 hash_method(::Function, ::HashVersion{1}) = UseHeader("Base.Function", UseQualifiedName())
-hash_method(::AbstractSet, ::HashVersion{1}) = UseQualifiedName(UseTransform(sort! ∘ collect))
+function hash_method(::AbstractSet, ::HashVersion{1})
+    return UseQualifiedName(UseTransform(sort! ∘ collect))
+end
 
 """
     HashVersion{1}()
@@ -392,7 +396,7 @@ third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(x, context=HashVersion{1}(); alg=crc32c)
-    return digest!(stable_hash_helper(x, setup_hash(alg), context, 
+    return digest!(stable_hash_helper(x, setup_hash(alg), context,
                                       hash_method(x, context)))
 end
 
