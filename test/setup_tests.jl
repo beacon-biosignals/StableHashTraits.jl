@@ -7,6 +7,7 @@ using UUIDs
 using SHA
 using DataFrames
 using Tables
+using AWSS3
 
 struct TestType
     a::Any

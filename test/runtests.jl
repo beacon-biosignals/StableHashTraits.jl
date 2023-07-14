@@ -47,10 +47,14 @@ include("setup_tests.jl")
     # various (in)equalities
     @test_throws ArgumentError stable_hash(BadTransform())
 
+    # dictionary like
     @test stable_hash(Dict(:a => 1, :b => 2)) == stable_hash(Dict(:b => 2, :a => 1))
+    @test ((; kwargs...) -> stable_hash(kwargs))(; a = 1, b = 2) == 
+          ((; kwargs...) -> stable_hash(kwargs))(; b = 2, a = 1)
     @test stable_hash((; a=1, b=2)) != stable_hash((; b=2, a=1))
     @test stable_hash((; a=1, b=2)) != stable_hash((; a=2, b=1))
 
+    # table like
     @test stable_hash((; x=collect(1:10), y=collect(1:10))) !=
           stable_hash([(; x=i, y=i) for i in 1:10])
     @test stable_hash([(; x=i, y=i) for i in 1:10]) !=
@@ -64,6 +68,7 @@ include("setup_tests.jl")
     @test stable_hash(DataFrame(; x=1:10, y=1:10), TablesEq()) ==
           stable_hash(NonTableStruct(1:10, 1:10), TablesEq())
 
+    # test out UseAndReplaceContext
     @test stable_hash(CustomHashObject(1:5, 1:10)) !=
           stable_hash(BasicHashObject(1:5, 1:10))
     @test stable_hash(Set(1:20)) == stable_hash(Set(reverse(1:20)))
@@ -78,8 +83,6 @@ include("setup_tests.jl")
     @test stable_hash(reshape(1:10, 2, 5)) != stable_hash(reshape(1:10, 5, 2))
     @test stable_hash(view(collect(1:5), 1:2)) != stable_hash([1, 2])
     @test stable_hash(view(collect(1:5), 1:2), ViewsEq()) == stable_hash([1, 2], ViewsEq())
-    @test stable_hash(view("bob", 1:2)) != stable_hash("bo")
-    @test stable_hash(view("bob", 1:2), ViewsEq()) == stable_hash("bo", ViewsEq())
 
     @test stable_hash([(), ()]) != stable_hash([(), (), ()])
 
@@ -95,6 +98,9 @@ include("setup_tests.jl")
     @test stable_hash(["ab"]) != stable_hash(["a", "b"])
     @test stable_hash(:foo) != stable_hash("foo")
     @test stable_hash(:foo) != stable_hash(:bar)
+    @test stable_hash(view("bob", 1:2)) != stable_hash("bo")
+    @test stable_hash(view("bob", 1:2), ViewsEq()) == stable_hash("bo", ViewsEq())
+    @test stable_hash(S3Path("s3://foo/bar")) != stable_hash(S3Path("s3://foo/baz"))
 
     @test stable_hash(sin) != stable_hash(cos)
     @test stable_hash(sin) != stable_hash(:sin)
