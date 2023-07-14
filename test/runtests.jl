@@ -39,7 +39,7 @@ end
 StableHashTraits.hash_method(::TestType) = UseFields()
 StableHashTraits.hash_method(::TestType2) = UseQualifiedName(UseFields())
 StableHashTraits.hash_method(::TestType3) = UseFields(:ByName)
-StableHashTraits.hash_method(::TestType4) = UseFields()
+StableHashTraits.hash_method(::TestType4) = UseProperties()
 StableHashTraits.hash_method(::TypeType) = UseFields()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
 
