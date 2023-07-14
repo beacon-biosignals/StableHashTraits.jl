@@ -127,7 +127,10 @@ qualified_name(x::Function) = string(parentmodule(x), '.', nameof(x))
 qualified_name(::T) where {T} = string(parentmodule(T), '.', nameof(T))
 qualified_name(::Type{T}) where {T} = string(parentmodule(T), '.', nameof(T))
 function stable_hash_helper(x, hash, context, method::UseQualifiedName)
-    str = qualified_name(x)
+    # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
+    # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
+    # https://discourse.julialang.org/t/difference-between-base-and-core/37426
+    str = replace(qualified_name(x), r"^Core\." => "Base.")
     if occursin(r"\.#[^.]*$", str)
         error("Annonymous types (those starting with `#`) cannot be hashed to a reliable value")
     end
@@ -340,8 +343,6 @@ hash_method(x, ::Nothing) = hash_method(x)
 hash_method(::Any) = nothing
 
 struct HashVersion{V} end
-# NOTE: this doesn't quite work, this prevents falling back to single-argument version of
-# `hash_method`
 function hash_method(x::T, ::HashVersion{1}) where {T}
     default_method = hash_method(x)
     isnothing(default_method) || return default_method
@@ -351,6 +352,7 @@ function hash_method(x::T, ::HashVersion{1}) where {T}
     return UseQualifiedName(UseFields(:ByName))
 end
 hash_method(::NamedTuple, ::HashVersion{1}) = UseQualifiedName(UseFields())
+hash_method(::Symbol, ::HashVersion{1}) = UseQualifiedName(UseWrite())
 hash_method(::AbstractRange, ::HashVersion{1}) = UseQualifiedName(UseFields(:ByName))
 hash_method(::AbstractArray, ::HashVersion{1}) = UseQualifiedName(UseSize(UseIterate()))
 hash_method(::AbstractString, ::HashVersion{1}) = UseQualifiedName(UseWrite())
