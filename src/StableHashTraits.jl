@@ -120,7 +120,7 @@ function stable_hash_helper(x, hash, context, ::UseTable)
 end
 
 struct UseQualifiedName{T}
-    parent_context::T
+    parent::T
 end
 UseQualifiedName() = UseQualifiedName(nothing)
 qualified_name(x::Function) = string(parentmodule(x), '.', nameof(x))
@@ -134,30 +134,30 @@ function stable_hash_helper(x, hash, context, method::UseQualifiedName)
     if occursin(r"\.#[^.]*$", str)
         error("Annonymous types (those starting with `#`) cannot be hashed to a reliable value")
     end
-    return _stable_hash_header(str, x, hash, context, method.parent_context)
+    return _stable_hash_header(str, x, hash, context, method.parent)
 end
 
 struct UseSize{T}
-    parent_context::T
+    parent::T
 end
 function stable_hash_helper(x, hash, context, method::UseSize)
     sz = size(x)
     hash = stable_hash_helper(sz, similar_hasher(hash), context, hash_method(sz, context))
-    val = stable_hash_helper(x, similar_hasher(hash), context, method.parent_context)
+    val = stable_hash_helper(x, similar_hasher(hash), context, method.parent)
     recursive_hash!(hash, val)
     return hash
 end
 
 struct UseHeader{T}
     str::String
-    parent_context::T
+    parent::T
 end
 function stable_hash_helper(x, hash, context, method::UseHeader)
-    return _stable_hash_header(method.str, x, hash, context, method.parent_context)
+    return _stable_hash_header(method.str, x, hash, context, method.parent)
 end
 
-strip_qualifier(x::UseQualifiedName) = x.parent_context
-strip_qualifier(x::UseHeader) = x.parent_context
+strip_qualifier(x::UseQualifiedName) = x.parent
+strip_qualifier(x::UseHeader) = x.parent
 strip_qualifier(x) = x
 function _stable_hash_header(str::String, x, hash, context, method)
     # we do not qualify the type of the header value (it will always be a string)
@@ -216,11 +216,11 @@ callable which transforms the old context to the new.
     ```
 """
 struct UseAndReplaceContext{F,M}
-    parent_context::M
+    parent::M
     contextfn::F
 end
 function stable_hash_helper(x, hash, context, method::UseAndReplaceContext)
-    return stable_hash_helper(x, hash, method.contextfn(context), method.parent_context)
+    return stable_hash_helper(x, hash, method.contextfn(context), method.parent)
 end
 
 #####
@@ -347,12 +347,12 @@ function hash_method(x::T, ::HashVersion{1}) where {T}
     default_method = hash_method(x)
     isnothing(default_method) || return default_method
     Base.isprimitivetype(T) && return UseWrite()
+    Base.fieldcount(T) == 0 && return UseQualifiedType(UseWrite())
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
-    return UseQualifiedName(UseFields(:ByName))
+    return UseQualifiedType(UseFields(:ByName))
 end
 hash_method(::NamedTuple, ::HashVersion{1}) = UseQualifiedName(UseFields())
-hash_method(::Symbol, ::HashVersion{1}) = UseQualifiedName(UseWrite())
 hash_method(::AbstractRange, ::HashVersion{1}) = UseQualifiedName(UseFields(:ByName))
 hash_method(::AbstractArray, ::HashVersion{1}) = UseQualifiedName(UseSize(UseIterate()))
 hash_method(::AbstractString, ::HashVersion{1}) = UseQualifiedName(UseWrite())
