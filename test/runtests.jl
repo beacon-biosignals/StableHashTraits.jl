@@ -47,8 +47,9 @@ include("setup_tests.jl")
     # various (in)equalities
     @test_throws ArgumentError stable_hash(BadTransform())
 
-    @test stable_hash(Dict(:a => "1", :b => "2")) == stable_hash(Dict(:b => "2", :a => "1"))
-    @test stable_hash((; a="1", b="2")) != stable_hash((; b="2", a="1"))
+    @test stable_hash(Dict(:a => 1, :b => 2)) == stable_hash(Dict(:b => 2, :a => 1))
+    @test stable_hash((; a=1, b=2)) != stable_hash((; b=2, a=1))
+    @test stable_hash((; a=1, b=2)) != stable_hash((; a=2, b=1))
 
     @test stable_hash((; x=collect(1:10), y=collect(1:10))) !=
           stable_hash([(; x=i, y=i) for i in 1:10])
@@ -89,8 +90,6 @@ include("setup_tests.jl")
 
     @test stable_hash(v"0.1.0") != stable_hash(v"0.1.2")
 
-    @test stable_hash((a=1, b=2)) != stable_hash((b=2, a=1))
-    @test stable_hash((a=1, b=2)) != stable_hash((a=2, b=1))
     @test stable_hash([:ab]) != stable_hash([:a, :b])
     @test stable_hash("a", "b") != stable_hash("ab")
     @test stable_hash(["ab"]) != stable_hash(["a", "b"])

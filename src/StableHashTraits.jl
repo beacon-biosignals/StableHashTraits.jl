@@ -387,7 +387,7 @@ end
 The default `hash_context` used by `stable_hash`. There is currently only one version (`1`)
 and it is the default version. By explicitly passing this context to `stable_hash` you
 ensure that hash values for these fallback methods will not change even if new fallbacks are
-defined. This is a "root" context, meaning that `parnet(::HashVersion) = nothing`. If
+defined. This is a "root" context, meaning that `parnet_context(::HashVersion) = nothing`. If
 no method is defined for a type in this context, it will fallback to the single-argument
 version of `hash_context`.
 """
