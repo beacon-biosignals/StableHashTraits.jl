@@ -49,8 +49,8 @@ include("setup_tests.jl")
 
     # dictionary like
     @test stable_hash(Dict(:a => 1, :b => 2)) == stable_hash(Dict(:b => 2, :a => 1))
-    @test ((; kwargs...) -> stable_hash(kwargs))(; a = 1, b = 2) == 
-          ((; kwargs...) -> stable_hash(kwargs))(; b = 2, a = 1)
+    @test ((; kwargs...) -> stable_hash(kwargs))(; a=1, b=2) ==
+          ((; kwargs...) -> stable_hash(kwargs))(; b=2, a=1)
     @test stable_hash((; a=1, b=2)) != stable_hash((; b=2, a=1))
     @test stable_hash((; a=1, b=2)) != stable_hash((; a=2, b=1))
 
