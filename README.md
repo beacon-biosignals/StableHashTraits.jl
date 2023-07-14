@@ -93,7 +93,7 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 ### In 1.0:
 
-This is a very breaking release, almost all values hash differently and the API has changes.
+This is a very breaking release, almost all values hash differently and the API has changed.
 However, far fewer manual defintiions of `hash_method` become necessary. The fallback for
 `Any` should handle many more cases. 
 
@@ -148,8 +148,8 @@ way the default context (`HashVersion{1}`) is defined, you normally don't have t
 this context as an argument when you define a method of `hash_context` or `write` because
 there are appropriate fallback methods.
 
-When you define a hash context it should normally accept a parent_context context that
-serves as a fallback, and return this parent_context in an implementation of the method
+When you define a hash context it should normally accept a parent context that serves as a
+fallback, and return it in an implementation of the method
 `StableHashTratis.parent_context`. For example, here is how we could write a context that
 treats all named tuples with the same keys as equivalent. 
 
@@ -159,7 +159,7 @@ struct NamedTuplesEq{T}
 end
 StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
-    return UseHeader("Base.NamedTuple", UseFields(:ByName))
+    return UseQualifiedName(UseFields(:ByName))
 end
 c = NamedTuplesEq(HashVersion{1}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
