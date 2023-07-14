@@ -42,7 +42,7 @@ It isn't intended for secure hashing.
 
 There is one exported method: `stable_hash`. You call this on the object you want to hash, and, as an optional second argument, you pass the context that determines how hasing occurs (this defaults to `HashVersion{1}`).
 
-You can customize the has behavior for particular types by implementing the trait
+You can customize the hash behavior for particular types by implementing the trait
 `StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional second argument, the context. Any method of `hash_method` should simply return one of the following values.
 
 1. `UseWrite()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
