@@ -48,8 +48,8 @@ include("setup_tests.jl")
     @test_throws ArgumentError stable_hash(BadTransform())
 
     @test stable_hash(Dict(:a => "1", :b => "2")) == stable_hash(Dict(:b => "2", :a => "1"))
-    @test stable_hash((; a = "1", b = "2")) != stable_hash((; b = "2", a = "1"))
-    
+    @test stable_hash((; a="1", b="2")) != stable_hash((; b="2", a="1"))
+
     @test stable_hash((; x=collect(1:10), y=collect(1:10))) !=
           stable_hash([(; x=i, y=i) for i in 1:10])
     @test stable_hash([(; x=i, y=i) for i in 1:10]) !=

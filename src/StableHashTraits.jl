@@ -123,8 +123,8 @@ struct UseQualifiedName{P,T}
     parent::T
 end
 UseQualifiedName{P}(parent::T) where {P,T} = UseQualifiedName{P,T}(parent)
-UseQualifiedName(parent::T = nothing) where T = UseQualifiedName{:WithoutParams}(parent)
-UseQualifiedType(parent::T = nothing) where T = UseQualifiedName{:WithParams}(parent)
+UseQualifiedName(parent::T=nothing) where {T} = UseQualifiedName{:WithoutParams}(parent)
+UseQualifiedType(parent::T=nothing) where {T} = UseQualifiedName{:WithParams}(parent)
 qualified_name_(T, ::Val{:WithoutParams}) = string(parentmodule(T), '.', nameof(T))
 qualified_name_(T, ::Val{:WithParams}) = string(parentmodule(T), '.', string(T))
 qualified_name(x::Function, _) = qualified_name_(x, Val(:WithoutParams))
