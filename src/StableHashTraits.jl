@@ -245,8 +245,7 @@ can be called.
 """
 function parent_context(x::Any)
     Base.depwarn("You should explicitly define a `parent_context` method for context " *
-                 "`$x`. See details in the docstring of `hash_method`.",
-                 :parent_context)
+                 "`$x`. See details in the docstring of `hash_method`.", :parent_context)
     return HashVersion{1}()
 end
 
@@ -358,7 +357,7 @@ hash_method(x, ::Nothing) = hash_method(x)
 hash_method(::Any) = nothing
 
 struct HashVersion{V} end
-function hash_method(x::T, ::HashVersion{1}) where {T}
+function hash_method(x::T, c::HashVersion{1}) where {T}
     default_method = hash_method(x)
     isnothing(default_method) || return default_method
     Base.isprimitivetype(T) && return UseWrite()
@@ -415,8 +414,7 @@ third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(x, context=HashVersion{1}(); alg=crc32c)
-    return digest!(stable_hash_helper(x, setup_hash(alg), context,
-                                      hash_method(x, context)))
+    return digest!(stable_hash_helper(x, setup_hash(alg), context, hash_method(x, context)))
 end
 
 end

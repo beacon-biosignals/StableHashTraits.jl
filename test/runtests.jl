@@ -40,7 +40,7 @@ include("setup_tests.jl")
                                                        TablesEq(); alg=sha1)
     @test_reference "references/ref30.txt" stable_hash([1 2; 3 4]; alg=sha1)
 
-    # verifies that transform can be called recurisvely
+    # verifies that transform can be called recursively
     @test stable_hash(GoodTransform(2)) == stable_hash(GoodTransform("-0.2"))
     @test stable_hash(GoodTransform(3)) != stable_hash(GoodTransform("-0.2"))
 
