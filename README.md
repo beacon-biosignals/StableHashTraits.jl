@@ -54,23 +54,29 @@ You can customize the hash behavior for particular types by implementing the tra
    passing the symbol `:ByOrder` (to hash properties in the order they are listed by
    `propertynames`), which is the default, or `:ByName` (sorting properties by their name
    before hashing).
-4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is the type
-    of the object. Throws an error if the name includes `#` (e.g. an anonymous function). If
-    you wish to include this qualified name *and* another method, pass one of the other
-    methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be used to
-    include the type as part of the hash. Do you want objects with the same field names and
-    values but different types to hash to different values? Then specify `UseQualifiedName`.
-5. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
+4. `UseQualifiedName([method])`: hash the string `parentmodule(T).nameof(T)` where `T` is
+    the type of the object. Throws an error if the name includes `#` (e.g. an anonymous
+    function). If you wish to include this qualified name *and* another method, pass one of
+    the other methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be
+    used to include the type as part of the hash. Do you want objects with the same field
+    names and values but different types to hash to different values? Then specify
+    `UseQualifiedName`.
+5. `UseQualifiedType([method])`: like `UseQualifiedName` but use the string
+   `parentmodule(T).string(T)` thereby including the type parameters of the type as well as
+   its name.
+6. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
     hash the contents of the value (e.g. `UseIterate`).
-6. `UseTransform(fn -> body)`: before hashing the result, transform it by the given
-   function; to help avoid stack overflows this cannot return an object of the same type.
-7. `UseHeader(str::String, method)`: prefix the hash created by `method` with a hash of
+7. `UseTransform(fn -> body)`: before hashing the result, transform it by the given
+   function; hash_method is then called on the return value. To help avoid stack overflows
+   this cannot return an object of the same type.
+8. `UseHeader(str::String, method)`: prefix the hash created by `method` with a hash of
    `str`.
-8. `UseProperties()`: same as `UseField` but using `propertynames` and `getproperty` in lieu
+9. `UseProperties()`: same as `UseField` but using `propertynames` and `getproperty` in lieu
    of `fieldnames` and `getfield`
-9. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
-   `Tables.columnnames` to compute a hash of each columns content and name, ala
-   `UseFields`. 
+10. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
+   `Tables.columnnames` to compute a hash of each columns content and name, ala `UseFields`. 
+10. `nothing`: indicates that you want to use a fallback method (see below); the two
+   argument version of `hash_method` should never return `nothing`.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
@@ -78,16 +84,20 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 ## Implemented methods of `hash_method`
 
+In the absence of a specific `hash_method` for your type, the following fallbacks
+are used. They are intended to avoid hash collisions as best as possible.
+
 - `Any`: 
     - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `UseQualifiedName(UseFields(:ByName))` for all other objects
+    - `UseQualifiedType(UseFields(:ByName))` for all other types
 - `NamedTuple`: `UseQualifiedName(UseFields())`
 - `Function`: `UseHeader("Base.Function", UseQualifiedName())`
-- `AbstractString`: `UseWrite()`
+- `AbstractString`, `Symbol`: `UseQualifiedName(UseWrite())`
 - `Tuple`, `Pair`: `UseQualifiedName(UseIterate())`
 - `AbstractArray`: `UseHeader("Base.AbstractArray", UseSize(UseIterate()))`
 - `AbstractRange`: `UseQualifiedName(UseFields())`
-- `AbstractSet`: `UseHeader("Base.AbstractSet", UseTransform(sort! ∘ collect))`
+- `AbstractSet`: `UseQualifiedName(UseTransform(sort! ∘ collect))`
+- `AbstractDict`: `UseQualifiedName(UseTransform(x -> sort!(collect(pairs(x)); by=first)))`
 
 ## Breaking changes
 
@@ -99,15 +109,16 @@ However, far fewer manual defintiions of `hash_method` become necessary. The fal
 
 API Changes:
 
-- `transform` has been split into `UseTransform` and `UseAndReplaceContext`
-- `stable_hash` no longer accepts mutliple objects to hash (wrap them in a tuple instead);
-  it now accepts a single object to hash, and the second positional argument is the context
-  (see below for details on contexts).
-- The fallback methods above are defined within a specific context (`HashContext{1}`). Any
-  contexts you make should should define a `StableHashTraits.parent_context` method that returns
-  e.g. `HashContext{1}` so that the fallback implementation for any methods of `hash_method`
-  you don't implement work properly. (A default version of `parent_context` raises a deprecation
-  warning and returns `HashContext{1}`). Refer to the discussion below about contexts.
+- **Breaking**: `transform` has been split into `UseTransform` and `UseAndReplaceContext`
+- **Breaking**: `stable_hash` no longer accepts mutliple objects to hash (wrap them in a
+  tuple instead); it now accepts a single object to hash, and the second positional argument
+  is the context (see below for details on contexts).
+- **Deprecation**: The fallback methods above are defined within a specific context
+  (`HashContext{1}`). Any contexts you make should should define a
+  `StableHashTraits.parent_context` method that returns e.g. `HashContext{1}` so that the
+  fallback implementation for any methods of `hash_method` you don't implement work
+  properly. (A default version of `parent_context` raises a deprecation warning and returns
+  `HashContext{1}`). Refer to the discussion below about contexts.
 
 ### In 0.3:
 
@@ -143,10 +154,10 @@ is passed as the second argument to `stable_hash`. By default it is equal to
 defined.
 
 This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
-is the method called for `UseWrite`, and which falls back to `Base.write`). Because of the
-way the default context (`HashVersion{1}`) is defined, you normally don't have to include
-this context as an argument when you define a method of `hash_context` or `write` because
-there are appropriate fallback methods.
+is the method called for `UseWrite`, and falls back to `Base.write`). Because of the way the
+default context (`HashVersion{1}`) is defined, you normally don't have to include this
+context as an argument when you define a method of `hash_context` or `write` because there
+are appropriate fallback methods.
 
 When you define a hash context it should normally accept a parent context that serves as a
 fallback, and return it in an implementation of the method
@@ -165,8 +176,9 @@ c = NamedTuplesEq(HashVersion{1}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
 ```
 
-If you did not define a method of `parent_context`, your context would need to implement a
-method for `AbstractRange` for the call to `stable_hash` to succeede.
+If we did not define a method of `parent_context`, our context would need to implement a a
+`hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and `Pair` for the
+call to `stable_hash` above to succeede.
 
 ### Customizing hashes within an object
 

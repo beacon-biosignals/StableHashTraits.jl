@@ -119,20 +119,24 @@ function stable_hash_helper(x, hash, context, ::UseTable)
     return hash_foreach(Pair, hash, context, Tables.columnnames(cols), cols)
 end
 
-struct UseQualifiedName{T}
+struct UseQualifiedName{P,T}
     parent::T
 end
-UseQualifiedName() = UseQualifiedName(nothing)
-qualified_name(x::Function) = string(parentmodule(x), '.', nameof(x))
-qualified_name(::T) where {T} = string(parentmodule(T), '.', nameof(T))
-qualified_name(::Type{T}) where {T} = string(parentmodule(T), '.', nameof(T))
-function stable_hash_helper(x, hash, context, method::UseQualifiedName)
+UseQualifiedName{P}(parent::T) where {P,T} = UseQualifiedName{P,T}(parent)
+UseQualifiedName(parent::T = nothing) where T = UseQualifiedName{:WithoutParams}(parent)
+UseQualifiedType(parent::T = nothing) where T = UseQualifiedName{:WithParams}(parent)
+qualified_name_(T, ::Val{:WithoutParams}) = string(parentmodule(T), '.', nameof(T))
+qualified_name_(T, ::Val{:WithParams}) = string(parentmodule(T), '.', string(T))
+qualified_name(x::Function, _) = qualified_name_(x, Val(:WithoutParams))
+qualified_name(::Type{T}, p) where {T} = qualified_name_(T, p)
+qualified_name(::T, p) where {T} = qualified_name_(T, p)
+function stable_hash_helper(x, hash, context, method::UseQualifiedName{P}) where {P}
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
     # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
     # https://discourse.julialang.org/t/difference-between-base-and-core/37426
-    str = replace(qualified_name(x), r"^Core\." => "Base.")
+    str = replace(qualified_name(x, Val(P)), r"^Core\." => "Base.")
     if occursin(r"\.#[^.]*$", str)
-        error("Annonymous types (those starting with `#`) cannot be hashed to a reliable value")
+        error("Annonymous types (those containing `#`) cannot be hashed to a reliable value")
     end
     return _stable_hash_header(str, x, hash, context, method.parent)
 end
@@ -263,22 +267,29 @@ You should return one of the following values.
    passing the symbol `:ByOrder` (to hash properties in the order they are listed by
    `propertynames`), which is the default, or `:ByName` (sorting properties by their name
    before hashing).
-4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is the type
-    of the object. Throws an error if the name includes `#` (e.g. an anonymous function). If
-    you wish to include this qualified name *and* another method, pass one of the other
-    methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be used to
-    include the type as part of the hash. Do you want objects with the same field names and
-    values but different types to hash to different values? Then specify `UseQualifiedName`.
-5. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
+4. `UseQualifiedName([method])`: hash the string `parentmodule(T).nameof(T)` where `T` is
+    the type of the object. Throws an error if the name includes `#` (e.g. an anonymous
+    function). If you wish to include this qualified name *and* another method, pass one of
+    the other methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be
+    used to include the type as part of the hash. Do you want objects with the same field
+    names and values but different types to hash to different values? Then specify
+    `UseQualifiedName`.
+5. `UseQualifiedType([method])`: like `UseQualifiedName` but use the string
+   `parentmodule(T).string(T)` thereby including the type parameters of the type as well as
+   its name.
+6. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
     hash the contents of the value (e.g. `UseIterate`).
-6. `UseTransform(fn -> body)`: before hashing the result, transform it by the given
-   function; to help avoid stack overflows this cannot return an object of the same type.
-7. `UseHeader(str::String, method)`: prefix the hash created by `method` with a hash of
+7. `UseTransform(fn -> body)`: before hashing the result, transform it by the given
+   function; hash_method is then called on the return value. To help avoid stack overflows
+   this cannot return an object of the same type.
+8. `UseHeader(str::String, method)`: prefix the hash created by `method` with a hash of
    `str`.
-8. `UseProperties()`: same as `UseField` but using `propertynames` and `getproperty` in lieu
+9. `UseProperties()`: same as `UseField` but using `propertynames` and `getproperty` in lieu
    of `fieldnames` and `getfield`
-9. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
+10. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
    `Tables.columnnames` to compute a hash of each columns content and name, ala `UseFields`. 
+10. `nothing`: indicates that you want to use a fallback method (see below); the two
+   argument version of `hash_method` should never return `nothing`.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
@@ -286,17 +297,20 @@ properties are the same for `UseProperties`, the hash will be the same; etc...
 
 ## Implemented methods of `hash_method`
 
+In the absence of a specific `hash_method` for your type, the following fallbacks are used.
+They are intended to avoid hash collisions as best as possible.
+
 - `Any`: 
     - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `UseQualifiedName(UseFields(:ByName))` for all other objects
+    - `UseQualifiedType(UseFields(:ByName))` for all other types
 - `NamedTuple`: `UseQualifiedName(UseFields())`
 - `Function`: `UseHeader("Base.Function", UseQualifiedName())`
-- `AbstractString`: `UseWrite()`
+- `AbstractString`, `Symbol`: `UseQualifiedName(UseWrite())`
 - `Tuple`, `Pair`: `UseQualifiedName(UseIterate())`
 - `AbstractArray`: `UseHeader("Base.AbstractArray", UseSize(UseIterate()))`
 - `AbstractRange`: `UseQualifiedName(UseFields())`
-- `AbstractSet`: `UseHeader("Base.AbstractSet", UseTransform(sort! ∘ collect))`
-
+- `AbstractSet`: `UseQualifiedName(UseTransform(sort! ∘ collect))`
+- `AbstractDict`: `UseQualifiedName(UseTransform(x -> sort!(collect(pairs(x)); by=first)))`
 
 ## Customizing hash computations with contexts
 
@@ -329,8 +343,9 @@ c = NamedTuplesEq(HashVersion{1}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
 ```
 
-If you did not define a method of `parent_context`, your context would need to implement a
-method for `AbstractRange` for the call to `stable_hash` to succeede.
+If we did not define a method of `parent_context`, our context would need to implement a a
+`hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and `Pair` for the
+call to `stable_hash` above to succeede.
 
 ### Customizing hashes within an object
 
@@ -347,7 +362,6 @@ function hash_method(x::T, ::HashVersion{1}) where {T}
     default_method = hash_method(x)
     isnothing(default_method) || return default_method
     Base.isprimitivetype(T) && return UseWrite()
-    Base.fieldcount(T) == 0 && return UseQualifiedType(UseWrite())
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
     return UseQualifiedType(UseFields(:ByName))
@@ -356,7 +370,10 @@ hash_method(::NamedTuple, ::HashVersion{1}) = UseQualifiedName(UseFields())
 hash_method(::AbstractRange, ::HashVersion{1}) = UseQualifiedName(UseFields(:ByName))
 hash_method(::AbstractArray, ::HashVersion{1}) = UseQualifiedName(UseSize(UseIterate()))
 hash_method(::AbstractString, ::HashVersion{1}) = UseQualifiedName(UseWrite())
-hash_method(::AbstractDict, ::HashVersion{1}) = UseQualifiedName(UseIterate())
+hash_method(::Symbol, ::HashVersion{1}) = UseQualifiedName(UseWrite())
+function hash_method(::AbstractDict, ::HashVersion{1})
+    return UseQualifiedName(UseTransform(x -> sort!(collect(pairs(x)); by=first)))
+end
 hash_method(::Tuple, ::HashVersion{1}) = UseQualifiedName(UseIterate())
 hash_method(::Pair, ::HashVersion{1}) = UseQualifiedName(UseIterate())
 hash_method(::Type, ::HashVersion{1}) = UseQualifiedName()
