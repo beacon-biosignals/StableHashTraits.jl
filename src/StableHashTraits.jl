@@ -179,20 +179,13 @@ struct UseTransform{F}
     fn::F
 end
 function stable_hash_helper(x, hash, context, method::UseTransform)
-    y = transform(x, method, context)
-    return stable_hash_helper(y, hash, context, hash_method(y, context))
-end
-
-transform(x, _, _) = x
-function transform(x, t::UseTransform, context)
-    result = t.fn(x)
+    result = method.fn(x)
     if typeof(result) == typeof(x)
         # this would almost certainly lead to a StackOverflowError
         throw(ArgumentError("The function passed to `UseTransform` returns an object of the " *
                             "same type as its input."))
-    else
-        return transform(result, hash_method(result, context), context)
     end
+    return stable_hash_helper(result, hash, context, hash_method(result, context))
 end
 
 """
@@ -266,14 +259,14 @@ You should return one of the following values.
    passing the symbol `:ByOrder` (to hash properties in the order they are listed by
    `propertynames`), which is the default, or `:ByName` (sorting properties by their name
    before hashing).
-4. `UseQualifiedName([method])`: hash the string `parentmodule(T).nameof(T)` where `T` is
+4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is
     the type of the object. Throws an error if the name includes `#` (e.g. an anonymous
     function). If you wish to include this qualified name *and* another method, pass one of
     the other methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be
     used to include the type as part of the hash. Do you want objects with the same field
     names and values but different types to hash to different values? Then specify
     `UseQualifiedName`.
-5. `UseQualifiedType([method])`: like `UseQualifiedName` but use the string
+5. `UseQualifiedType()`: like `UseQualifiedName` but use the string
    `parentmodule(T).string(T)` thereby including the type parameters of the type as well as
    its name.
 6. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to

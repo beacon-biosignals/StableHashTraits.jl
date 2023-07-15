@@ -54,14 +54,14 @@ You can customize the hash behavior for particular types by implementing the tra
    passing the symbol `:ByOrder` (to hash properties in the order they are listed by
    `propertynames`), which is the default, or `:ByName` (sorting properties by their name
    before hashing).
-4. `UseQualifiedName([method])`: hash the string `parentmodule(T).nameof(T)` where `T` is
+4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is
     the type of the object. Throws an error if the name includes `#` (e.g. an anonymous
     function). If you wish to include this qualified name *and* another method, pass one of
     the other methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be
     used to include the type as part of the hash. Do you want objects with the same field
     names and values but different types to hash to different values? Then specify
     `UseQualifiedName`.
-5. `UseQualifiedType([method])`: like `UseQualifiedName` but use the string
+5. `UseQualifiedType()`: like `UseQualifiedName` but use the string
    `parentmodule(T).string(T)` thereby including the type parameters of the type as well as
    its name.
 6. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
@@ -176,7 +176,7 @@ c = NamedTuplesEq(HashVersion{1}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
 ```
 
-If we did not define a method of `parent_context`, our context would need to implement a a
+If we did not define a method of `parent_context`, our context would need to implement a
 `hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and `Pair` for the
 call to `stable_hash` above to succeede.
 
