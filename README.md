@@ -84,15 +84,23 @@ are used. They are intended to avoid hash collisions as best as possible.
 
 - `Any`: 
     - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `UseQualifiedType(UseStruct(:ByName))` for all other types
-- `NamedTuple`: `UseQualifiedName(UseStruct())`
-- `Function`: `UseHeader("Base.Function", UseQualifiedName())`
-- `AbstractString`, `Symbol`: `UseQualifiedName(UseWrite())`
-- `Tuple`, `Pair`: `UseQualifiedName(UseIterate())`
-- `AbstractArray`: `UseHeader("Base.AbstractArray", UseSize(UseIterate()))`
-- `AbstractRange`: `UseQualifiedName(UseStruct())`
-- `AbstractSet`: `UseQualifiedName(UseTransform(sort! ∘ collect))`
-- `AbstractDict`: `UseQualifiedName(UseTransform(x -> sort!(collect(pairs(x)); by=first)))`
+    - `Use(qualified_type, UseStruct(:ByName))` for all other types
+- `NamedTuple`: `Use(qualified_name, UseStruct())`
+- `Function`: `Use("Base.Function", Use(qualified_name))`
+- `AbstractString`: `Use(qualified_name, UseWrite())`
+- `Symbol`: `Use(":", UseWrite())`
+- `String`: `UseWrite()` (note: removing the `Use(qualified_name` prevents an infinite loop)
+- `Tuple`, `Pair`: `Use(qualified_name, UseIterate())`
+- `Type`: `UseQualifiedType`
+- `AbstractArray`: `Use("Base.AbstractArray", UseSize(UseIterate()))`
+- `AbstractRange`: `Use(qualified_name, UseStruct())`
+- `AbstractSet`: `Use(qualified_name, UseTransform(sort! ∘ collect))`
+- `AbstractDict`: `Use(qualified_name, UseStruct(keys => getindex, :ByName))`
+
+There are two built-in contexts that can be used to modify these default fallbacks:
+`TablesEq` and `ViewsEq`. `TablesEq` makes any table with equivalent content have the same
+hash, and `ViewsEq` makes any array or string with the same sequence of values and the same
+size have an equal hash. You can pass one or more of these as the second argument to table hash, e.g. `stable_hash(x, ViewsEq())` or `stable_hash(x, ViewsEq(TablesEq()))`.
 
 ## Breaking changes
 
@@ -102,15 +110,19 @@ This is a very breaking release, almost all values hash differently and the API 
 However, far fewer manual defintiions of `hash_method` become necessary. The fallback for
 `Any` should handle many more cases. 
 
-API Changes:
-
-- **Breaking**: `transform` has been split into `UseTransform` and `UseAndReplaceContext`
+- **Breaking**: `transform` has been removed, its features are covered by `Use` and
+  `UseAndReplaceContext`.
 - **Breaking**: `stable_hash` no longer accepts mutliple objects to hash (wrap them in a
   tuple instead); it now accepts a single object to hash, and the second positional argument
   is the context (see below for details on contexts).
-- **Deprecation**: The `Use` objects have been greatly streamlined. You will
-  need to replace the old names as follows:
-    - ``
+- **Deprecation**: The `Use` objects have changed quite a bit. You will
+  need to replace the old names to avoid deprecation warnings:
+    - Favor `UseStruct()` (which uses `fieldnames` instead of `propertynames`) 
+      to `UseProperties()`.
+    - *BUT* to reproduce `UseProperties()`, call `UseStruct(propertynames => getproperty)`
+    - Replace `UseQualifiedName()` with `Use(qualified_name)`
+    - Replace `UseSize` with `Use(size)`
+    - Reaplce `UseTable` with `Use(Tables.columntable)`
 - **Deprecation**: The fallback methods above are defined within a specific context
   (`HashContext{1}`). Any contexts you make should should define a
   `StableHashTraits.parent_context` method that returns e.g. `HashContext{1}` so that the

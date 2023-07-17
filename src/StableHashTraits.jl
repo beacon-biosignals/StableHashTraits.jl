@@ -1,7 +1,7 @@
 module StableHashTraits
 
 export stable_hash, UseWrite, UseIterate, UseStruct, Use, UseAndReplaceContext, HashVersion,
-    qualified_name, qualified_type
+    qualified_name, qualified_type, TablesEq, ViewsEq
 using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA
 
@@ -35,6 +35,12 @@ digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 #####
 ##### Hash Methods 
 #####
+
+# deprecations
+@deprecate UseProperties(order=:ByOrder) UseStruct(propertynames => getproperty, order)
+@deprecate UseQualifiedName(method=nothing) Use(qualified_name, method)
+@deprecate UseSize(method=nothing) Use(size, method)
+@deprecate UseTable() Use(Tables.columntable)
 
 # These are the various methods to compute a hash from an object
 
@@ -90,7 +96,7 @@ end
 struct UseStruct{P,S} 
     fnpair::P
 end
-UseStruct(x::Symbol) = UseStruct(x, (fieldnames ∘ typeof) => getfield)
+UseStruct(x::Symbol) = UseStruct((fieldnames ∘ typeof) => getfield, x)
 function UseStruct(fnpair::Pair=(fieldnames ∘ typeof) => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return UseStruct{typeof(fnpair),by}(fnpair)
@@ -119,7 +125,9 @@ function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
     # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
     # https://discourse.julialang.org/t/difference-between-base-and-core/37426
-    return replace(str, r"^Core\." => "Base.")
+    str = replace(str, r"^Core\." => "Base.")
+    str = replace(str, ", " => ",") # spacing in type names vary across minor julia versions
+    return str
 end
 function validate_name(str)
     if occursin(r"\.#[^.]*$", str)
@@ -133,9 +141,8 @@ struct Use{F,T}
     then::T
 end
 Use(fn) = Use{typeof(fn), Nothing}(fn, nothing)
-Use(fn, method) = Use{typeof(fn), typeof(method)}(fn, method)
-apply_use(x, method::Use{<:Base.Callable}) = method.fn(x)
-apply_use(_, method)  = method.fn
+apply_use(x, method::Use{<:Base.Callable}) = method.use(x)
+apply_use(_, method)  = method.use
 function stable_hash_helper(x, hash, context, method)
     y = apply_use(x, method)
     if typeof(y) == typeof(x)
@@ -255,8 +262,9 @@ They are intended to avoid hash collisions as best as possible.
     - `Use(qualified_type, UseStruct(:ByName))` for all other types
 - `NamedTuple`: `Use(qualified_name, UseStruct())`
 - `Function`: `Use("Base.Function", Use(qualified_name))`
-- `AbstractString`, `Symbol`: `Use(":", UseWrite())`
-- `String`: `UseWrite()`
+- `AbstractString`: `Use(qualified_name, UseWrite())`
+- `Symbol`: `Use(":", UseWrite())`
+- `String`: `UseWrite()` (note: removing the `Use(qualified_name` prevents an infinite loop)
 - `Tuple`, `Pair`: `Use(qualified_name, UseIterate())`
 - `Type`: `UseQualifiedType`
 - `AbstractArray`: `Use("Base.AbstractArray", UseSize(UseIterate()))`
@@ -334,10 +342,52 @@ hash_method(::Function, ::HashVersion{1}) = Use("Base.Function", Use(qualified_n
 hash_method(::AbstractSet, ::HashVersion{1}) = Use(qualified_name, Use(sort! ∘ collect))
 
 """
+    TablesEq(parent_context)
+
+Create a hash context for which `Tables.columntable(x) == Tables.columntable(y)` implies
+that `stable_hash(x) == stable_hash(y)`. All other hashes as specified in the
+`parent_context` remain unchanged.
+"""
+struct TablesEq{T}
+    parent::T
+end
+TablesEq() = TablesEq(HashVersion{1}())
+StableHashTraits.parent_context(x::TablesEq) = x.parent
+function is_columntable(::Type{T}) where {T}
+    T <: NamedTuple && all(f -> f <: AbstractVector, fieldtypes(T))
+end
+function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
+    if Tables.istable(T)
+        is_columntable(T) && return Use("Tables.AbstractColumns", UseStruct(:ByName))
+        return Use(Tables.columntable)
+    end
+    return StableHashTraits.hash_method(x, parent_context(m))
+end
+
+"""
+    ViewsEq(parent_context)
+
+Create a hash context for which, if `all(x == y for x in xs, y in ys)` and `size(x) ==
+size(y)` for two arrays `xs` and `ys`, and if `x == y` and `x` and `y` are `<:
+AbstractString`, it implies that `stable_hash(x) == stable_hash(y)`, regardless of the types
+of the arrays. All other hash values, as specified in the `parent_context` remain unchanged.
+"""
+struct ViewsEq{T}
+    parent::T
+end
+ViewsEq() = ViewsEq(HashVersion{1}())
+StableHashTraits.parent_context(x::ViewsEq) = x.parent
+function StableHashTraits.hash_method(::AbstractArray, ::ViewsEq)
+    return Use("Base.AbstractArray", Use(size, UseIterate()))
+end
+StableHashTraits.hash_method(::AbstractString, ::ViewsEq) = UseWrite()
+StableHashTraits.hash_method(::String, ::ViewsEq) = UseWrite()
+
+"""
     HashVersion{1}()
 
 The default `hash_context` used by `stable_hash`. There is currently only one version (`1`)
-and it is the default version. By explicitly passing this context to `stable_hash` you
+and it is the default context. By explicitly passing this context to `stable_hash` you
 ensure that hash values for these fallback methods will not change even if new fallbacks are
 defined. This is a "root" context, meaning that `parent_context(::HashVersion) = nothing`. If
 no method is defined for a type in this context, it will fallback to the single-argument

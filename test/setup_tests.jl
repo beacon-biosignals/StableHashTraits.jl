@@ -39,7 +39,7 @@ end
 
 StableHashTraits.hash_method(::TestType) = UseStruct()
 StableHashTraits.hash_method(::TestType2) = Use(qualified_name, UseStruct())
-StableHashTraits.hash_method(::TestType3) = UseStruct(:ByName, propertynames => getproperty)
+StableHashTraits.hash_method(::TestType3) = UseStruct(propertynames => getproperty, :ByName)
 StableHashTraits.hash_method(::TestType4) = UseStruct(propertynames => getproperty)
 StableHashTraits.hash_method(::TypeType) = UseStruct()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
@@ -88,29 +88,6 @@ function StableHashTraits.hash_method(x::GoodTransform)
     x.count > 0 && return Use(x -> GoodTransform(-0.1x.count))
     return Use(x -> GoodTransform(string(x.count)))
 end
-
-struct TablesEq end
-StableHashTraits.parent_context(::TablesEq) = HashVersion{1}()
-function StableHashTraits.hash_method(x::T, ::TablesEq) where {T}
-    if Tables.istable(T) && 
-        if Tables.columnaccess(T)
-            return UseStruct(Tables.columnnames => Tables.getcolumn)
-        else
-            return Use(Tables.columns)
-        end
-    end
-    return StableHashTraits.hash_method(x, HashVersion{1}())
-end
-
-struct ViewsEq end
-StableHashTraits.parent_context(::ViewsEq) = HashVersion{1}()
-function StableHashTraits.hash_method(::AbstractArray, ::ViewsEq)
-    return Use("Base.AbstractArray", Use(size, UseIterate()))
-end
-function StableHashTraits.hash_method(::AbstractString, ::ViewsEq)
-    return UseWrite()
-end
-StableHashTraits.hash_method(::String, ::ViewsEq) = UseWrite()
 
 struct MyOldContext end
 StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = UseIterate()

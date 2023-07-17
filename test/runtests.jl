@@ -65,7 +65,7 @@ include("setup_tests.jl")
           stable_hash(DataFrame(; x=1:10, y=1:10), TablesEq())
     @test stable_hash(DataFrame(; x=1:10, y=1:10)) !=
           stable_hash(NonTableStruct(1:10, 1:10))
-    @test stable_hash(DataFrame(; x=1:10, y=1:10), TablesEq()) ==
+    @test stable_hash(DataFrame(; x=1:10, y=1:10), TablesEq()) !=
           stable_hash(NonTableStruct(1:10, 1:10), TablesEq())
 
     # test out UseAndReplaceContext
@@ -121,6 +121,10 @@ include("setup_tests.jl")
           stable_hash([1, 2])
     @test (@test_deprecated(r"`parent_context`", stable_hash("12", MyOldContext()))) ==
           stable_hash("12")
+    @test_deprecated(UseProperties(:ByName))
+    @test_deprecated(UseQualifiedName())
+    @test_deprecated(UseSize())
+    @test_deprecated(UseTable())
 end
 
 @testset "Aqua" begin
