@@ -38,9 +38,9 @@ struct TestType5
 end
 
 StableHashTraits.hash_method(::TestType) = UseFields()
-StableHashTraits.hash_method(::TestType2) = UseQualifiedName(UseFields())
-StableHashTraits.hash_method(::TestType3) = UseProperties(:ByName)
-StableHashTraits.hash_method(::TestType4) = UseProperties()
+StableHashTraits.hash_method(::TestType2) = Use(qualified_name, UseFields())
+StableHashTraits.hash_method(::TestType3) = UseFields(:ByName, propertynames => getproperty)
+StableHashTraits.hash_method(::TestType4) = UseFields(propertynames => getproperty)
 StableHashTraits.hash_method(::TypeType) = UseFields()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
 
@@ -59,7 +59,7 @@ struct BasicHashObject
     x::AbstractRange
     y::Vector{Float64}
 end
-StableHashTraits.hash_method(x::BasicHashObject) = UseFields()
+StableHashTraits.hash_method(::BasicHashObject) = UseFields()
 struct CustomHashObject
     x::AbstractRange
     y::Vector{Float64}
@@ -78,32 +78,39 @@ function StableHashTraits.hash_method(x::Any, c::CustomContext)
 end
 
 struct BadTransform end
-StableHashTraits.hash_method(::BadTransform) = UseTransform(identity)
+StableHashTraits.hash_method(::BadTransform) = Use(identity)
 
 struct GoodTransform{T}
     count::T
 end
 function StableHashTraits.hash_method(x::GoodTransform)
-    !(x.count isa Number) && return UseQualifiedName(UseTransform(x -> x.count))
-    x.count > 0 && return UseTransform(x -> GoodTransform(-0.1x.count))
-    return UseTransform(x -> GoodTransform(string(x.count)))
+    !(x.count isa Number) && return UseQualifiedName(Use(x -> x.count))
+    x.count > 0 && return Use(x -> GoodTransform(-0.1x.count))
+    return Use(x -> GoodTransform(string(x.count)))
 end
 
 struct TablesEq end
 StableHashTraits.parent_context(::TablesEq) = HashVersion{1}()
-function StableHashTraits.hash_method(x::T, c::TablesEq) where {T}
-    return Tables.istable(T) ? UseTable() :
-           StableHashTraits.hash_method(x, HashVersion{1}())
+function StableHashTraits.hash_method(x::T, ::TablesEq) where {T}
+    if Tables.istable(T)
+        if Tables.columnaccess(T)
+            return UseFields(Tables.columnnames => Tables.getcolumn)
+        else
+            return Use(Tables.columns)
+        end
+    end
+    return StableHashTraits.hash_method(x, HashVersion{1}())
 end
 
 struct ViewsEq end
 StableHashTraits.parent_context(::ViewsEq) = HashVersion{1}()
 function StableHashTraits.hash_method(::AbstractArray, ::ViewsEq)
-    return UseHeader("Base.AbstractArray", UseSize(UseIterate()))
+    return Use("Base.AbstractArray", Use(size, UseIterate()))
 end
 function StableHashTraits.hash_method(::AbstractString, ::ViewsEq)
-    return UseHeader("Base.AbstractString", UseWrite())
+    return UseWrite()
 end
+StableHashTraits.hash_method(::String, ::ViewsEq) = UseWrite()
 
 struct MyOldContext end
 StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = UseIterate()

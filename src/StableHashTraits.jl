@@ -1,7 +1,7 @@
 module StableHashTraits
 
-export stable_hash, UseWrite, UseIterate, UseFields, UseProperties, UseTable,
-       UseQualifiedName, UseSize, UseTransform, UseHeader, UseAndReplaceContext, HashVersion
+export stable_hash, UseWrite, UseIterate, UseFields, Use, UseAndReplaceContext, HashVersion,
+    qualified_name, qualified_type
 using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA
 
@@ -87,105 +87,68 @@ function hash_foreach(fn, hash, context, args...)
     return hash
 end
 
-struct UseProperties{S} end
-function UseProperties(by::Symbol=:ByOrder)
-    by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
-    return UseProperties{by}()
+struct UseFields{S,P} 
+    fnpair::P
 end
-orderproperties(::UseProperties{:ByOrder}, props) = props
-orderproperties(::UseProperties{:ByName}, props) = TupleTools.sort(props; by=string)
-function stable_hash_helper(x, hash, context, use::UseProperties)
-    return hash_foreach(hash, context, orderproperties(use, propertynames(x))) do k
-        return k => getproperty(x, k)
-    end
-end
-
-struct UseFields{S} end
-function UseFields(by::Symbol=:ByOrder)
+UseFields(fnpair::Pair) = UseFields(:ByOrder, fnpair)
+function UseFields(by::Symbol=:ByOrder, fnpair::Pair=(fieldnames ∘ typeof) => getfield)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
-    return UseFields{by}()
+    return UseFields{by,typeof(fnpair)}(fnpair)
 end
 orderfields(::UseFields{:ByOrder}, props) = props
-orderfields(::UseFields{:ByName}, props) = TupleTools.sort(props; by=string)
-function stable_hash_helper(x::T, hash, context, use::UseFields) where {T}
-    return hash_foreach(hash, context, orderfields(use, fieldnames(T))) do k
-        return k => getfield(x, k)
+orderfields(::UseFields{:ByName}, props) = sort_(props)
+sort_(x::Tuple) = TupleTools.sort(x; by=string)
+sort_(x::AbstractSet) = sort!(collect(x))
+sort_(x) = sort(x)
+function stable_hash_helper(x, hash, context, use::UseFields)
+    fieldsfn, getfieldfn = use.fnpair
+    return hash_foreach(hash, context, orderfields(use, fieldsfn(x))) do k
+        return k => getfieldfn(x, k)
     end
 end
 
-struct UseTable end
-function stable_hash_helper(x, hash, context, ::UseTable)
-    cols = Tables.columns(x)
-    return hash_foreach(Pair, hash, context, Tables.columnnames(cols), cols)
-end
+qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
+qualified_name(fn::Function) = qname_(fn, nameof)
+qualified_type(fn::Function) = qname_(fn, string)
+qualified_name(x::T) where T = qname_(T, nameof)
+qualified_type(x::T) where T = qname_(T, string)
+qualified_name(::Type{T}, p) where {T} = qname_(T, nameof)
+qualified_type(::Type{T}, p) where {T} = qname_(T, string)
 
-struct UseQualifiedName{P,T}
-    parent::T
-end
-UseQualifiedName{P}(parent::T) where {P,T} = UseQualifiedName{P,T}(parent)
-UseQualifiedName(parent::T=nothing) where {T} = UseQualifiedName{:WithoutParams}(parent)
-UseQualifiedType(parent::T=nothing) where {T} = UseQualifiedName{:WithParams}(parent)
-qualified_name_(T, ::Val{:WithoutParams}) = string(parentmodule(T), '.', nameof(T))
-qualified_name_(T, ::Val{:WithParams}) = string(parentmodule(T), '.', string(T))
-qualified_name(x::Function, _) = qualified_name_(x, Val(:WithoutParams))
-qualified_name(::Type{T}, p) where {T} = qualified_name_(T, p)
-qualified_name(::T, p) where {T} = qualified_name_(T, p)
-function stable_hash_helper(x, hash, context, method::UseQualifiedName{P}) where {P}
+function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
     # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
     # https://discourse.julialang.org/t/difference-between-base-and-core/37426
-    str = replace(qualified_name(x, Val(P)), r"^Core\." => "Base.")
+    return replace(str, r"^Core\." => "Base.")
+end
+function validate_name(str)
     if occursin(r"\.#[^.]*$", str)
-        error("Annonymous types (those containing `#`) cannot be hashed to a reliable value")
+        throw(ArgumentError("Annonymous types (those containing `#`) cannot be hashed to a reliable value"))
     end
-    return _stable_hash_header(str, x, hash, context, method.parent)
+    return str
 end
 
-struct UseSize{T}
-    parent::T
+struct Use{F,T}
+    use::F
+    then::T
 end
-function stable_hash_helper(x, hash, context, method::UseSize)
-    sz = size(x)
-    hash = stable_hash_helper(sz, similar_hasher(hash), context, hash_method(sz, context))
-    val = stable_hash_helper(x, similar_hasher(hash), context, method.parent)
-    recursive_hash!(hash, val)
-    return hash
-end
-
-struct UseHeader{T}
-    str::String
-    parent::T
-end
-function stable_hash_helper(x, hash, context, method::UseHeader)
-    return _stable_hash_header(method.str, x, hash, context, method.parent)
-end
-
-strip_qualifier(x::UseQualifiedName) = x.parent
-strip_qualifier(x::UseHeader) = x.parent
-strip_qualifier(x) = x
-function _stable_hash_header(str::String, x, hash, context, method)
-    # we do not qualify the type of the header value (it will always be a string)
-    # because that leads to an infinite recursion
-    hash = stable_hash_helper(str, similar_hasher(hash), context,
-                              strip_qualifier(hash_method(str, context)))
-    isnothing(method) && return hash
-
-    val = stable_hash_helper(x, similar_hasher(hash), context, method)
-    recursive_hash!(hash, val)
-    return hash
-end
-
-struct UseTransform{F}
-    fn::F
-end
-function stable_hash_helper(x, hash, context, method::UseTransform)
-    result = method.fn(x)
-    if typeof(result) == typeof(x)
-        # this would almost certainly lead to a StackOverflowError
-        throw(ArgumentError("The function passed to `UseTransform` returns an object of the " *
-                            "same type as its input."))
+Use(fn) = Use{typeof(fn), Nothing}(fn, nothing)
+Use(fn, method) = Use{typeof(fn), typeof(method)}(fn, method)
+apply_use(x, method::Use{<:Base.Callable}) = method.fn(x)
+apply_use(_, method)  = method.fn
+function stable_hash_helper(x, hash, context, method)
+    y = apply_use(x, method)
+    if typeof(y) == typeof(x)
+        throw(ArgumentError("The first argument to `Use` yields an object of the " *
+                            "same type as the original object to be hashed; allowing this "*
+                            "would almost certianly cause a StackOverflowError"))
     end
-    return stable_hash_helper(result, hash, context, hash_method(result, context))
+    h = stable_hash_helper(y, hash, context, hash_method(y, context))
+
+    isnothing(method.then) && return h
+
+    then_h = stable_hash_helper(x, similar_hasher(hash), context, method.then)
+    return recursive_hash!(hash, then_h)
 end
 
 """
@@ -254,44 +217,35 @@ You should return one of the following values.
     and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
     falls back to `Base.write(io, x)` if no specialized methods are defined for x.
 2. `UseIterate()`: assumes the object is iterable and finds a hash of all elements
-3. `UseFields()`: assume a struct of some type and use `fieldnames(typeof(x))` and
-   `getfield` to compute a hash of all fields. You can further customize its behavior by
-   passing the symbol `:ByOrder` (to hash properties in the order they are listed by
+3. `UseFields([order], [pair])`: assume a struct of some type and use
+   `fieldnames(typeof(x))` and `getfield` to compute a hash of all fields. You can further
+   customize its behavior using it's two parameters: - `order` can be :ByOrder (the
+        default)—which sorts by the order of `fieldnames` or `:ByName`—which sorts by
+          lexigraphical order of the symbols - Defines how fields are extracted; the default
+        is `fieldnames ∘ typeof => getfield` but this could be changed to e.g.
+          `propertynames => getproperty` or `Tables.columnnames => Tables.getcolumn` passing
+          the symbol `:ByOrder` (to hash properties in the order they are listed by
    `propertynames`), which is the default, or `:ByName` (sorting properties by their name
    before hashing).
-4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is
-    the type of the object. Throws an error if the name includes `#` (e.g. an anonymous
-    function). If you wish to include this qualified name *and* another method, pass one of
-    the other methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be
-    used to include the type as part of the hash. Do you want objects with the same field
-    names and values but different types to hash to different values? Then specify
-    `UseQualifiedName`.
-5. `UseQualifiedType()`: like `UseQualifiedName` but use the string
-   `parentmodule(T).string(T)` thereby including the type parameters of the type as well as
-   its name.
-6. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
-    hash the contents of the value (e.g. `UseIterate`).
-7. `UseTransform(fn -> body)`: before hashing the result, transform it by the given
-   function; hash_method is then called on the return value. To help avoid stack overflows
-   this cannot return an object of the same type.
-8. `UseHeader(str::String, method)`: prefix the hash created by `method` with a hash of
-   `str`.
-9. `UseProperties()`: same as `UseField` but using `propertynames` and `getproperty` in lieu
-   of `fieldnames` and `getfield`
-10. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
-   `Tables.columnnames` to compute a hash of each columns content and name, ala `UseFields`. 
-10. `nothing`: indicates that you want to use a fallback method (see below); the two
-   argument version of `hash_method` should never return `nothing`.
+4. `Use(fn | value, [method])`: hash the static `value` or hash the value of
+   applying `fn` to the given object. To prevent an infinite loop it is an error to return
+   an object of the same type as the object you're hashing. Optionally, you can
+   pass a second method that is also included in the hashed value. e.g. 
+   Use("foo", UseIterate()) would prefix a hash of "foo" to a hash of all elements
+   of an iterable object.
+5. `nothing`: indicates that you want to use a fallback method (see below); the two argument
+   version of `hash_method` should never return `nothing`.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
-properties are the same for `UseProperties`, the hash will be the same; etc...
+fields are the same for `UseFields`, the hash will be the same; etc...
 
 ## Implemented methods of `hash_method`
 
 In the absence of a specific `hash_method` for your type, the following fallbacks are used.
 They are intended to avoid hash collisions as best as possible.
 
+**TODO**: fix
 - `Any`: 
     - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
     - `UseQualifiedType(UseFields(:ByName))` for all other types
@@ -356,23 +310,22 @@ function hash_method(x::T, c::HashVersion{1}) where {T}
     Base.isprimitivetype(T) && return UseWrite()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
-    return UseQualifiedType(UseFields(:ByName))
+    return Use(qualified_type, UseFields(:ByName))
 end
-hash_method(::NamedTuple, ::HashVersion{1}) = UseQualifiedName(UseFields())
-hash_method(::AbstractRange, ::HashVersion{1}) = UseQualifiedName(UseFields(:ByName))
-hash_method(::AbstractArray, ::HashVersion{1}) = UseQualifiedName(UseSize(UseIterate()))
-hash_method(::AbstractString, ::HashVersion{1}) = UseQualifiedName(UseWrite())
-hash_method(::Symbol, ::HashVersion{1}) = UseQualifiedName(UseWrite())
+hash_method(::NamedTuple, ::HashVersion{1}) = Use(qualified_name, UseFields())
+hash_method(::AbstractRange, ::HashVersion{1}) = Use(qualified_name, UseFields(:ByName))
+hash_method(::AbstractArray, ::HashVersion{1}) = Use(qualified_name, Use(size, UseIterate()))
+hash_method(::AbstractString, ::HashVersion{1}) = Use(qualified_name, UseWrite())
+hash_method(::String, ::HashVersion{1}) = UseWrite()
+hash_method(::Symbol, ::HashVersion{1}) = Use(":", UseWrite())
 function hash_method(::AbstractDict, ::HashVersion{1})
-    return UseQualifiedName(UseTransform(x -> sort!(collect(pairs(x)); by=first)))
+    return Use(qualified_name, UseFields(:ByName, keys => getindex))
 end
-hash_method(::Tuple, ::HashVersion{1}) = UseQualifiedName(UseIterate())
-hash_method(::Pair, ::HashVersion{1}) = UseQualifiedName(UseIterate())
-hash_method(::Type, ::HashVersion{1}) = UseQualifiedName()
-hash_method(::Function, ::HashVersion{1}) = UseHeader("Base.Function", UseQualifiedName())
-function hash_method(::AbstractSet, ::HashVersion{1})
-    return UseQualifiedName(UseTransform(sort! ∘ collect))
-end
+hash_method(::Tuple, ::HashVersion{1}) = Use(qualified_name, UseIterate())
+hash_method(::Pair, ::HashVersion{1}) = Use(qualified_name, UseIterate())
+hash_method(::Type, ::HashVersion{1}) = Use(qualified_name)
+hash_method(::Function, ::HashVersion{1}) = Use("Base.Function", Use(qualified_name))
+hash_method(::AbstractSet, ::HashVersion{1}) = Use(qualified_name, Use(sort! ∘ collect))
 
 """
     HashVersion{1}()
@@ -380,7 +333,7 @@ end
 The default `hash_context` used by `stable_hash`. There is currently only one version (`1`)
 and it is the default version. By explicitly passing this context to `stable_hash` you
 ensure that hash values for these fallback methods will not change even if new fallbacks are
-defined. This is a "root" context, meaning that `parnet_context(::HashVersion) = nothing`. If
+defined. This is a "root" context, meaning that `parent_context(::HashVersion) = nothing`. If
 no method is defined for a type in this context, it will fallback to the single-argument
 version of `hash_context`.
 """
