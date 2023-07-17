@@ -92,7 +92,7 @@ end
 struct TablesEq end
 StableHashTraits.parent_context(::TablesEq) = HashVersion{1}()
 function StableHashTraits.hash_method(x::T, ::TablesEq) where {T}
-    if Tables.istable(T)
+    if Tables.istable(T) && 
         if Tables.columnaccess(T)
             return UseStruct(Tables.columnnames => Tables.getcolumn)
         else
