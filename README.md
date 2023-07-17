@@ -49,34 +49,27 @@ You can customize the hash behavior for particular types by implementing the tra
     and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
     falls back to `Base.write(io, x)` if no specialized methods are defined for x.
 2. `UseIterate()`: assumes the object is iterable and finds a hash of all elements
-3. `UseStruct()`: assume a struct of some type and use `fieldnames(typeof(x))` and
-   `getfield` to compute a hash of all fields. You can further customize its behavior by
-   passing the symbol `:ByOrder` (to hash properties in the order they are listed by
+3. `UseStruct([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
+    the object as defined by a sequence of pairs. How precisely this occurs is determined
+    by the two arugments
+        - `pair` Defines how fields are extracted; the default
+          is `fieldnames ∘ typeof => getfield` but this could be changed to e.g.
+          `propertynames => getproperty` or `Tables.columnnames => Tables.getcolumn`.
+          The first element of the pair is a function used to compute a list of keys
+          and the second element is a two argument function used to extract the keys 
+          from the object.
+        - `order` can be :ByOrder (the default)—which sorts by the order of `fieldnames` or
+         `:ByName`—which sorts by lexigraphical order of the symbols 
+   the symbol `:ByOrder` (to hash properties in the order they are listed by
    `propertynames`), which is the default, or `:ByName` (sorting properties by their name
    before hashing).
-4. `UseQualifiedName()`: hash the string `parentmodule(T).nameof(T)` where `T` is
-    the type of the object. Throws an error if the name includes `#` (e.g. an anonymous
-    function). If you wish to include this qualified name *and* another method, pass one of
-    the other methods as an arugment (e.g. `UseQualifiedName(UseProperties())`). This can be
-    used to include the type as part of the hash. Do you want objects with the same field
-    names and values but different types to hash to different values? Then specify
-    `UseQualifiedName`.
-5. `UseQualifiedType()`: like `UseQualifiedName` but use the string
-   `parentmodule(T).string(T)` thereby including the type parameters of the type as well as
-   its name.
-6. `UseSize(method)`: hash the result of calling `size` on the object and use `method` to
-    hash the contents of the value (e.g. `UseIterate`).
-7. `UseTransform(fn -> body)`: before hashing the result, transform it by the given
-   function; hash_method is then called on the return value. To help avoid stack overflows
-   this cannot return an object of the same type.
-8. `UseHeader(str::String, method)`: prefix the hash created by `method` with a hash of
-   `str`.
-9. `UseProperties()`: same as `UseField` but using `propertynames` and `getproperty` in lieu
-   of `fieldnames` and `getfield`
-10. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
-   `Tables.columnnames` to compute a hash of each columns content and name, ala `UseStruct`. 
-10. `nothing`: indicates that you want to use a fallback method (see below); the two
-   argument version of `hash_method` should never return `nothing`.
+4. `Use(fn | value, [method])`: hash the static `value` or hash the value of
+   applying `fn` to the given object. To prevent an infinite loop it is an error to return
+   an object of the same type as the object you're hashing. Optionally, you can pass a
+   second method that is also included in the hashed value. e.g. Use("foo", UseIterate())
+   would prefix a hash of "foo" to a hash of all elements of an iterable object.
+5. `nothing`: indicates that you want to use a fallback method (see below); the two argument
+   version of `hash_method` should never return `nothing`.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
