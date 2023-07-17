@@ -300,7 +300,7 @@ They are intended to avoid hash collisions as best as possible.
 - `AbstractString`, `Symbol`: `UseQualifiedName(UseWrite())`
 - `Tuple`, `Pair`: `UseQualifiedName(UseIterate())`
 - `AbstractArray`: `UseHeader("Base.AbstractArray", UseSize(UseIterate()))`
-- `AbstractRange`: `UseQualifiedName(UseFields())`
+- `AbstractRange`: `UseQualifiedName(UseFields(:ByName))`
 - `AbstractSet`: `UseQualifiedName(UseTransform(sort! ∘ collect))`
 - `AbstractDict`: `UseQualifiedName(UseTransform(x -> sort!(collect(pairs(x)); by=first)))`
 
