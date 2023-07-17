@@ -1,7 +1,7 @@
 module StableHashTraits
 
 export stable_hash, UseWrite, UseIterate, UseStruct, Use, UseAndReplaceContext, HashVersion,
-    qualified_name, qualified_type, TablesEq, ViewsEq
+       qualified_name, qualified_type, TablesEq, ViewsEq
 using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA
 
@@ -93,7 +93,7 @@ function hash_foreach(fn, hash, context, args...)
     return hash
 end
 
-struct UseStruct{P,S} 
+struct UseStruct{P,S}
     fnpair::P
 end
 UseStruct(x::Symbol) = UseStruct((fieldnames ∘ typeof) => getfield, x)
@@ -101,8 +101,8 @@ function UseStruct(fnpair::Pair=(fieldnames ∘ typeof) => getfield, by::Symbol=
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return UseStruct{typeof(fnpair),by}(fnpair)
 end
-orderfields(::UseStruct{<:Any, :ByOrder}, props) = props
-orderfields(::UseStruct{<:Any, :ByName}, props) = sort_(props)
+orderfields(::UseStruct{<:Any,:ByOrder}, props) = props
+orderfields(::UseStruct{<:Any,:ByName}, props) = sort_(props)
 sort_(x::Tuple) = TupleTools.sort(x; by=string)
 sort_(x::AbstractSet) = sort!(collect(x))
 sort_(x) = sort(x)
@@ -116,8 +116,8 @@ end
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
 qualified_name(fn::Function) = qname_(fn, nameof)
 qualified_type(fn::Function) = qname_(fn, string)
-qualified_name(x::T) where T = qname_(T, nameof)
-qualified_type(x::T) where T = qname_(T, string)
+qualified_name(x::T) where {T} = qname_(T, nameof)
+qualified_type(x::T) where {T} = qname_(T, string)
 qualified_name(::Type{T}, p) where {T} = qname_(T, nameof)
 qualified_type(::Type{T}, p) where {T} = qname_(T, string)
 
@@ -140,14 +140,14 @@ struct Use{F,T}
     use::F
     then::T
 end
-Use(fn) = Use{typeof(fn), Nothing}(fn, nothing)
+Use(fn) = Use{typeof(fn),Nothing}(fn, nothing)
 apply_use(x, method::Use{<:Base.Callable}) = method.use(x)
-apply_use(_, method)  = method.use
+apply_use(_, method) = method.use
 function stable_hash_helper(x, hash, context, method)
     y = apply_use(x, method)
     if typeof(y) == typeof(x)
         throw(ArgumentError("The first argument to `Use` yields an object of the " *
-                            "same type as the original object to be hashed; allowing this "*
+                            "same type as the original object to be hashed; allowing this " *
                             "would almost certianly cause a StackOverflowError"))
     end
     h = stable_hash_helper(y, hash, context, hash_method(y, context))
@@ -328,7 +328,9 @@ function hash_method(x::T, c::HashVersion{1}) where {T}
 end
 hash_method(::NamedTuple, ::HashVersion{1}) = Use(qualified_name, UseStruct())
 hash_method(::AbstractRange, ::HashVersion{1}) = Use(qualified_name, UseStruct(:ByName))
-hash_method(::AbstractArray, ::HashVersion{1}) = Use(qualified_name, Use(size, UseIterate()))
+function hash_method(::AbstractArray, ::HashVersion{1})
+    return Use(qualified_name, Use(size, UseIterate()))
+end
 hash_method(::AbstractString, ::HashVersion{1}) = Use(qualified_name, UseWrite())
 hash_method(::String, ::HashVersion{1}) = UseWrite()
 hash_method(::Symbol, ::HashVersion{1}) = Use(":", UseWrite())
@@ -354,7 +356,7 @@ end
 TablesEq() = TablesEq(HashVersion{1}())
 StableHashTraits.parent_context(x::TablesEq) = x.parent
 function is_columntable(::Type{T}) where {T}
-    T <: NamedTuple && all(f -> f <: AbstractVector, fieldtypes(T))
+    return T <: NamedTuple && all(f -> f <: AbstractVector, fieldtypes(T))
 end
 function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
