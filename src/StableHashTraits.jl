@@ -1,6 +1,6 @@
 module StableHashTraits
 
-export stable_hash, UseWrite, UseIterate, UseFields, Use, UseAndReplaceContext, HashVersion,
+export stable_hash, UseWrite, UseIterate, UseStruct, Use, UseAndReplaceContext, HashVersion,
     qualified_name, qualified_type
 using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA
@@ -87,20 +87,20 @@ function hash_foreach(fn, hash, context, args...)
     return hash
 end
 
-struct UseFields{S,P} 
+struct UseStruct{P,S} 
     fnpair::P
 end
-UseFields(fnpair::Pair) = UseFields(:ByOrder, fnpair)
-function UseFields(by::Symbol=:ByOrder, fnpair::Pair=(fieldnames ∘ typeof) => getfield)
+UseStruct(x::Symbol) = UseStruct(x, (fieldnames ∘ typeof) => getfield)
+function UseStruct(fnpair::Pair=(fieldnames ∘ typeof) => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
-    return UseFields{by,typeof(fnpair)}(fnpair)
+    return UseStruct{typeof(fnpair),by}(fnpair)
 end
-orderfields(::UseFields{:ByOrder}, props) = props
-orderfields(::UseFields{:ByName}, props) = sort_(props)
+orderfields(::UseStruct{<:Any, :ByOrder}, props) = props
+orderfields(::UseStruct{<:Any, :ByName}, props) = sort_(props)
 sort_(x::Tuple) = TupleTools.sort(x; by=string)
 sort_(x::AbstractSet) = sort!(collect(x))
 sort_(x) = sort(x)
-function stable_hash_helper(x, hash, context, use::UseFields)
+function stable_hash_helper(x, hash, context, use::UseStruct)
     fieldsfn, getfieldfn = use.fnpair
     return hash_foreach(hash, context, orderfields(use, fieldsfn(x))) do k
         return k => getfieldfn(x, k)
@@ -217,46 +217,50 @@ You should return one of the following values.
     and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
     falls back to `Base.write(io, x)` if no specialized methods are defined for x.
 2. `UseIterate()`: assumes the object is iterable and finds a hash of all elements
-3. `UseFields([order], [pair])`: assume a struct of some type and use
-   `fieldnames(typeof(x))` and `getfield` to compute a hash of all fields. You can further
-   customize its behavior using it's two parameters: - `order` can be :ByOrder (the
-        default)—which sorts by the order of `fieldnames` or `:ByName`—which sorts by
-          lexigraphical order of the symbols - Defines how fields are extracted; the default
-        is `fieldnames ∘ typeof => getfield` but this could be changed to e.g.
-          `propertynames => getproperty` or `Tables.columnnames => Tables.getcolumn` passing
-          the symbol `:ByOrder` (to hash properties in the order they are listed by
+3. `UseStruct([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
+    the object as defined by a sequence of pairs. How precisely this occurs is determined
+    by the two arugments
+        - `pair` Defines how fields are extracted; the default
+          is `fieldnames ∘ typeof => getfield` but this could be changed to e.g.
+          `propertynames => getproperty` or `Tables.columnnames => Tables.getcolumn`.
+          The first element of the pair is a function used to compute a list of keys
+          and the second element is a two argument function used to extract the keys 
+          from the object.
+        - `order` can be :ByOrder (the default)—which sorts by the order of `fieldnames` or
+         `:ByName`—which sorts by lexigraphical order of the symbols 
+   the symbol `:ByOrder` (to hash properties in the order they are listed by
    `propertynames`), which is the default, or `:ByName` (sorting properties by their name
    before hashing).
 4. `Use(fn | value, [method])`: hash the static `value` or hash the value of
    applying `fn` to the given object. To prevent an infinite loop it is an error to return
-   an object of the same type as the object you're hashing. Optionally, you can
-   pass a second method that is also included in the hashed value. e.g. 
-   Use("foo", UseIterate()) would prefix a hash of "foo" to a hash of all elements
-   of an iterable object.
+   an object of the same type as the object you're hashing. Optionally, you can pass a
+   second method that is also included in the hashed value. e.g. Use("foo", UseIterate())
+   would prefix a hash of "foo" to a hash of all elements of an iterable object.
 5. `nothing`: indicates that you want to use a fallback method (see below); the two argument
    version of `hash_method` should never return `nothing`.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
-fields are the same for `UseFields`, the hash will be the same; etc...
+fields are the same for `UseStruct`, the hash will be the same; etc...
 
 ## Implemented methods of `hash_method`
 
 In the absence of a specific `hash_method` for your type, the following fallbacks are used.
 They are intended to avoid hash collisions as best as possible.
 
-**TODO**: fix
 - `Any`: 
     - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `UseQualifiedType(UseFields(:ByName))` for all other types
-- `NamedTuple`: `UseQualifiedName(UseFields())`
-- `Function`: `UseHeader("Base.Function", UseQualifiedName())`
-- `AbstractString`, `Symbol`: `UseQualifiedName(UseWrite())`
-- `Tuple`, `Pair`: `UseQualifiedName(UseIterate())`
-- `AbstractArray`: `UseHeader("Base.AbstractArray", UseSize(UseIterate()))`
-- `AbstractRange`: `UseQualifiedName(UseFields())`
-- `AbstractSet`: `UseQualifiedName(UseTransform(sort! ∘ collect))`
-- `AbstractDict`: `UseQualifiedName(UseTransform(x -> sort!(collect(pairs(x)); by=first)))`
+    - `Use(qualified_type, UseStruct(:ByName))` for all other types
+- `NamedTuple`: `Use(qualified_name, UseStruct())`
+- `Function`: `Use("Base.Function", Use(qualified_name))`
+- `AbstractString`, `Symbol`: `Use(":", UseWrite())`
+- `String`: `UseWrite()`
+- `Tuple`, `Pair`: `Use(qualified_name, UseIterate())`
+- `Type`: `UseQualifiedType`
+- `AbstractArray`: `Use("Base.AbstractArray", UseSize(UseIterate()))`
+- `AbstractRange`: `Use(qualified_name, UseStruct())`
+- `AbstractSet`: `Use(qualified_name, UseTransform(sort! ∘ collect))`
+- `AbstractDict`: `Use(qualified_name, UseStruct(keys => getindex, :ByName))`
 
 ## Customizing hash computations with contexts
 
@@ -283,7 +287,7 @@ struct NamedTuplesEq{T}
 end
 StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
-    return UseQualifiedName(UseFields(:ByName))
+    return UseQualifiedName(UseStruct(:ByName))
 end
 c = NamedTuplesEq(HashVersion{1}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
@@ -310,16 +314,16 @@ function hash_method(x::T, c::HashVersion{1}) where {T}
     Base.isprimitivetype(T) && return UseWrite()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
-    return Use(qualified_type, UseFields(:ByName))
+    return Use(qualified_type, UseStruct(:ByName))
 end
-hash_method(::NamedTuple, ::HashVersion{1}) = Use(qualified_name, UseFields())
-hash_method(::AbstractRange, ::HashVersion{1}) = Use(qualified_name, UseFields(:ByName))
+hash_method(::NamedTuple, ::HashVersion{1}) = Use(qualified_name, UseStruct())
+hash_method(::AbstractRange, ::HashVersion{1}) = Use(qualified_name, UseStruct(:ByName))
 hash_method(::AbstractArray, ::HashVersion{1}) = Use(qualified_name, Use(size, UseIterate()))
 hash_method(::AbstractString, ::HashVersion{1}) = Use(qualified_name, UseWrite())
 hash_method(::String, ::HashVersion{1}) = UseWrite()
 hash_method(::Symbol, ::HashVersion{1}) = Use(":", UseWrite())
 function hash_method(::AbstractDict, ::HashVersion{1})
-    return Use(qualified_name, UseFields(:ByName, keys => getindex))
+    return Use(qualified_name, UseStruct(keys => getindex, :ByName))
 end
 hash_method(::Tuple, ::HashVersion{1}) = Use(qualified_name, UseIterate())
 hash_method(::Pair, ::HashVersion{1}) = Use(qualified_name, UseIterate())

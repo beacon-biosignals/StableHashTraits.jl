@@ -37,18 +37,18 @@ struct TestType5
     bob::String
 end
 
-StableHashTraits.hash_method(::TestType) = UseFields()
-StableHashTraits.hash_method(::TestType2) = Use(qualified_name, UseFields())
-StableHashTraits.hash_method(::TestType3) = UseFields(:ByName, propertynames => getproperty)
-StableHashTraits.hash_method(::TestType4) = UseFields(propertynames => getproperty)
-StableHashTraits.hash_method(::TypeType) = UseFields()
+StableHashTraits.hash_method(::TestType) = UseStruct()
+StableHashTraits.hash_method(::TestType2) = Use(qualified_name, UseStruct())
+StableHashTraits.hash_method(::TestType3) = UseStruct(:ByName, propertynames => getproperty)
+StableHashTraits.hash_method(::TestType4) = UseStruct(propertynames => getproperty)
+StableHashTraits.hash_method(::TypeType) = UseStruct()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
 
 struct NonTableStruct
     x::Vector{Int}
     y::Vector{Int}
 end
-StableHashTraits.hash_method(::NonTableStruct) = UseFields()
+StableHashTraits.hash_method(::NonTableStruct) = UseStruct()
 
 struct NestedObject{T}
     x::T
@@ -59,7 +59,7 @@ struct BasicHashObject
     x::AbstractRange
     y::Vector{Float64}
 end
-StableHashTraits.hash_method(::BasicHashObject) = UseFields()
+StableHashTraits.hash_method(::BasicHashObject) = UseStruct()
 struct CustomHashObject
     x::AbstractRange
     y::Vector{Float64}
@@ -69,9 +69,9 @@ struct CustomContext{P}
 end
 StableHashTraits.parent_context(x::CustomContext) = x.parent_context
 function StableHashTraits.hash_method(::CustomHashObject)
-    return UseAndReplaceContext(UseFields(), CustomContext)
+    return UseAndReplaceContext(UseStruct(), CustomContext)
 end
-StableHashTraits.hash_method(::BasicHashObject) = UseFields()
+StableHashTraits.hash_method(::BasicHashObject) = UseStruct()
 StableHashTraits.hash_method(::AbstractRange, ::CustomContext) = UseIterate()
 function StableHashTraits.hash_method(x::Any, c::CustomContext)
     return StableHashTraits.hash_method(x, c.parent_context)
@@ -94,7 +94,7 @@ StableHashTraits.parent_context(::TablesEq) = HashVersion{1}()
 function StableHashTraits.hash_method(x::T, ::TablesEq) where {T}
     if Tables.istable(T)
         if Tables.columnaccess(T)
-            return UseFields(Tables.columnnames => Tables.getcolumn)
+            return UseStruct(Tables.columnnames => Tables.getcolumn)
         else
             return Use(Tables.columns)
         end

@@ -49,7 +49,7 @@ You can customize the hash behavior for particular types by implementing the tra
     and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
     falls back to `Base.write(io, x)` if no specialized methods are defined for x.
 2. `UseIterate()`: assumes the object is iterable and finds a hash of all elements
-3. `UseFields()`: assume a struct of some type and use `fieldnames(typeof(x))` and
+3. `UseStruct()`: assume a struct of some type and use `fieldnames(typeof(x))` and
    `getfield` to compute a hash of all fields. You can further customize its behavior by
    passing the symbol `:ByOrder` (to hash properties in the order they are listed by
    `propertynames`), which is the default, or `:ByName` (sorting properties by their name
@@ -74,7 +74,7 @@ You can customize the hash behavior for particular types by implementing the tra
 9. `UseProperties()`: same as `UseField` but using `propertynames` and `getproperty` in lieu
    of `fieldnames` and `getfield`
 10. `UseTable()`: assumes the object is a `Tables.istable` and uses `Tables.columns` and
-   `Tables.columnnames` to compute a hash of each columns content and name, ala `UseFields`. 
+   `Tables.columnnames` to compute a hash of each columns content and name, ala `UseStruct`. 
 10. `nothing`: indicates that you want to use a fallback method (see below); the two
    argument version of `hash_method` should never return `nothing`.
 
@@ -89,13 +89,13 @@ are used. They are intended to avoid hash collisions as best as possible.
 
 - `Any`: 
     - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `UseQualifiedType(UseFields(:ByName))` for all other types
-- `NamedTuple`: `UseQualifiedName(UseFields())`
+    - `UseQualifiedType(UseStruct(:ByName))` for all other types
+- `NamedTuple`: `UseQualifiedName(UseStruct())`
 - `Function`: `UseHeader("Base.Function", UseQualifiedName())`
 - `AbstractString`, `Symbol`: `UseQualifiedName(UseWrite())`
 - `Tuple`, `Pair`: `UseQualifiedName(UseIterate())`
 - `AbstractArray`: `UseHeader("Base.AbstractArray", UseSize(UseIterate()))`
-- `AbstractRange`: `UseQualifiedName(UseFields())`
+- `AbstractRange`: `UseQualifiedName(UseStruct())`
 - `AbstractSet`: `UseQualifiedName(UseTransform(sort! ∘ collect))`
 - `AbstractDict`: `UseQualifiedName(UseTransform(x -> sort!(collect(pairs(x)); by=first)))`
 
@@ -170,7 +170,7 @@ struct NamedTuplesEq{T}
 end
 StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
-    return UseQualifiedName(UseFields(:ByName))
+    return UseQualifiedName(UseStruct(:ByName))
 end
 c = NamedTuplesEq(HashVersion{1}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
