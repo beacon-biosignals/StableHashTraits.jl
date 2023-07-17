@@ -102,6 +102,8 @@ However, far fewer manual defintiions of `hash_method` become necessary. The fal
 
 API Changes:
 
+**TODO**: add the changes to the `Use` options
+
 - **Breaking**: `transform` has been split into `UseTransform` and `UseAndReplaceContext`
 - **Breaking**: `stable_hash` no longer accepts mutliple objects to hash (wrap them in a
   tuple instead); it now accepts a single object to hash, and the second positional argument
