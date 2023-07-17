@@ -226,16 +226,17 @@ You should return one of the following values.
           The first element of the pair is a function used to compute a list of keys
           and the second element is a two argument function used to extract the keys 
           from the object.
-        - `order` can be :ByOrder (the default)—which sorts by the order of `fieldnames` or
-         `:ByName`—which sorts by lexigraphical order of the symbols 
-   the symbol `:ByOrder` (to hash properties in the order they are listed by
-   `propertynames`), which is the default, or `:ByName` (sorting properties by their name
-   before hashing).
+        - `order` can be :ByOrder (the default)—which sorts by the order returned by `pair[1]` or
+         `:ByName`—which sorts by lexigraphical order.
 4. `Use(fn | value, [method])`: hash the static `value` or hash the value of
    applying `fn` to the given object. To prevent an infinite loop it is an error to return
    an object of the same type as the object you're hashing. Optionally, you can pass a
    second method that is also included in the hashed value. e.g. Use("foo", UseIterate())
-   would prefix a hash of "foo" to a hash of all elements of an iterable object.
+   would prefix a hash of "foo" to a hash of all elements of an iterable object. 
+   There are two functions aviable for specific use-cases of `Use`
+        - `qualified_name`: Get the qualified name of an objects type, e.g. `Base.String`
+        - `qualified_type`: The the qualified name and type parameters of a type, 
+           e.g. `Base.Array{Int, 1}`.
 5. `nothing`: indicates that you want to use a fallback method (see below); the two argument
    version of `hash_method` should never return `nothing`.
 
