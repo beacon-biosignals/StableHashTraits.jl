@@ -346,9 +346,9 @@ hash_method(::AbstractSet, ::HashVersion{1}) = Use(qualified_name, Use(sort! ∘
 """
     TablesEq(parent_context)
 
-Create a hash context for which `Tables.columntable(x) == Tables.columntable(y)` implies
-that `stable_hash(x) == stable_hash(y)`. All other hashes as specified in the
-`parent_context` remain unchanged.
+In this hash context the order of columns, and the type of the table do not impact the hash
+that is created, only the set of columns (as determined by `Tables.columns`), and the hash
+of the individual columns matter.
 """
 struct TablesEq{T}
     parent::T
@@ -367,10 +367,9 @@ end
 """
     ViewsEq(parent_context)
 
-Create a hash context for which, if `all(x == y for x in xs, y in ys)` and `size(x) ==
-size(y)` for two arrays `xs` and `ys`, and if `x == y` and `x` and `y` are `<:
-AbstractString`, it implies that `stable_hash(x) == stable_hash(y)`, regardless of the types
-of the arrays. All other hash values, as specified in the `parent_context` remain unchanged.
+Create a hash context where only contents of an array or string determine its hash: that is,
+the type of the array or string (e.g. `SubString` vs. `String`) does not impact the hash
+value.
 """
 struct ViewsEq{T}
     parent::T
