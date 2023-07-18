@@ -1,9 +1,155 @@
 module StableHashTraits
 
-export stable_hash, UseWrite, UseIterate, UseStruct, Use, UseAndReplaceContext, HashVersion,
+export stable_hash, WriteHashTrait, IterateHashTrait, StructHashTrait, Use, HashTraitAndContext, HashVersion,
        qualified_name, qualified_type, TablesEq, ViewsEq
 using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA
+
+"""
+    HashVersion{1}()
+
+The default `hash_context` used by `stable_hash`. There is currently only one version (`1`)
+and it is the default context. By explicitly passing this context to `stable_hash` you
+ensure that hash values for these fallback methods will not change even if new fallbacks are
+defined. This is a "root" context, meaning that `parent_context(::HashVersion) = nothing`.
+"""
+struct HashVersion{V} end
+
+"""
+    stable_hash(x, context=HashVersion{1}(); alg=crc32c)
+
+Create a stable hash of the given objects. As long as the context remains the same, this is
+intended to remain unchanged across julia verisons. How each object is hashed is determined
+by [`hash_method`](@ref), which aims to have sensible fallbacks.
+
+To ensure the greattest stability, explicitly pass the context object. Even if the fallback
+methods change in a future release, the hash you get by passing an explicit `HashVersin{N}`
+should *not* change. (Note that the number in `HashVersion` may not necessarily match the
+package verison of `StableHashTraits`).
+
+To change the hash algorithm used, pass a different function to `alg`. The function should
+take one required argument (value to hash) and a second, optional argument (a hash value to
+mix). Additionally `sha1` and `sha256` are supported (from the standard library `SHA`).
+
+The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
+third argument to [`StableHashTraits.write`](@ref)
+
+"""
+function stable_hash(x, context=HashVersion{1}(); alg=sha256)
+    return digest!(stable_hash_helper(x, setup_hash(alg), context, hash_method(x, context)))
+end
+
+"""
+    hash_method(x, [context])
+
+Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
+You should return one of the following values.
+
+1. `WriteHashTrait()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
+    and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
+    falls back to `Base.write(io, x)` if no specialized methods are defined for x.
+2. `IterateHashTrait()`: assumes the object is iterable and finds a hash of all elements
+3. `StructHashTrait([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
+    the object as defined by a sequence of pairs. How precisely this occurs is determined by
+    the two arugments - `pair` Defines how fields are extracted; the default is `fieldnames
+        ∘ typeof => getfield` but this could be changed to e.g. `propertynames =>
+          getproperty` or `Tables.columnnames => Tables.getcolumn`. The first element of the
+          pair is a function used to compute a list of keys and the second element is a two
+          argument function used to extract the keys from the object. - `order` can be
+          :ByOrder (the default)—which sorts by the order returned by `pair[1]` or
+          `:ByName`—which sorts by lexigraphical order.
+4. `Use(fn | value, [method])`: hash the static `value` or hash the value of
+   applying `fn` to the given object. To prevent an infinite loop it is an error to return
+   an object of the same type as the object you're hashing. Optionally, you can pass a
+   second method that is also included in the hashed value. There are two functions avaible
+   for specific use-cases of `Use` - `qualified_name`: Get the qualified name of an objects
+        type, e.g. `Base.String` - `qualified_type`: The the qualified name and type
+        parameters of a type, e.g. `Base.Array{Int, 1}`. For example, `Use(qualified_name,
+           StructHashTrait())` would hash the structure of an object (using its fields) along with
+    a hash of the module and name of the type.
+5. `nothing`: indicates that you want to use a fallback method (see below); the two argument
+   version of `hash_method` should never return `nothing`.
+
+Your hash will be stable if the output for the given method remains the same: e.g. if
+`write` is the same for an object that uses `WriteHashTrait`, its hash will be the same; if the
+fields are the same for `StructHashTrait`, the hash will be the same; etc...
+
+## Implemented methods of `hash_method`
+
+In the absence of a specific `hash_method` for your type, the following fallbacks are used.
+They are intended to avoid hash collisions as best as possible.
+
+- `Any`: 
+    - `WriteHashTrait()` for any object `x` where `isprimitivetype(typeof(x))` is true
+    - `Use(qualified_type, StructHashTrait(:ByName))` for all other types
+- `NamedTuple`: `Use(qualified_name, StructHashTrait())`
+- `Function`: `Use("Base.Function", Use(qualified_name))`
+- `AbstractString`: `Use(qualified_name, WriteHashTrait())`
+- `Symbol`: `Use(":", WriteHashTrait())`
+- `String`: `WriteHashTrait()` (note: removing the `Use(qualified_name` prevents an infinite loop)
+- `Tuple`, `Pair`: `Use(qualified_name, IterateHashTrait())`
+- `Type`: `UseQualifiedType`
+- `AbstractArray`: `Use(qualified_name, Use(size, IterateHashTrait()))`
+- `AbstractRange`: `Use(qualified_name, StructHashTrait(:ByName))`
+- `AbstractSet`: `Use(qualified_name, Use(sort! ∘ collect))`
+- `AbstractDict`: `Use(qualified_name, Use(keys => getindex, :ByName))`
+
+There are two built-in contexts that can be used to modify these default fallbacks:
+[`TablesEq`](@ref) and [`ViewsEq`](@ref). `TablesEq` makes any table with equivalent content
+have the same hash, and `ViewsEq` makes any array or string with the same sequence of values
+and the same size have an equal hash. You can pass one or more of these as the second
+argument to `stable_hash`, e.g. `stable_hash(x, ViewsEq())` or `stable_hash(x,
+ViewsEq(TablesEq()))`.
+
+## Customizing hash computations with contexts
+
+You can customize how hashes are computed within a given scope using a context object. This
+is also a very useful way to avoid type piracy. The context can be any object you'd like and
+is passed as the second argument to `stable_hash`. By default it is equal to
+`HashVersion{1}()` and this is the context for which the default fallbacks listed above are
+defined.
+
+This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
+is the method called for `WriteHashTrait`, and which falls back to `Base.write`). Because of the
+way the default context (`HashVersion{1}`) is defined, you normally don't have to include
+this context as an argument when you define a method of `hash_context` or `write` because
+there are appropriate fallback methods.
+
+When you define a hash context it should normally accept a parent context that serves as a
+fallback, and return it in an implementation of the method
+`StableHashTratis.parent_context`. For example, here is how we could write a context that
+treats all named tuples with the same keys as equivalent. 
+
+```julia
+struct NamedTuplesEq{T}
+    parent::T
+end
+StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
+function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
+    return Use(qualified_name, StructHashTrait(:ByName))
+end
+c = NamedTuplesEq(HashVersion{1}())
+stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
+```
+
+If we did not define a method of `parent_context`, our context would need to implement a
+`hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and `Pair` for the
+call to `stable_hash` above to succeede.
+
+### Customizing hashes within an object
+
+Contexts can be changed not only when you call `stable_hash` but also when you hash the
+contents of a particular object. This lets you change how hashing occurs within the object.
+See the docstring of [`HashTraitAndContext`](@ref) for details. 
+"""
+hash_method(x, context) = hash_method(x, parent_context(context))
+hash_method(x, ::Nothing) = hash_method(x)
+hash_method(::Any) = nothing
+
+function stable_hash_helper(x, hash_state, context, method::Nothing)
+    throw(ArgumentError("There is no appropriate `hash_method` defined for objects"*
+                        " of type $(typeof(x))."))
+end
 
 #####
 ##### Hash Function API 
@@ -33,18 +179,20 @@ update!(sha::SHA.SHA_CTX, bytes) = SHA.update!(sha, bytes)
 digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 
 #####
-##### Hash Methods 
+##### Hash Traits
 #####
 
 # deprecations
-@deprecate UseProperties(order=:ByOrder) UseStruct(propertynames => getproperty, order)
-@deprecate UseQualifiedName(method=nothing) Use(qualified_name, method)
-@deprecate UseSize(method=nothing) Use(size, method)
-@deprecate UseTable() Use(Tables.columntable)
+@deprecate UseWrite() WriteHashTrait()
+@deprecate UseIterate() IterateHashTrait()
+@deprecate UseProperties(order=:ByOrder) StructHashTrait(propertynames => getproperty, order)
+@deprecate UseQualifiedName(method=nothing) FnHashTrait(qualified_name, method)
+@deprecate UseSize(method=nothing) FnHashTrait(size, method)
+@deprecate UseTable() FnHashTrait(Tables.columntable => StructHashTrait)
 
 # These are the various methods to compute a hash from an object
 
-struct UseWrite end
+struct WriteHashTrait end
 """
     StableHashTraits.write(io, x, [context])
 
@@ -61,54 +209,54 @@ See also: [`StableHashTraits.hash_method`](@ref).
 """
 write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
-function stable_hash_helper(x, hash, context, ::UseWrite)
+function stable_hash_helper(x, hash_state, context, ::WriteHashTrait)
     io = IOBuffer()
     write(io, x, context)
-    update!(hash, take!(io))
-    return hash
+    update!(hash_state, take!(io))
+    return hash_state
 end
 
-function recursive_hash!(hash, result)
-    interior_hash = digest!(result)
+function recursive_hash!(hash_state, nested_hash_state)
+    nested_hash = digest!(nested_hash_state)
     # digest will return nothing if no objects have been added to the hash when using
     # GenericFunHash; in this case, don't update the hash at all
-    if !isnothing(interior_hash)
-        update!(hash, copy(reinterpret(UInt8, vcat(interior_hash))))
+    if !isnothing(nested_hash)
+        update!(hash_state, copy(reinterpret(UInt8, vcat(nested_hash))))
     end
     return hash
 end
 
-struct UseIterate end
-function stable_hash_helper(x, hash, context, ::UseIterate)
-    return hash_foreach(identity, hash, context, x)
+struct IterateHashTrait end
+function stable_hash_helper(x, hash_state, context, ::IterateHashTrait)
+    return hash_foreach(identity, hash_state, context, x)
 end
-function hash_foreach(fn, hash, context, args...)
-    update!(hash, UInt8[])
+function hash_foreach(fn, hash_state, context, args...)
+    update!(hash_state, UInt8[])
     foreach(args...) do as...
         el = fn(as...)
-        val = stable_hash_helper(el, similar_hasher(hash), context,
+        val = stable_hash_helper(el, similar_hasher(hash_state), context,
                                  hash_method(el, context))
-        return recursive_hash!(hash, val)
+        return recursive_hash!(hash_state, val)
     end
-    return hash
+    return hash_state
 end
 
-struct UseStruct{P,S}
+struct StructHashTrait{P,S}
     fnpair::P
 end
-UseStruct(x::Symbol) = UseStruct((fieldnames ∘ typeof) => getfield, x)
-function UseStruct(fnpair::Pair=(fieldnames ∘ typeof) => getfield, by::Symbol=:ByOrder)
+StructHashTrait(x::Symbol) = StructHashTrait((fieldnames ∘ typeof) => getfield, x)
+function StructHashTrait(fnpair::Pair=(fieldnames ∘ typeof) => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
-    return UseStruct{typeof(fnpair),by}(fnpair)
+    return StructHashTrait{typeof(fnpair),by}(fnpair)
 end
-orderfields(::UseStruct{<:Any,:ByOrder}, props) = props
-orderfields(::UseStruct{<:Any,:ByName}, props) = sort_(props)
+orderfields(::StructHashTrait{<:Any,:ByOrder}, props) = props
+orderfields(::StructHashTrait{<:Any,:ByName}, props) = sort_(props)
 sort_(x::Tuple) = TupleTools.sort(x; by=string)
 sort_(x::AbstractSet) = sort!(collect(x))
 sort_(x) = sort(x)
-function stable_hash_helper(x, hash, context, use::UseStruct)
+function stable_hash_helper(x, hash_state, context, use::StructHashTrait)
     fieldsfn, getfieldfn = use.fnpair
-    return hash_foreach(hash, context, orderfields(use, fieldsfn(x))) do k
+    return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
         return k => getfieldfn(x, k)
     end
 end
@@ -136,31 +284,53 @@ function validate_name(str)
     return str
 end
 
-struct Use{F,T}
-    use::F
+struct FnHashTrait{F,T}
+    fn::F # either a `function` or a `function => hash_method`
+    then::H # if non-nothing, apply a second method
+end
+FnHashTrait(fn) = FnHashTrait{typeof(fn),Nothing}(fn, nothing)
+function get_value_(x, context, method::FnHashTrait{<:Base.Callable}) 
+    y = method.fn(x)
+    if typeof(y) == typeof(x)
+        throw(ArgumentError("The first argument to `FnHashTrait` yields an object of the " *
+                            "same type with the same `hash_method` as the original object "*
+                            "to be hashed; allowing this would almost certianly cause a"*
+                            " `StackOverflowError`"))
+    end
+    return y, hash_method(y, context)
+end
+function get_value_(x, _, method::FnHashTrait{<:Pair}) 
+    fn, new_method = method.fn
+    fn(x), new_method
+end
+
+struct ConstantHashTrait{T,H}
+    constant::T
     then::T
 end
-Use(fn) = Use{typeof(fn),Nothing}(fn, nothing)
-apply_use(x, method::Use{<:Base.Callable}) = method.use(x)
-apply_use(_, method) = method.use
-function stable_hash_helper(x, hash, context, method)
-    y = apply_use(x, method)
-    if typeof(y) == typeof(x)
-        throw(ArgumentError("The first argument to `Use` yields an object of the " *
-                            "same type as the original object to be hashed; allowing this " *
-                            "would almost certianly cause a StackOverflowError"))
+ConstantHashTrait(val) = ConstantHashTrait{typeof(val), Nothing}(val, nothing)
+function get_value_(x, context, method::ConstantHashTrait)
+    new_method = hash_method(method.constant , context)
+    if new_method != method # avoid infinite loops!
+        return method.constant, new_method
+    else
+        return x, method.then
     end
-    h = stable_hash_helper(y, hash, context, hash_method(y, context))
+end
+
+function stable_hash_helper(x, hash_state, context, method::Union{FnHashTrait, ConstantHashTrait})
+    y, new_method = get_value_(x, context, method)
+    h = stable_hash_helper(y, hash_state, context, new_method)
 
     isnothing(method.then) && return h
 
-    then_h = stable_hash_helper(x, similar_hasher(hash), context, method.then)
-    return recursive_hash!(hash, then_h)
+    then_h = stable_hash_helper(x, similar_hasher(hash_state), context, method.then)
+    return recursive_hash!(hash_state, then_h)
 end
 
 """
 
-    UseAndReplaceContext(method, old_context -> new_context)
+    HashTraitAndContext(method, old_context -> new_context)
 
 A special hash method that changes the context when hashing the contents of an object. The
 `method` defines how the object itself should be hashed and the second argument is a
@@ -178,20 +348,20 @@ callable which transforms the old context to the new.
         end
         StableHashTraits.parent_context(x::MyContext) = x.parent_context
 
-        StableHashTraits.hash_method(::MyContainedType, ::MyContext) = UseWrite()
-        StableHashTraits.hash_method(::MyContainerType) = UseAndReplaceContext(UseIterate(), MyContext)
+        StableHashTraits.hash_method(::MyContainedType, ::MyContext) = WriteHashTrait()
+        StableHashTraits.hash_method(::MyContainerType) = HashTraitAndContext(IterateHashTrait(), MyContext)
     ```
 """
-struct UseAndReplaceContext{F,M}
+struct HashTraitAndContext{F,M}
     parent::M
     contextfn::F
 end
-function stable_hash_helper(x, hash, context, method::UseAndReplaceContext)
-    return stable_hash_helper(x, hash, method.contextfn(context), method.parent)
+function stable_hash_helper(x, hash_state, context, method::HashTraitAndContext)
+    return stable_hash_helper(x, hash_state, method.contextfn(context), method.parent)
 end
 
 #####
-##### Hash method trait 
+##### Contexts
 #####
 
 """
@@ -212,140 +382,31 @@ function parent_context(x::Any)
     return HashVersion{1}()
 end
 
-# The way you indicate which method a given object used to compute a hash.
-
-"""
-    hash_method(x, [context])
-
-Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
-You should return one of the following values.
-
-1. `UseWrite()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
-    and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
-    falls back to `Base.write(io, x)` if no specialized methods are defined for x.
-2. `UseIterate()`: assumes the object is iterable and finds a hash of all elements
-3. `UseStruct([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
-    the object as defined by a sequence of pairs. How precisely this occurs is determined by
-    the two arugments - `pair` Defines how fields are extracted; the default is `fieldnames
-        ∘ typeof => getfield` but this could be changed to e.g. `propertynames =>
-          getproperty` or `Tables.columnnames => Tables.getcolumn`. The first element of the
-          pair is a function used to compute a list of keys and the second element is a two
-          argument function used to extract the keys from the object. - `order` can be
-          :ByOrder (the default)—which sorts by the order returned by `pair[1]` or
-          `:ByName`—which sorts by lexigraphical order.
-4. `Use(fn | value, [method])`: hash the static `value` or hash the value of
-   applying `fn` to the given object. To prevent an infinite loop it is an error to return
-   an object of the same type as the object you're hashing. Optionally, you can pass a
-   second method that is also included in the hashed value. There are two functions avaible
-   for specific use-cases of `Use` - `qualified_name`: Get the qualified name of an objects
-        type, e.g. `Base.String` - `qualified_type`: The the qualified name and type
-        parameters of a type, e.g. `Base.Array{Int, 1}`. For example, `Use(qualified_name,
-           UseStruct())` would hash the structure of an object (using its fields) along with
-    a hash of the module and name of the type.
-5. `nothing`: indicates that you want to use a fallback method (see below); the two argument
-   version of `hash_method` should never return `nothing`.
-
-Your hash will be stable if the output for the given method remains the same: e.g. if
-`write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
-fields are the same for `UseStruct`, the hash will be the same; etc...
-
-## Implemented methods of `hash_method`
-
-In the absence of a specific `hash_method` for your type, the following fallbacks are used.
-They are intended to avoid hash collisions as best as possible.
-
-- `Any`: 
-    - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `Use(qualified_type, UseStruct(:ByName))` for all other types
-- `NamedTuple`: `Use(qualified_name, UseStruct())`
-- `Function`: `Use("Base.Function", Use(qualified_name))`
-- `AbstractString`: `Use(qualified_name, UseWrite())`
-- `Symbol`: `Use(":", UseWrite())`
-- `String`: `UseWrite()` (note: removing the `Use(qualified_name` prevents an infinite loop)
-- `Tuple`, `Pair`: `Use(qualified_name, UseIterate())`
-- `Type`: `UseQualifiedType`
-- `AbstractArray`: `Use("Base.AbstractArray", UseSize(UseIterate()))`
-- `AbstractRange`: `Use(qualified_name, UseStruct())`
-- `AbstractSet`: `Use(qualified_name, UseTransform(sort! ∘ collect))`
-- `AbstractDict`: `Use(qualified_name, UseStruct(keys => getindex, :ByName))`
-
-There are two built-in contexts that can be used to modify these default fallbacks:
-[`TablesEq`](@ref) and [`ViewsEq`](@ref). `TablesEq` makes any table with equivalent content
-have the same hash, and `ViewsEq` makes any array or string with the same sequence of values
-and the same size have an equal hash. You can pass one or more of these as the second
-argument to `stable_hash`, e.g. `stable_hash(x, ViewsEq())` or `stable_hash(x,
-ViewsEq(TablesEq()))`.
-
-## Customizing hash computations with contexts
-
-You can customize how hashes are computed within a given scope using a context object. This
-is also a very useful way to avoid type piracy. The context can be any object you'd like and
-is passed as the second argument to `stable_hash`. By default it is equal to
-`HashVersion{1}()` and this is the context for which the default fallbacks listed above are
-defined.
-
-This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
-is the method called for `UseWrite`, and which falls back to `Base.write`). Because of the
-way the default context (`HashVersion{1}`) is defined, you normally don't have to include
-this context as an argument when you define a method of `hash_context` or `write` because
-there are appropriate fallback methods.
-
-When you define a hash context it should normally accept a parent context that serves as a
-fallback, and return it in an implementation of the method
-`StableHashTratis.parent_context`. For example, here is how we could write a context that
-treats all named tuples with the same keys as equivalent. 
-
-```julia
-struct NamedTuplesEq{T}
-    parent::T
-end
-StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
-function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
-    return Use(qualified_name, UseStruct(:ByName))
-end
-c = NamedTuplesEq(HashVersion{1}())
-stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
-```
-
-If we did not define a method of `parent_context`, our context would need to implement a
-`hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and `Pair` for the
-call to `stable_hash` above to succeede.
-
-### Customizing hashes within an object
-
-Contexts can be changed not only when you call `stable_hash` but also when you hash the
-contents of a particular object. This lets you change how hashing occurs within the object.
-See the docstring of [`UseAndReplaceContext`](@ref) for details. 
-"""
-hash_method(x, context) = hash_method(x, parent_context(context))
-hash_method(x, ::Nothing) = hash_method(x)
-hash_method(::Any) = nothing
-
-struct HashVersion{V} end
 function hash_method(x::T, c::HashVersion{1}) where {T}
-    default_method = hash_method(x)
+    # we need to comupte `default_method` here because `hash_method(x::MyType, ::Any)` is
+    # less specific than the current method
+    default_method = hash_method(x, parent_context(c))
     isnothing(default_method) || return default_method
     Base.isprimitivetype(T) && return UseWrite()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
-    return Use(qualified_type, UseStruct(:ByName))
+    return FnHashTrait(qualified_type, StructHashTrait(:ByName))
 end
-hash_method(::NamedTuple, ::HashVersion{1}) = Use(qualified_name, UseStruct())
-hash_method(::AbstractRange, ::HashVersion{1}) = Use(qualified_name, UseStruct(:ByName))
+hash_method(::NamedTuple, ::HashVersion{1}) = FnHashTrait(qualified_name, StructHashTrait())
+hash_method(::AbstractRange, ::HashVersion{1}) = FnHashTrait(qualified_name, StructHashTrait(:ByName))
 function hash_method(::AbstractArray, ::HashVersion{1})
-    return Use(qualified_name, Use(size, UseIterate()))
+    return FnHashTrait(qualified_name, FnHashTrait(size, IterateHashTrait()))
 end
-hash_method(::AbstractString, ::HashVersion{1}) = Use(qualified_name, UseWrite())
-hash_method(::String, ::HashVersion{1}) = UseWrite()
-hash_method(::Symbol, ::HashVersion{1}) = Use(":", UseWrite())
+hash_method(::AbstractString, ::HashVersion{1}) = FnHashTrait(qualified_name => WriteHashTrait(), WriteHashTrait())
+hash_method(::Symbol, ::HashVersion{1}) = ConstantHashTrait(":", WriteHashTrait())
 function hash_method(::AbstractDict, ::HashVersion{1})
-    return Use(qualified_name, UseStruct(keys => getindex, :ByName))
+    return FnHashTrait(qualified_name, StructHashTrait(keys => getindex, :ByName))
 end
-hash_method(::Tuple, ::HashVersion{1}) = Use(qualified_name, UseIterate())
-hash_method(::Pair, ::HashVersion{1}) = Use(qualified_name, UseIterate())
-hash_method(::Type, ::HashVersion{1}) = Use(qualified_name)
-hash_method(::Function, ::HashVersion{1}) = Use("Base.Function", Use(qualified_name))
-hash_method(::AbstractSet, ::HashVersion{1}) = Use(qualified_name, Use(sort! ∘ collect))
+hash_method(::Tuple, ::HashVersion{1}) = FnHashTrait(qualified_name, IterateHashTrait())
+hash_method(::Pair, ::HashVersion{1}) = FnHashTrait(qualified_name, IterateHashTrait())
+hash_method(::Type, ::HashVersion{1}) = FnHashTrait(qualified_name)
+hash_method(::Function, ::HashVersion{1}) = ConstantHashTrait("Base.Function", FnHashTrait(qualified_name))
+hash_method(::AbstractSet, ::HashVersion{1}) = FnHashTrait(qualified_name, FnHashTrait(sort! ∘ collect))
 
 """
     TablesEq(parent_context)
@@ -363,8 +424,7 @@ function is_columntable(::Type{T}) where {T}
     return T <: NamedTuple && all(f -> f <: AbstractVector, fieldtypes(T))
 end
 function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
-    is_columntable(T) && return Use("Tables.AbstractColumns", UseStruct(:ByName))
-    Tables.istable(T) && return Use(Tables.columntable)
+    Tables.istable(T) && return FnHashTrait(Tables.columntable => StructHashTrait(:ByName))
     return StableHashTraits.hash_method(x, parent_context(m))
 end
 
@@ -381,45 +441,12 @@ end
 ViewsEq() = ViewsEq(HashVersion{1}())
 StableHashTraits.parent_context(x::ViewsEq) = x.parent
 function StableHashTraits.hash_method(::AbstractArray, ::ViewsEq)
-    return Use("Base.AbstractArray", Use(size, UseIterate()))
+    return ConstantHashTrait("Base.AbstractArray", FnHashTrait(size, IterateHashTrait()))
 end
-StableHashTraits.hash_method(::AbstractString, ::ViewsEq) = UseWrite()
-StableHashTraits.hash_method(::String, ::ViewsEq) = UseWrite()
+function StableHashTraits.hash_method(::AbstractString, ::ViewsEq)
+    return ConstantHashTrait("Base.AbstractString", WriteHashTrait())
+end
 
-"""
-    HashVersion{1}()
-
-The default `hash_context` used by `stable_hash`. There is currently only one version (`1`)
-and it is the default context. By explicitly passing this context to `stable_hash` you
-ensure that hash values for these fallback methods will not change even if new fallbacks are
-defined. This is a "root" context, meaning that `parent_context(::HashVersion) = nothing`. If
-no method is defined for a type in this context, it will fallback to the single-argument
-version of `hash_context`.
-"""
 parent_context(::HashVersion) = nothing
-
-"""
-    stable_hash(x, context=HashVersion{1}(); alg=crc32c)
-
-Create a stable hash of the given objects. As long as the context remains the same, this is
-intended to remain unchanged across julia verisons. How each object is hashed is determined
-by [`hash_method`](@ref), which aims to have sensible fallbacks.
-
-To ensure the greattest stability, explicitly pass the context object. Even if the fallback
-methods change in a future release, the hash you get by passing an explicit `HashVersin{N}`
-should *not* change. (Note that the number in `HashVersion` may not necessarily match the
-package verison of `StableHashTraits`).
-
-To change the hash algorithm used, pass a different function to `alg`. The function should
-take one required argument (value to hash) and a second, optional argument (a hash value to
-mix). Additionally `sha1` and `sha256` are supported (from the standard library `SHA`).
-
-The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
-third argument to [`StableHashTraits.write`](@ref)
-
-"""
-function stable_hash(x, context=HashVersion{1}(); alg=crc32c)
-    return digest!(stable_hash_helper(x, setup_hash(alg), context, hash_method(x, context)))
-end
 
 end

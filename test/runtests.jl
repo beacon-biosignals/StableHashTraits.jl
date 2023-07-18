@@ -106,6 +106,7 @@ include("setup_tests.jl")
     @test stable_hash(sin) != stable_hash(:sin)
     @test stable_hash(sin) != stable_hash("sin")
     @test stable_hash(sin) != stable_hash("Base.sin")
+    @test stable_hash(Int) != stable_hash("Base.Int")
     @test_throws ArgumentError stable_hash(x -> x + 1)
 
     @test stable_hash(ExtraTypeParams{:A,Int}(2)) != stable_hash(ExtraTypeParams{:B,Int}(2))
