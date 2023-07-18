@@ -359,10 +359,8 @@ function is_columntable(::Type{T}) where {T}
     return T <: NamedTuple && all(f -> f <: AbstractVector, fieldtypes(T))
 end
 function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
-    if Tables.istable(T)
-        is_columntable(T) && return Use("Tables.AbstractColumns", UseStruct(:ByName))
-        return Use(Tables.columntable)
-    end
+    is_columntable(T) && return Use("Tables.AbstractColumns", UseStruct(:ByName))
+    Tables.istable(T) && return Use(Tables.columntable)
     return StableHashTraits.hash_method(x, parent_context(m))
 end
 

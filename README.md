@@ -100,14 +100,14 @@ are used. They are intended to avoid hash collisions as best as possible.
 There are two built-in contexts that can be used to modify these default fallbacks:
 `TablesEq` and `ViewsEq`. `TablesEq` makes any table with equivalent content have the same
 hash, and `ViewsEq` makes any array or string with the same sequence of values and the same
-size have an equal hash. You can pass one or more of these as the second argument to table hash, e.g. `stable_hash(x, ViewsEq())` or `stable_hash(x, ViewsEq(TablesEq()))`.
+size have an equal hash. You can pass one or more of these as the second argument to `stable_hash`, e.g. `stable_hash(x, ViewsEq())` or `stable_hash(x, ViewsEq(TablesEq()))`.
 
 ## Breaking changes
 
 ### In 1.0:
 
 This is a very breaking release, almost all values hash differently and the API has changed.
-However, far fewer manual defintiions of `hash_method` become necessary. The fallback for
+However, far fewer manual defintions of `hash_method` become necessary. The fallback for
 `Any` should handle many more cases. 
 
 - **Breaking**: `transform` has been removed, its features are covered by `Use` and
