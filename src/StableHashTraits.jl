@@ -1,9 +1,9 @@
 module StableHashTraits
 
-export stable_hash, WriteHashTrait, IterateHashTrait, StructHashTrait, Use, HashTraitAndContext, HashVersion,
+export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash, HashAndContext, HashVersion,
        qualified_name, qualified_type, TablesEq, ViewsEq
 using CRC32c, TupleTools, Compat, Tables
-using SHA: SHA
+using SHA: SHA, sha256
 
 """
     HashVersion{1}()
@@ -45,11 +45,11 @@ end
 Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
 You should return one of the following values.
 
-1. `WriteHashTrait()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
-    and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
-    falls back to `Base.write(io, x)` if no specialized methods are defined for x.
-2. `IterateHashTrait()`: assumes the object is iterable and finds a hash of all elements
-3. `StructHashTrait([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
+1. `WriteHash()`: writes the object to a binary format using `StableHashTraits.write(io, x)` and
+    takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)` falls
+    back to `Base.write(io, x)` if no specialized methods are defined for x.
+2. `IterateHash()`: assumes the object is iterable and finds a hash of all elements
+3. `StructHash([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
     the object as defined by a sequence of pairs. How precisely this occurs is determined by
     the two arugments - `pair` Defines how fields are extracted; the default is `fieldnames
         ∘ typeof => getfield` but this could be changed to e.g. `propertynames =>
@@ -58,21 +58,36 @@ You should return one of the following values.
           argument function used to extract the keys from the object. - `order` can be
           :ByOrder (the default)—which sorts by the order returned by `pair[1]` or
           `:ByName`—which sorts by lexigraphical order.
-4. `Use(fn | value, [method])`: hash the static `value` or hash the value of
-   applying `fn` to the given object. To prevent an infinite loop it is an error to return
-   an object of the same type as the object you're hashing. Optionally, you can pass a
-   second method that is also included in the hashed value. There are two functions avaible
-   for specific use-cases of `Use` - `qualified_name`: Get the qualified name of an objects
-        type, e.g. `Base.String` - `qualified_type`: The the qualified name and type
-        parameters of a type, e.g. `Base.Array{Int, 1}`. For example, `Use(qualified_name,
-           StructHashTrait())` would hash the structure of an object (using its fields) along with
-    a hash of the module and name of the type.
-5. `nothing`: indicates that you want to use a fallback method (see below); the two argument
-   version of `hash_method` should never return `nothing`.
+4. `FnHash(fn, [method])`: hash the result of applying `fn` to the given object. Optionally,
+   use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result.
+   There are two built-in functions of using when using `FnHash`
+    - `qualified_name`: Get the qualified name of an objects type, e.g. `Base.String`
+    - `qualified_type`: The the qualified name and type parameters of a type, e.g.
+       `Base.Array{Int, 1}`. For example, `Use(qualified_name, StructHash())` would hash the
+       structure of an object (using its fields) along with a hash of the module and name of
+          the type.
+5. `ConstantHash(value, [method])`: hash the constant `value`. Optionally, use `method` to
+    hash the `value`.
+5. `Tuple`: apply multiple methods to hash the object, and then recursively hash
+    their results. You can use an empty tuple to indicate that no appropriate method
+    exists for your type; this is roughly equivalent to not implementing the method,
+    but this may be useful in some cases to avoid method ambiguities, and is used
+    internall to approriately handle hash contexts.
+
+!!! note Avoiding infinite recursion with `FnHash` and `ConstantHash`
+
+A naive application of `ConstantHash` or `FnHash` could easilly cause a `StackOverflowError`
+(e.g. if `value` is of the same type that the `hash_method` is defined for). However, the
+application of these methods tries to avoid this situation. During `hash_method` resolution,
+if applying either trait yields an object of the same type as `hash_method`'s input, and
+`method` is given, the object is hashed using `method`. If `method` is not given, the
+`parent_context` is used to determine the hash_method applied to the object. Finally, if no
+such parent exists then an `ArgumentError` is thrown, warning about the danger of a
+`StackOverflowError`. 
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
-`write` is the same for an object that uses `WriteHashTrait`, its hash will be the same; if the
-fields are the same for `StructHashTrait`, the hash will be the same; etc...
+`write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
+fields are the same for `StructHash`, the hash will be the same; etc...
 
 ## Implemented methods of `hash_method`
 
@@ -80,17 +95,18 @@ In the absence of a specific `hash_method` for your type, the following fallback
 They are intended to avoid hash collisions as best as possible.
 
 - `Any`: 
-    - `WriteHashTrait()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `Use(qualified_type, StructHashTrait(:ByName))` for all other types
-- `NamedTuple`: `Use(qualified_name, StructHashTrait())`
+    - `WriteHash()` for any object `x` where `isprimitivetype(typeof(x))` is true
+    - `Use(qualified_type, StructHash(:ByName))` for all other types
+- `NamedTuple`: `Use(qualified_name, StructHash())`
 - `Function`: `Use("Base.Function", Use(qualified_name))`
-- `AbstractString`: `Use(qualified_name, WriteHashTrait())`
-- `Symbol`: `Use(":", WriteHashTrait())`
-- `String`: `WriteHashTrait()` (note: removing the `Use(qualified_name` prevents an infinite loop)
-- `Tuple`, `Pair`: `Use(qualified_name, IterateHashTrait())`
+- `AbstractString`: `Use(qualified_name, WriteHash())`
+- `Symbol`: `Use(":", WriteHash())`
+- `String`: `WriteHash()` (note: removing the `Use(qualified_name` prevents an infinite
+  loop)
+- `Tuple`, `Pair`: `Use(qualified_name, IterateHash())`
 - `Type`: `UseQualifiedType`
-- `AbstractArray`: `Use(qualified_name, Use(size, IterateHashTrait()))`
-- `AbstractRange`: `Use(qualified_name, StructHashTrait(:ByName))`
+- `AbstractArray`: `Use(qualified_name, Use(size, IterateHash()))`
+- `AbstractRange`: `Use(qualified_name, StructHash(:ByName))`
 - `AbstractSet`: `Use(qualified_name, Use(sort! ∘ collect))`
 - `AbstractDict`: `Use(qualified_name, Use(keys => getindex, :ByName))`
 
@@ -109,11 +125,11 @@ is passed as the second argument to `stable_hash`. By default it is equal to
 `HashVersion{1}()` and this is the context for which the default fallbacks listed above are
 defined.
 
-This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
-is the method called for `WriteHashTrait`, and which falls back to `Base.write`). Because of the
-way the default context (`HashVersion{1}`) is defined, you normally don't have to include
-this context as an argument when you define a method of `hash_context` or `write` because
-there are appropriate fallback methods.
+This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter is the
+method called for `WriteHash`, and which falls back to `Base.write`). Because of the way the
+default context (`HashVersion{1}`) is defined, you normally don't have to include this
+context as an argument when you define a method of `hash_context` or `write` because there
+are appropriate fallback methods.
 
 When you define a hash context it should normally accept a parent context that serves as a
 fallback, and return it in an implementation of the method
@@ -126,7 +142,7 @@ struct NamedTuplesEq{T}
 end
 StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
-    return Use(qualified_name, StructHashTrait(:ByName))
+    return Use(qualified_name, StructHash(:ByName))
 end
 c = NamedTuplesEq(HashVersion{1}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
@@ -140,15 +156,14 @@ call to `stable_hash` above to succeede.
 
 Contexts can be changed not only when you call `stable_hash` but also when you hash the
 contents of a particular object. This lets you change how hashing occurs within the object.
-See the docstring of [`HashTraitAndContext`](@ref) for details. 
+See the docstring of [`HashAndContext`](@ref) for details. 
 """
 hash_method(x, context) = hash_method(x, parent_context(context))
-hash_method(x, ::Nothing) = hash_method(x)
-hash_method(::Any) = nothing
+hash_method(_, ::Nothing) = nothing # signals that no method is available
 
-function stable_hash_helper(x, hash_state, context, method::Nothing)
+function stable_hash_helper(x, hash_state, context, method::Tuple{})
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects"*
-                        " of type $(typeof(x))."))
+                        " of type $(typeof(x)) in context of type `$(typeof(context))`."))
 end
 
 #####
@@ -183,16 +198,16 @@ digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 #####
 
 # deprecations
-@deprecate UseWrite() WriteHashTrait()
-@deprecate UseIterate() IterateHashTrait()
-@deprecate UseProperties(order=:ByOrder) StructHashTrait(propertynames => getproperty, order)
-@deprecate UseQualifiedName(method=nothing) FnHashTrait(qualified_name, method)
-@deprecate UseSize(method=nothing) FnHashTrait(size, method)
-@deprecate UseTable() FnHashTrait(Tables.columntable => StructHashTrait)
+@deprecate UseWrite() WriteHash()
+@deprecate UseIterate() IterateHash()
+@deprecate UseProperties(order=:ByOrder) StructHash(propertynames => getproperty, order)
+@deprecate UseQualifiedName(method=nothing) (FnHash(qualified_name), method)
+@deprecate UseSize(method=nothing) (FnHash(size), method)
+@deprecate UseTable() FnHash(Tables.columntable, StructHash)
 
 # These are the various methods to compute a hash from an object
 
-struct WriteHashTrait end
+struct WriteHash end
 """
     StableHashTraits.write(io, x, [context])
 
@@ -209,7 +224,7 @@ See also: [`StableHashTraits.hash_method`](@ref).
 """
 write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
-function stable_hash_helper(x, hash_state, context, ::WriteHashTrait)
+function stable_hash_helper(x, hash_state, context, ::WriteHash)
     io = IOBuffer()
     write(io, x, context)
     update!(hash_state, take!(io))
@@ -226,8 +241,8 @@ function recursive_hash!(hash_state, nested_hash_state)
     return hash
 end
 
-struct IterateHashTrait end
-function stable_hash_helper(x, hash_state, context, ::IterateHashTrait)
+struct IterateHash end
+function stable_hash_helper(x, hash_state, context, ::IterateHash)
     return hash_foreach(identity, hash_state, context, x)
 end
 function hash_foreach(fn, hash_state, context, args...)
@@ -241,20 +256,20 @@ function hash_foreach(fn, hash_state, context, args...)
     return hash_state
 end
 
-struct StructHashTrait{P,S}
+struct StructHash{P,S}
     fnpair::P
 end
-StructHashTrait(x::Symbol) = StructHashTrait((fieldnames ∘ typeof) => getfield, x)
-function StructHashTrait(fnpair::Pair=(fieldnames ∘ typeof) => getfield, by::Symbol=:ByOrder)
+StructHash(x::Symbol) = StructHash((fieldnames ∘ typeof) => getfield, x)
+function StructHash(fnpair::Pair=(fieldnames ∘ typeof) => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
-    return StructHashTrait{typeof(fnpair),by}(fnpair)
+    return StructHash{typeof(fnpair),by}(fnpair)
 end
-orderfields(::StructHashTrait{<:Any,:ByOrder}, props) = props
-orderfields(::StructHashTrait{<:Any,:ByName}, props) = sort_(props)
+orderfields(::StructHash{<:Any,:ByOrder}, props) = props
+orderfields(::StructHash{<:Any,:ByName}, props) = sort_(props)
 sort_(x::Tuple) = TupleTools.sort(x; by=string)
 sort_(x::AbstractSet) = sort!(collect(x))
 sort_(x) = sort(x)
-function stable_hash_helper(x, hash_state, context, use::StructHashTrait)
+function stable_hash_helper(x, hash_state, context, use::StructHash)
     fieldsfn, getfieldfn = use.fnpair
     return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
         return k => getfieldfn(x, k)
@@ -284,53 +299,44 @@ function validate_name(str)
     return str
 end
 
-struct FnHashTrait{F,T}
-    fn::F # either a `function` or a `function => hash_method`
-    then::H # if non-nothing, apply a second method
+struct FnHash{F,H}
+    fn::F
+    result_method::H # if non-nothing, apply to result of `fn`
 end
-FnHashTrait(fn) = FnHashTrait{typeof(fn),Nothing}(fn, nothing)
-function get_value_(x, context, method::FnHashTrait{<:Base.Callable}) 
-    y = method.fn(x)
-    if typeof(y) == typeof(x)
-        throw(ArgumentError("The first argument to `FnHashTrait` yields an object of the " *
-                            "same type with the same `hash_method` as the original object "*
-                            "to be hashed; allowing this would almost certianly cause a"*
-                            " `StackOverflowError`"))
-    end
-    return y, hash_method(y, context)
-end
-function get_value_(x, _, method::FnHashTrait{<:Pair}) 
-    fn, new_method = method.fn
-    fn(x), new_method
-end
+FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
+get_value_(x, method::FnHash{<:Base.Callable}) = method.fn(x)
 
-struct ConstantHashTrait{T,H}
+struct ConstantHash{T,H}
     constant::T
-    then::T
+    result_method::H # if non-nothing, apply to value `constant`
 end
-ConstantHashTrait(val) = ConstantHashTrait{typeof(val), Nothing}(val, nothing)
-function get_value_(x, context, method::ConstantHashTrait)
-    new_method = hash_method(method.constant , context)
-    if new_method != method # avoid infinite loops!
-        return method.constant, new_method
-    else
-        return x, method.then
+ConstantHash(val) = ConstantHash{typeof(val), Nothing}(val, nothing)
+get_value_(x, method::ConstantHash) = method.constant
+
+function stable_hash_helper(x, hash_state, context, method::Union{FnHash, ConstantHash})
+    y = get_value_(x, method)
+    new_method = @something(method.result_method, hash_method(y, context))
+    if typeof(x) == typeof(y) && method == new_method
+        throw(ArgumentError("Your use of `$(nameof(method))` for an object of type "*
+                            "`$(typeof(x))` in context of type `$(typeof(context))` "*
+                            "would cause a `StackOverflowError`."))
     end
+
+    return stable_hash_helper(something(y), hash_state, context, new_method)
 end
 
-function stable_hash_helper(x, hash_state, context, method::Union{FnHashTrait, ConstantHashTrait})
-    y, new_method = get_value_(x, context, method)
-    h = stable_hash_helper(y, hash_state, context, new_method)
+function stable_hash_helper(x, hash_state, context, methods::Tuple)
+    for method in methods
+        val = stable_hash_helper(x, similar_hasher(hash_state), context, method)
+        recursive_hash!(hash_state, val)
+    end
 
-    isnothing(method.then) && return h
-
-    then_h = stable_hash_helper(x, similar_hasher(hash_state), context, method.then)
-    return recursive_hash!(hash_state, then_h)
+    return hash_state
 end
 
 """
 
-    HashTraitAndContext(method, old_context -> new_context)
+    HashAndContext(method, old_context -> new_context)
 
 A special hash method that changes the context when hashing the contents of an object. The
 `method` defines how the object itself should be hashed and the second argument is a
@@ -348,15 +354,15 @@ callable which transforms the old context to the new.
         end
         StableHashTraits.parent_context(x::MyContext) = x.parent_context
 
-        StableHashTraits.hash_method(::MyContainedType, ::MyContext) = WriteHashTrait()
-        StableHashTraits.hash_method(::MyContainerType) = HashTraitAndContext(IterateHashTrait(), MyContext)
+        StableHashTraits.hash_method(::MyContainedType, ::MyContext) = WriteHash()
+        StableHashTraits.hash_method(::MyContainerType) = HashAndContext(IterateHash(), MyContext)
     ```
 """
-struct HashTraitAndContext{F,M}
+struct HashAndContext{F,M}
     parent::M
     contextfn::F
 end
-function stable_hash_helper(x, hash_state, context, method::HashTraitAndContext)
+function stable_hash_helper(x, hash_state, context, method::HashAndContext)
     return stable_hash_helper(x, hash_state, method.contextfn(context), method.parent)
 end
 
@@ -383,30 +389,30 @@ function parent_context(x::Any)
 end
 
 function hash_method(x::T, c::HashVersion{1}) where {T}
-    # we need to comupte `default_method` here because `hash_method(x::MyType, ::Any)` is
+    # we need to compute `default_method` here because `hash_method(x::MyType, ::Any)` is
     # less specific than the current method
     default_method = hash_method(x, parent_context(c))
     isnothing(default_method) || return default_method
     Base.isprimitivetype(T) && return UseWrite()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
-    return FnHashTrait(qualified_type, StructHashTrait(:ByName))
+    return (FnHash(qualified_type), StructHash(:ByName))
 end
-hash_method(::NamedTuple, ::HashVersion{1}) = FnHashTrait(qualified_name, StructHashTrait())
-hash_method(::AbstractRange, ::HashVersion{1}) = FnHashTrait(qualified_name, StructHashTrait(:ByName))
+hash_method(::NamedTuple, ::HashVersion{1}) = (FnHash(qualified_name), StructHash())
+hash_method(::AbstractRange, ::HashVersion{1}) = (FnHash(qualified_name), StructHash(:ByName))
 function hash_method(::AbstractArray, ::HashVersion{1})
-    return FnHashTrait(qualified_name, FnHashTrait(size, IterateHashTrait()))
+    return (FnHash(qualified_name), FnHash(size), IterateHash())
 end
-hash_method(::AbstractString, ::HashVersion{1}) = FnHashTrait(qualified_name => WriteHashTrait(), WriteHashTrait())
-hash_method(::Symbol, ::HashVersion{1}) = ConstantHashTrait(":", WriteHashTrait())
+hash_method(::AbstractString, ::HashVersion{1}) = (FnHash(qualified_name, WriteHash()), WriteHash())
+hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
 function hash_method(::AbstractDict, ::HashVersion{1})
-    return FnHashTrait(qualified_name, StructHashTrait(keys => getindex, :ByName))
+    return (FnHash(qualified_name), StructHash(keys => getindex, :ByName))
 end
-hash_method(::Tuple, ::HashVersion{1}) = FnHashTrait(qualified_name, IterateHashTrait())
-hash_method(::Pair, ::HashVersion{1}) = FnHashTrait(qualified_name, IterateHashTrait())
-hash_method(::Type, ::HashVersion{1}) = FnHashTrait(qualified_name)
-hash_method(::Function, ::HashVersion{1}) = ConstantHashTrait("Base.Function", FnHashTrait(qualified_name))
-hash_method(::AbstractSet, ::HashVersion{1}) = FnHashTrait(qualified_name, FnHashTrait(sort! ∘ collect))
+hash_method(::Tuple, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
+hash_method(::Pair, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
+hash_method(::Type, ::HashVersion{1}) = FnHash(qualified_name)
+hash_method(::Function, ::HashVersion{1}) = (ConstantHash("Base.Function"), FnHash(qualified_name))
+hash_method(::AbstractSet, ::HashVersion{1}) = (FnHash(qualified_name), FnHash(sort! ∘ collect))
 
 """
     TablesEq(parent_context)
@@ -424,7 +430,7 @@ function is_columntable(::Type{T}) where {T}
     return T <: NamedTuple && all(f -> f <: AbstractVector, fieldtypes(T))
 end
 function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
-    Tables.istable(T) && return FnHashTrait(Tables.columntable => StructHashTrait(:ByName))
+    Tables.istable(T) && return FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn))
     return StableHashTraits.hash_method(x, parent_context(m))
 end
 
@@ -441,10 +447,10 @@ end
 ViewsEq() = ViewsEq(HashVersion{1}())
 StableHashTraits.parent_context(x::ViewsEq) = x.parent
 function StableHashTraits.hash_method(::AbstractArray, ::ViewsEq)
-    return ConstantHashTrait("Base.AbstractArray", FnHashTrait(size, IterateHashTrait()))
+    return (ConstantHash("Base.AbstractArray"), FnHash(size, IterateHash()))
 end
 function StableHashTraits.hash_method(::AbstractString, ::ViewsEq)
-    return ConstantHashTrait("Base.AbstractString", WriteHashTrait())
+    return (ConstantHash("Base.AbstractString", WriteHash()), WriteHash())
 end
 
 parent_context(::HashVersion) = nothing

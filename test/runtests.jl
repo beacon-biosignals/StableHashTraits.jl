@@ -126,6 +126,7 @@ include("setup_tests.jl")
     @test_deprecated(UseQualifiedName())
     @test_deprecated(UseSize())
     @test_deprecated(UseTable())
+    # TODO: add more deprecations
 end
 
 @testset "Aqua" begin
