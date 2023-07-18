@@ -180,7 +180,7 @@ struct NamedTuplesEq{T}
 end
 StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
-    return UseQualifiedName(UseStruct(:ByName))
+    return Use(qualified_name, UseStruct(:ByName))
 end
 c = NamedTuplesEq(HashVersion{1}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
