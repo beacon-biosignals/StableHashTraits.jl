@@ -225,26 +225,23 @@ You should return one of the following values.
     falls back to `Base.write(io, x)` if no specialized methods are defined for x.
 2. `UseIterate()`: assumes the object is iterable and finds a hash of all elements
 3. `UseStruct([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
-    the object as defined by a sequence of pairs. How precisely this occurs is determined
-    by the two arugments
-        - `pair` Defines how fields are extracted; the default
-          is `fieldnames ∘ typeof => getfield` but this could be changed to e.g.
-          `propertynames => getproperty` or `Tables.columnnames => Tables.getcolumn`.
-          The first element of the pair is a function used to compute a list of keys
-          and the second element is a two argument function used to extract the keys 
-          from the object.
-        - `order` can be :ByOrder (the default)—which sorts by the order returned by `pair[1]` or
-         `:ByName`—which sorts by lexigraphical order.
+    the object as defined by a sequence of pairs. How precisely this occurs is determined by
+    the two arugments - `pair` Defines how fields are extracted; the default is `fieldnames
+        ∘ typeof => getfield` but this could be changed to e.g. `propertynames =>
+          getproperty` or `Tables.columnnames => Tables.getcolumn`. The first element of the
+          pair is a function used to compute a list of keys and the second element is a two
+          argument function used to extract the keys from the object. - `order` can be
+          :ByOrder (the default)—which sorts by the order returned by `pair[1]` or
+          `:ByName`—which sorts by lexigraphical order.
 4. `Use(fn | value, [method])`: hash the static `value` or hash the value of
    applying `fn` to the given object. To prevent an infinite loop it is an error to return
    an object of the same type as the object you're hashing. Optionally, you can pass a
-   second method that is also included in the hashed value. 
-   There are two functions avaible for specific use-cases of `Use`
-        - `qualified_name`: Get the qualified name of an objects type, e.g. `Base.String`
-        - `qualified_type`: The the qualified name and type parameters of a type, 
-           e.g. `Base.Array{Int, 1}`.
-    For example, `Use(qualified_name, UseStruct())` would hash the structure of an object
-    (using its fields) along with a hash of the module and name of the type.
+   second method that is also included in the hashed value. There are two functions avaible
+   for specific use-cases of `Use` - `qualified_name`: Get the qualified name of an objects
+        type, e.g. `Base.String` - `qualified_type`: The the qualified name and type
+        parameters of a type, e.g. `Base.Array{Int, 1}`. For example, `Use(qualified_name,
+           UseStruct())` would hash the structure of an object (using its fields) along with
+    a hash of the module and name of the type.
 5. `nothing`: indicates that you want to use a fallback method (see below); the two argument
    version of `hash_method` should never return `nothing`.
 
@@ -272,12 +269,19 @@ They are intended to avoid hash collisions as best as possible.
 - `AbstractSet`: `Use(qualified_name, UseTransform(sort! ∘ collect))`
 - `AbstractDict`: `Use(qualified_name, UseStruct(keys => getindex, :ByName))`
 
+There are two built-in contexts that can be used to modify these default fallbacks:
+[`TablesEq`](@ref) and [`ViewsEq`](@ref). `TablesEq` makes any table with equivalent content
+have the same hash, and `ViewsEq` makes any array or string with the same sequence of values
+and the same size have an equal hash. You can pass one or more of these as the second
+argument to `stable_hash`, e.g. `stable_hash(x, ViewsEq())` or `stable_hash(x,
+ViewsEq(TablesEq()))`.
+
 ## Customizing hash computations with contexts
 
 You can customize how hashes are computed within a given scope using a context object. This
 is also a very useful way to avoid type piracy. The context can be any object you'd like and
 is passed as the second argument to `stable_hash`. By default it is equal to
-`HashVersion{1}` and this is the context for which the default fallbacks listed above are
+`HashVersion{1}()` and this is the context for which the default fallbacks listed above are
 defined.
 
 This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
@@ -303,14 +307,14 @@ c = NamedTuplesEq(HashVersion{1}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
 ```
 
-If we did not define a method of `parent_context`, our context would need to implement a a
+If we did not define a method of `parent_context`, our context would need to implement a
 `hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and `Pair` for the
 call to `stable_hash` above to succeede.
 
 ### Customizing hashes within an object
 
 Contexts can be changed not only when you call `stable_hash` but also when you hash the
-contents of a particular object. This lets you change how hasing occurs within the object.
+contents of a particular object. This lets you change how hashing occurs within the object.
 See the docstring of [`UseAndReplaceContext`](@ref) for details. 
 """
 hash_method(x, context) = hash_method(x, parent_context(context))

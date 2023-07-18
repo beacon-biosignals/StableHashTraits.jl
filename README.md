@@ -160,7 +160,7 @@ changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 You can customize how hashes are computed within a given scope using a context object. This
 is also a very useful way to avoid type piracy. The context can be any object you'd like and
 is passed as the second argument to `stable_hash`. By default it is equal to
-`HashVersion{1}` and this is the context for which the default fallbacks listed above are
+`HashVersion{1}()` and this is the context for which the default fallbacks listed above are
 defined.
 
 This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
@@ -193,5 +193,5 @@ call to `stable_hash` above to succeede.
 ### Customizing hashes within an object
 
 Contexts can be customized not only when you call `stable_hash` but also when you hash the
-contents of a particular object. This lets you change how hasing occurs within the object.
+contents of a particular object. This lets you change how hashing occurs within the object.
 See the docstring of `UseAndReplaceContext` for details. 
