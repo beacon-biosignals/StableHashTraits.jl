@@ -40,124 +40,25 @@ function stable_hash(x, context=HashVersion{1}(); alg=sha256)
     return digest!(stable_hash_helper(x, setup_hash(alg), context, hash_method(x, context)))
 end
 
+# extract contents of README so we can insert it into the some of the docstrings
+const HASH_TRAITS_DOCS, HASH_CONTEXT_DOCS = let
+    readme = read(joinpath(pkgdir(StableHashTraits), "README.md"), String)
+    traits = match(r"START_HASH_TRAITS -->(.*)<!-- END_HASH_TRAITS"s, readme).captures[1]
+    contexts = match(r"START_CONTEXTS -->(.*)<!-- END_CONTEXTS"s, readme).captures[1]
+    # TODO: wrap any exported functions in [`fun`]
+
+    traits, contexts
+end
+
 """
     hash_method(x, [context])
 
 Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
 You should return one of the following values.
 
-1. `WriteHash()`: writes the object to a binary format using `StableHashTraits.write(io, x)` and
-    takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)` falls
-    back to `Base.write(io, x)` if no specialized methods are defined for x.
-2. `IterateHash()`: assumes the object is iterable and finds a hash of all elements
-3. `StructHash([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
-    the object as defined by a sequence of pairs. How precisely this occurs is determined by
-    the two arugments - `pair` Defines how fields are extracted; the default is `fieldnames
-        ∘ typeof => getfield` but this could be changed to e.g. `propertynames =>
-          getproperty` or `Tables.columnnames => Tables.getcolumn`. The first element of the
-          pair is a function used to compute a list of keys and the second element is a two
-          argument function used to extract the keys from the object. - `order` can be
-          :ByOrder (the default)—which sorts by the order returned by `pair[1]` or
-          `:ByName`—which sorts by lexigraphical order.
-4. `FnHash(fn, [method])`: hash the result of applying `fn` to the given object. Optionally,
-   use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result.
-   There are two built-in functions of using when using `FnHash`
-    - `qualified_name`: Get the qualified name of an objects type, e.g. `Base.String`
-    - `qualified_type`: The the qualified name and type parameters of a type, e.g.
-       `Base.Array{Int, 1}`. For example, `Use(qualified_name, StructHash())` would hash the
-       structure of an object (using its fields) along with a hash of the module and name of
-          the type.
-5. `ConstantHash(value, [method])`: hash the constant `value`. Optionally, use `method` to
-    hash the `value`.
-5. `Tuple`: apply multiple methods to hash the object, and then recursively hash
-    their results. You can use an empty tuple to indicate that no appropriate method
-    exists for your type; this is roughly equivalent to not implementing the method,
-    but this may be useful in some cases to avoid method ambiguities, and is used
-    internall to approriately handle hash contexts.
+$HASH_TRAITS_DOCS
 
-!!! note Avoiding infinite recursion with `FnHash` and `ConstantHash`
-
-A naive application of `ConstantHash` or `FnHash` could easilly cause a `StackOverflowError`
-(e.g. if `value` is of the same type that the `hash_method` is defined for). However, the
-application of these methods tries to avoid this situation. During `hash_method` resolution,
-if applying either trait yields an object of the same type as `hash_method`'s input, and
-`method` is given, the object is hashed using `method`. If `method` is not given, the
-`parent_context` is used to determine the hash_method applied to the object. Finally, if no
-such parent exists then an `ArgumentError` is thrown, warning about the danger of a
-`StackOverflowError`. 
-
-Your hash will be stable if the output for the given method remains the same: e.g. if
-`write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
-fields are the same for `StructHash`, the hash will be the same; etc...
-
-## Implemented methods of `hash_method`
-
-In the absence of a specific `hash_method` for your type, the following fallbacks are used.
-They are intended to avoid hash collisions as best as possible.
-
-- `Any`: 
-    - `WriteHash()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `Use(qualified_type, StructHash(:ByName))` for all other types
-- `NamedTuple`: `Use(qualified_name, StructHash())`
-- `Function`: `Use("Base.Function", Use(qualified_name))`
-- `AbstractString`: `Use(qualified_name, WriteHash())`
-- `Symbol`: `Use(":", WriteHash())`
-- `String`: `WriteHash()` (note: removing the `Use(qualified_name` prevents an infinite
-  loop)
-- `Tuple`, `Pair`: `Use(qualified_name, IterateHash())`
-- `Type`: `UseQualifiedType`
-- `AbstractArray`: `Use(qualified_name, Use(size, IterateHash()))`
-- `AbstractRange`: `Use(qualified_name, StructHash(:ByName))`
-- `AbstractSet`: `Use(qualified_name, Use(sort! ∘ collect))`
-- `AbstractDict`: `Use(qualified_name, Use(keys => getindex, :ByName))`
-
-There are two built-in contexts that can be used to modify these default fallbacks:
-[`TablesEq`](@ref) and [`ViewsEq`](@ref). `TablesEq` makes any table with equivalent content
-have the same hash, and `ViewsEq` makes any array or string with the same sequence of values
-and the same size have an equal hash. You can pass one or more of these as the second
-argument to `stable_hash`, e.g. `stable_hash(x, ViewsEq())` or `stable_hash(x,
-ViewsEq(TablesEq()))`.
-
-## Customizing hash computations with contexts
-
-You can customize how hashes are computed within a given scope using a context object. This
-is also a very useful way to avoid type piracy. The context can be any object you'd like and
-is passed as the second argument to `stable_hash`. By default it is equal to
-`HashVersion{1}()` and this is the context for which the default fallbacks listed above are
-defined.
-
-This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter is the
-method called for `WriteHash`, and which falls back to `Base.write`). Because of the way the
-default context (`HashVersion{1}`) is defined, you normally don't have to include this
-context as an argument when you define a method of `hash_context` or `write` because there
-are appropriate fallback methods.
-
-When you define a hash context it should normally accept a parent context that serves as a
-fallback, and return it in an implementation of the method
-`StableHashTratis.parent_context`. For example, here is how we could write a context that
-treats all named tuples with the same keys as equivalent. 
-
-```julia
-struct NamedTuplesEq{T}
-    parent::T
-end
-StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
-function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
-    return Use(qualified_name, StructHash(:ByName))
-end
-c = NamedTuplesEq(HashVersion{1}())
-stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
-```
-
-If we did not define a method of `parent_context`, our context would need to implement a
-`hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and `Pair` for the
-call to `stable_hash` above to succeede.
-
-### Customizing hashes within an object
-
-Contexts can be changed not only when you call `stable_hash` but also when you hash the
-contents of a particular object. This lets you change how hashing occurs within the object.
-See the docstring of [`HashAndContext`](@ref) for details. 
+$HASH_CONTEXT_DOCS
 """
 hash_method(x, context) = hash_method(x, parent_context(context))
 hash_method(x, ::Nothing) = hash_method(x)

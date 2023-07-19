@@ -40,67 +40,47 @@ It isn't intended for secure hashing.
 
 ## Details
 
-There is one exported method: `stable_hash`. You call this on the object you want to hash, and, as an optional second argument, you pass the context that determines how hasing occurs (this defaults to `HashVersion{1}`).
+You compute hashes using `stable_hash`. This is called on the object you want to hash, and, as an optional second argument. The context you use affects how hasing occurs (this defaults to `HashVersion{1}`).
 
 You can customize the hash behavior for particular types by implementing the trait
 `StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional second argument, the context. Any method of `hash_method` should simply return one of the following values.
 
-1. `UseWrite()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
-    and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
-    falls back to `Base.write(io, x)` if no specialized methods are defined for x.
-2. `UseIterate()`: assumes the object is iterable and finds a hash of all elements
-3. `UseStruct([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
-    the object as defined by a sequence of pairs. How precisely this occurs is determined
-    by the two arugments
-        - `pair` Defines how fields are extracted; the default
-          is `fieldnames ∘ typeof => getfield` but this could be changed to e.g.
-          `propertynames => getproperty` or `Tables.columnnames => Tables.getcolumn`.
-          The first element of the pair is a function used to compute a list of keys
-          and the second element is a two argument function used to extract the keys 
-          from the object.
-        - `order` can be :ByOrder (the default)—which sorts by the order returned by 
-          `pair[1]` or `:ByName`—which sorts by lexigraphical order.
-4. `Use(fn | value, [method])`: hash the static `value` or hash the value of
-   applying `fn` to the given object. To prevent an infinite loop it is an error to return
-   an object of the same type as the object you're hashing. Optionally, you can pass a
-   second method that is also included in the hashed value. 
-   There are two functions avaible for specific use-cases of `Use`
-        - `qualified_name`: Get the qualified name of an objects type, e.g. `Base.String`
-        - `qualified_type`: The the qualified name and type parameters of a type, 
-           e.g. `Base.Array{Int, 1}`.
-    For example, `Use(qualified_name, UseStruct())` would hash the structure of an object
-    (using its fields) along with a hash of the module and name of the type.
-5. `nothing`: indicates that you want to use a fallback method (see below); the two argument
-   version of `hash_method` should never return `nothing`.
+<!-- START_HASH_TRAITS -->
+
+1. `WriteHash()`: writes the object to a binary format using `StableHashTraits.write(io, x)` and
+    takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)` falls
+    back to `Base.write(io, x)` if no specialized methods are defined for x.
+2. `IterateHash()`: assumes the object is iterable and finds a hash of all elements
+3. `StructHash([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
+    the object as defined by a sequence of pairs. How precisely this occurs is determined by
+    the two arugments - `pair` Defines how fields are extracted; the default is `fieldnames
+        ∘ typeof => getfield` but this could be changed to e.g. `propertynames =>
+          getproperty` or `Tables.columnnames => Tables.getcolumn`. The first element of the
+          pair is a function used to compute a list of keys and the second element is a two
+          argument function used to extract the keys from the object. - `order` can be
+          :ByOrder (the default)—which sorts by the order returned by `pair[1]` or
+          `:ByName`—which sorts by lexigraphical order.
+4. `FnHash(fn, [method])`: hash the result of applying `fn` to the given object. Optionally,
+   use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result.
+   There are two built-in functions of using when using `FnHash`
+    - `qualified_name`: Get the qualified name of an objects type, e.g. `Base.String`
+    - `qualified_type`: The the qualified name and type parameters of a type, e.g.
+       `Base.Array{Int, 1}`. For example, `Use(qualified_name, StructHash())` would hash the
+       structure of an object (using its fields) along with a hash of the module and name of
+          the type.
+5. `ConstantHash(value, [method])`: hash the constant `value`. Optionally, use `method` to
+    hash the `value`.
+5. `Tuple`: apply multiple methods to hash the object, and then recursively hash
+    their results. You can use an empty tuple to indicate that no appropriate method
+    exists for your type; this is roughly equivalent to not implementing the method,
+    but this may be useful in some cases to avoid method ambiguities, and is used
+    internall to approriately handle hash contexts.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
-`write` is the same for an object that uses `UseWrite`, its hash will be the same; if the
-properties are the same for `UseProperties`, the hash will be the same; etc...
+`write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
+fields are the same for `StructHash`, the hash will be the same; etc...
 
-## Implemented methods of `hash_method`
-
-In the absence of a specific `hash_method` for your type, the following fallbacks
-are used. They are intended to avoid hash collisions as best as possible.
-
-- `Any`: 
-    - `UseWrite()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `Use(qualified_type, UseStruct(:ByName))` for all other types
-- `NamedTuple`: `Use(qualified_name, UseStruct())`
-- `Function`: `Use("Base.Function", Use(qualified_name))`
-- `AbstractString`: `Use(qualified_name, UseWrite())`
-- `Symbol`: `Use(":", UseWrite())`
-- `String`: `UseWrite()` (note: removing the `Use(qualified_name` prevents an infinite loop)
-- `Tuple`, `Pair`: `Use(qualified_name, UseIterate())`
-- `Type`: `UseQualifiedType`
-- `AbstractArray`: `Use("Base.AbstractArray", UseSize(UseIterate()))`
-- `AbstractRange`: `Use(qualified_name, UseStruct())`
-- `AbstractSet`: `Use(qualified_name, UseTransform(sort! ∘ collect))`
-- `AbstractDict`: `Use(qualified_name, UseStruct(keys => getindex, :ByName))`
-
-There are two built-in contexts that can be used to modify these default fallbacks:
-`TablesEq` and `ViewsEq`. `TablesEq` makes any table with equivalent content have the same
-hash, and `ViewsEq` makes any array or string with the same sequence of values and the same
-size have an equal hash. You can pass one or more of these as the second argument to `stable_hash`, e.g. `stable_hash(x, ViewsEq())` or `stable_hash(x, ViewsEq(TablesEq()))`.
+<!-- END_HASH_TRAITS -->
 
 ## Breaking changes
 
@@ -155,6 +135,8 @@ previous hash value. For example if you had a custom table type `MyCustomTable` 
 you only defined a `StableHashTraits.write` method and no `hash_method`, its hash will be
 changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 
+<!-- START_CONTEXTS -->
+
 ## Customizing hash computations with contexts
 
 You can customize how hashes are computed within a given scope using a context object. This
@@ -195,3 +177,5 @@ call to `stable_hash` above to succeede.
 Contexts can be customized not only when you call `stable_hash` but also when you hash the
 contents of a particular object. This lets you change how hashing occurs within the object.
 See the docstring of `UseAndReplaceContext` for details. 
+
+<!-- END_CONTEXTS -->
