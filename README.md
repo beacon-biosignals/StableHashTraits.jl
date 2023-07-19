@@ -170,7 +170,7 @@ stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
 
 If we did not define a method of `parent_context`, our context would need to implement a
 `hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and `Pair` for the
-call to `stable_hash` above to succeede.
+call to `stable_hash` above to succeede. 
 
 ### Customizing hashes within an object
 

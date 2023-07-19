@@ -316,18 +316,19 @@ you will instead have to manually mangae the fallback mechanism as follows:
 
 ```julia
 # generic fallback method
-function hash_method(x::T, c::MyRootContext) where T
+function hash_method(x::T, ::MyRootContext) where T
     default_method = hash_method(x)
     StableHashTraits.is_implemented(default_method) && return default_method
 
     # return generic fallback hash trait here
 end
-
-This pattern is necessary to avoid the method ambiguities that would arise between 
-`hash_method(x::MyType, ::Any)` and `hash_method(x::Any, x::MyRootContext)`. Generally
-if a type implements hash_method for itself, absent a context, we want this `hash_method`
-to be used.
 ```
+
+This works because `hash_method(::Any)` returns a sentinal value that indicates that there
+is no more specific method available. This pattern is necessary to avoid the method
+ambiguities that would arise between `hash_method(x::MyType, ::Any)` and
+`hash_method(x::Any, ::MyRootContext)`. Generally if a type implements hash_method for
+itself, but absent a context, we want this `hash_method` to be used.
 """
 function parent_context(x::Any)
     Base.depwarn("You should explicitly define a `parent_context` method for context " *
