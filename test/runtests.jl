@@ -126,7 +126,7 @@ include("setup_tests.jl")
     @test_throws ArgumentError stable_hash(BadHashMethod())
     @test_throws ArgumentError stable_hash("bob", BadRootContext())
     @test stable_hash(1, BadRootContext()) isa Vector{UInt8}
-    
+
     @test (@test_deprecated(r"`parent_context`", stable_hash([1, 2], MyOldContext()))) !=
           stable_hash([1, 2])
     @test (@test_deprecated(r"`parent_context`", stable_hash("12", MyOldContext()))) ==

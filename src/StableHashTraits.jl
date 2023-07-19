@@ -78,7 +78,7 @@ end
 
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when " *
-                        "hashing object $x. The implementation of `hash_method` for this "*
+                        "hashing object $x. The implementation of `hash_method` for this " *
                         "object is invalid."))
     return nothing
 end
