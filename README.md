@@ -121,7 +121,7 @@ However, far fewer manual defintions of `hash_method` become necessary. The fall
       to `UseProperties()`.
     - *BUT* to reproduce `UseProperties()`, call `StructHash(propertynames => getproperty)`
     - Replace `UseQualifiedName()` with `FnHash(qualified_name, HashWrite())`
-    - Replace `UseSize(method)` with `FnHash(size, method)`
+    - Replace `UseSize(method)` with `(FnHash(size), method)`
     - Reaplce `UseTable` with `FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn))`
 - **Deprecation**: The fallback methods above for hashing are defined within a specific
   context (`HashContext{1}`). Any contexts you make should define a `parent_context`
