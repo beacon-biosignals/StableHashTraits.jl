@@ -300,14 +300,34 @@ end
 """
     StableHashTraits.parent_context(context)
 
-Return the parent_context context of the given context object. (See [`hash_method`](@ref) for
-details of using context). The default method falls back to returning `HashVersion{1}`, but
-this is flagged as a deprecation warning; in the future it is expected that all contexts
+Return the parent_context context of the given context object. (See [`hash_method`](@ref)
+for details of using context). The default method falls back to returning `HashVersion{1}`,
+but this is flagged as a deprecation warning; in the future it is expected that all contexts
 define this method.
 
-If your context is expected to be the root context (akin to `HashVersion{1}`), then 
-`parent_context` should return `nothing` so that the single argument fallback for `hash_method`
-can be called.
+This is normally all that you need to know to implement a new context. However, if your
+context is expected to be the root context—one that does not fallback to any parent (akin to
+`HashVersion{1}`)—then there may be a bit more work invovled. In this case, `parent_context`
+should return `nothing` so that the single argument fallback for `hash_method` can be
+called. 
+
+Furthermore, if you implement a root context and want to implement `hash_method` over `Any`
+you will instead have to manually mangae the fallback mechanism as follows:
+
+```julia
+# generic fallback method
+function hash_method(x::T, c::MyRootContext) where T
+    default_method = hash_method(x)
+    StableHashTraits.is_implemented(default_method) && return default_method
+
+    # return generic fallback hash trait here
+end
+
+This pattern is necessary to avoid the method ambiguities that would arise between 
+`hash_method(x::MyType, ::Any)` and `hash_method(x::Any, x::MyRootContext)`. Generally
+if a type implements hash_method for itself, absent a context, we want this `hash_method`
+to be used.
+```
 """
 function parent_context(x::Any)
     Base.depwarn("You should explicitly define a `parent_context` method for context " *
@@ -324,7 +344,7 @@ function hash_method(x::T, c::HashVersion{1}) where {T}
     # between `hash_method(::Any, ::HashVersion{1})` vs. `hash_method(::MyType, ::Any)`.
     # Furthermore, this would would require the user to define `hash_method` with two
     # arguments.
-    default_method = hash_method(x, parent_context(c))
+    default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
     is_implemented(default_method) && return default_method
     Base.isprimitivetype(T) && return WriteHash()
     # merely reordering a struct's fields should be considered an implementation detail, and
