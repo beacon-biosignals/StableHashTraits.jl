@@ -41,14 +41,20 @@ It isn't intended for secure hashing.
 
 ## Details
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and, as an optional second argument called the context. The context you use affects how hasing occurs (it defaults to `HashVersion{1}()`).
+You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hasing occurs (it defaults to `HashVersion{1}()`), see the final section in the README for more details.
+
+There are sensible defaults that ensure that if two values are different the input to the
+hash algorithm will differ. 
 
 You can customize the hash behavior for particular types by implementing the trait
-`StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional second argument, the context. If you define a method that does not accept a context, it will be used in all contexts. Any method of `hash_method` should simply return one of the following values, typically based only on the *type* of its input.
+`StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional
+second argument, the context. If you define a method that does not accept a context, it will
+be used in all contexts. Any method of `hash_method` should simply return one of the
+following values, typically based only on the *type* of its input.
 
 <!-- START_HASH_TRAITS -->
 1. `WriteHash()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
-    and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
+    and takes a hash of that. `StableHashTraits.write(io, x)`
     falls back to `Base.write(io, x)` if no specialized methods are defined for x.
 2. `IterateHash()`: assumes the object is iterable and finds a hash of all elements
 3. `StructHash([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
@@ -80,25 +86,6 @@ You can customize the hash behavior for particular types by implementing the tra
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
 fields are the same for `StructHash`, the hash will be the same; etc...
-
-If you dont' define `hash_method` for a type, one of the following fallbacks will be used,
-depending on the type.
-
-- `Any`: 
-    - `WriteHash()` for any object `x` where `isprimitivetype(typeof(x))` is true
-    - `(FnHash(qualified_type), StructHash(:ByName))` for all other types
-- `NamedTuple`: `(FnHash(qualified_name), StructHash())`
-- `Function`: `(ConstantHash("Base.Function"), FnHash(qualified_name))`
-- `AbstractString`: `(FnHash(qualified_name, WriteHash()), WriteHash())`
-- `Symbol`: `(ConstantHash(":"), WriteHash())`
-- `String`: `WriteHash()` (note: removing the `FnHash(qualified_name` prevents an infinite loop)
-- `Tuple`, `Pair`: `(FnHash(qualified_name), IterateHash())`
-- `Type`: `(ConstantHash("Base.DataType"), FnHash(qualified_name))`
-- `AbstractArray`: `(FnHash(qualified_name), FnHash(size), IterateHash())`
-- `AbstractRange`: `(FnHash(qualified_name), StructHash(:ByName))`
-- `AbstractSet`: `(FnHash(qualified_name), FnHash(sort! ∘ collect))`
-- `AbstractDict`: `(FnHash(qualified_name), StructHash(keys => getindex, :ByName))`
-
 <!-- END_HASH_TRAITS -->
 
 ## Breaking changes
@@ -181,7 +168,7 @@ struct NamedTuplesEq{T}
 end
 StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
-    return Use(qualified_name, UseStruct(:ByName))
+    return FnHash(qualified_name), UseStruct(:ByName)
 end
 c = NamedTuplesEq(HashVersion{1}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
