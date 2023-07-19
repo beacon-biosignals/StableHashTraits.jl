@@ -54,7 +54,7 @@ You can customize the hash behavior for particular types by implementing the tra
 2. `IterateHash()`: assumes the object is iterable and finds a hash of all elements
 3. `StructHash([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
     the object as defined by a sequence of pairs. How precisely this occurs is determined by
-    the two arugments 
+    the two arugments: 
       - `pair` Defines how fields are extracted; the default is 
         `fieldnames ∘ typeof => getfield` 
         but this could be changed to e.g. `propertynames => getproperty` or
@@ -62,23 +62,24 @@ You can customize the hash behavior for particular types by implementing the tra
         function used to compute a list of keys and the second element is a two argument
         function used to extract the keys from the object. 
       - `order` can be `:ByOrder` (the default)—which sorts by the order returned by
-        `pair[1]` or `:ByName`—which sorts by lexigraphical order.
+        `pair[1]`—or `:ByName`—which sorts by lexigraphical order.
 4. `FnHash(fn, [method])`: hash the result of applying `fn` to the given object. Optionally,
-   use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result.
-   There are two built-in functions common to make use of with `FnHash`
+   use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result to
+   determine how to hash it. There are two built-in functions common to make use of with
+   `FnHash`
     - `qualified_name`: Get the qualified name of an objects type, e.g. `Base.String`
-    - `qualified_type`: The the qualified name and type parameters of a type, e.g.
+    - `qualified_type`: Get the qualified name and type parameters of a type, e.g.
        `Base.Vector{Int}`. 
     Favor these functions over e.g. `string ∘ typeof` as they have been tested to provide
     more stable values across julia verisons and sessions than the naive
     string-ification of types.
 5. `ConstantHash(value, [method])`: hash the constant `value`. Optionally, use `method` to
-    hash the `value`, otherwise call `hash_method` on `value`.
+    hash the `value`, otherwise call `hash_method` on `value` to determine how to hash it.
 5. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
-    results. You can use an empty tuple to indicate that no appropriate method exists for
-    your type; this is roughly equivalent to not implementing the method, but this may be
-    useful in some cases to avoid method ambiguities, and is used internally to approriately
-    handle hash contexts.
+    results. You can use an empty tuple to indicate that no customized hash method exists
+    for your type; this is roughly equivalent to not implementing the method, but this may
+    be useful in some cases to avoid method ambiguities, and is used internally to
+    approriately handle the fallbacks for the default hash context.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
@@ -180,6 +181,6 @@ call to `stable_hash` above to succeede.
 
 Contexts can be customized not only when you call `stable_hash` but also when you hash the
 contents of a particular object. This lets you change how hashing occurs within the object.
-See the docstring of `UseAndReplaceContext` for details. 
+See the docstring of `HashAndContext` for details. 
 
 <!-- END_CONTEXTS -->

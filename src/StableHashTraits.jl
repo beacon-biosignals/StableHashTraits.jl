@@ -2,7 +2,6 @@ module StableHashTraits
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq
-using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA, sha256
 
 """
@@ -27,7 +26,8 @@ methods change in a future release, the hash you get by passing an explicit `Has
 should *not* change. (Note that the number in `HashVersion` may not necessarily match the
 package verison of `StableHashTraits`).
 
-To change the hash algorithm used, pass a different function to `alg`. 
+To change the hash algorithm used, pass a different function to `alg`. It accepts sha1,
+sha256 or any function of the form hash(x, [old_hash]), such as CRC32c.crc32c.
 
 The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
 third argument to [`StableHashTraits.write`](@ref)
@@ -246,21 +246,22 @@ A special hash method that changes the context when hashing the contents of an o
 `method` defines how the object itself should be hashed and the second argument is a
 callable which transforms the old context to the new.
 
-!!! note It is best to nest the old context.
+For example, here is how we can make sure the arrays in a specific object have a hash that
+is invariant to endianness without having to copy the array.
 
-    In practice you generally only want to modify how hashing works for a subset 
-    of the types, and then fallback to the old context. This can be achieved by
-    nesting the old context, as follows:
+```julia
+struct EndianInvariant{P}
+    parent_context::P
+end
+StableHashTraits.parent_context(x::EndianInvariant) = x.parent_context
 
-    ```julia
-        struct MyContext{P}
-            parent_context::P
-        end
-        StableHashTraits.parent_context(x::MyContext) = x.parent_context
+struct CrossPlatformData
+    data::Vector{Int}
+end
 
-        StableHashTraits.hash_method(::MyContainedType, ::MyContext) = WriteHash()
-        StableHashTraits.hash_method(::MyContainerType) = HashAndContext(IterateHash(), MyContext)
-    ```
+StableHashTraits.hash_method(::Number, ::EndianInvariant) = FnHash(htol, WriteHash())
+StableHashTraits.hash_method(::CrossPlatformData) = HashAndContext(IterateHash(), EndianInvariant)
+```
 """
 struct HashAndContext{F,M}
     parent::M
