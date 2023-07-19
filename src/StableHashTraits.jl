@@ -1,8 +1,7 @@
 module StableHashTraits
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash,
-       HashAndContext, HashVersion,
-       qualified_name, qualified_type, TablesEq, ViewsEq
+       HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq
 using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA, sha256
 
@@ -17,7 +16,7 @@ defined. This is a "root" context, meaning that `parent_context(::HashVersion) =
 struct HashVersion{V} end
 
 """
-    stable_hash(x, context=HashVersion{1}(); alg=crc32c)
+    stable_hash(x, context=HashVersion{1}(); alg=sha256)
 
 Create a stable hash of the given objects. As long as the context remains the same, this is
 intended to remain unchanged across julia verisons. How each object is hashed is determined
@@ -28,9 +27,7 @@ methods change in a future release, the hash you get by passing an explicit `Has
 should *not* change. (Note that the number in `HashVersion` may not necessarily match the
 package verison of `StableHashTraits`).
 
-To change the hash algorithm used, pass a different function to `alg`. The function should
-take one required argument (value to hash) and a second, optional argument (a hash value to
-mix). Additionally `sha1` and `sha256` are supported (from the standard library `SHA`).
+To change the hash algorithm used, pass a different function to `alg`. 
 
 The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
 third argument to [`StableHashTraits.write`](@ref)
@@ -62,7 +59,7 @@ $HASH_CONTEXT_DOCS
 """
 hash_method(x, context) = hash_method(x, parent_context(context))
 hash_method(x, ::Nothing) = hash_method(x)
-hash_method(_) = nothing # signals that no method is available
+hash_method(_) = () # signals that no method is available
 
 function stable_hash_helper(x, hash_state, context, method::Tuple{})
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects"*
@@ -297,9 +294,11 @@ end
 
 function hash_method(x::T, c::HashVersion{1}) where {T}
     # we need to compute `default_method` here because `hash_method(x::MyType, ::Any)` is
-    # less specific than the current method
+    # less specific than the current method, but if we have something defined for a specific
+    # type as the first argument, we want to use it. (note that changing to x::Any, and
+    # using T = typeof(x) would just lead to method ambiguities)
     default_method = hash_method(x, parent_context(c))
-    isnothing(default_method) || return default_method
+    isempty(default_method) || return default_method
     Base.isprimitivetype(T) && return UseWrite()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
@@ -347,7 +346,7 @@ end
 """
     ViewsEq(parent_context)
 
-Create a hash context where only contents of an array or string determine its hash: that is,
+Create a hash context where only the contents of an array or string determine its hash: that is,
 the type of the array or string (e.g. `SubString` vs. `String`) does not impact the hash
 value.
 """
