@@ -72,13 +72,14 @@ is_implemented(::Any) = true
 
 function stable_hash_helper(x, hash_state, context, method::NotImplemented)
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects" *
-                        " of type $(typeof(x)) in context of type `$(typeof(context))`."))
+                        " of type `$(typeof(x))` in context of type `$(typeof(context))`."))
     return nothing
 end
 
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when " *
-                        "hashing object $x."))
+                        "hashing object $x. The implementation of `hash_method` for this "*
+                        "object is invalid."))
     return nothing
 end
 
@@ -188,8 +189,8 @@ end
 orderfields(::StructHash{<:Any,:ByOrder}, props) = props
 orderfields(::StructHash{<:Any,:ByName}, props) = sort_(props)
 sort_(x::Tuple) = TupleTools.sort(x; by=string)
-sort_(x::AbstractSet) = sort!(collect(x))
-sort_(x) = sort(x)
+sort_(x::AbstractSet) = sort!(collect(x); by=string)
+sort_(x) = sort(x; by=string)
 function stable_hash_helper(x, hash_state, context, use::StructHash)
     fieldsfn, getfieldfn = use.fnpair
     return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k

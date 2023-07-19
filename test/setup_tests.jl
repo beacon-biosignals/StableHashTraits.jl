@@ -98,3 +98,10 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = IterateHash()
 struct ExtraTypeParams{P,T}
     value::T
 end
+
+struct BadHashMethod end
+StableHashTraits.hash_method(::BadHashMethod) = "garbage"
+
+struct BadRootContext end
+StableHashTraits.parent_context(::BadRootContext) = nothing
+StableHashTraits.hash_method(::Int, ::BadRootContext) = WriteHash()

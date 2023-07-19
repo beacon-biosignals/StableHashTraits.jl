@@ -123,6 +123,10 @@ include("setup_tests.jl")
     @test stable_hash(TestType(1, 2)) == stable_hash(TestType3(2, 1))
     @test stable_hash(TestType(1, 2)) != stable_hash(TestType4(2, 1))
 
+    @test_throws ArgumentError stable_hash(BadHashMethod())
+    @test_throws ArgumentError stable_hash("bob", BadRootContext())
+    @test stable_hash(1, BadRootContext()) isa Vector{UInt8}
+    
     @test (@test_deprecated(r"`parent_context`", stable_hash([1, 2], MyOldContext()))) !=
           stable_hash([1, 2])
     @test (@test_deprecated(r"`parent_context`", stable_hash("12", MyOldContext()))) ==
@@ -131,7 +135,6 @@ include("setup_tests.jl")
     @test_deprecated(UseQualifiedName())
     @test_deprecated(UseSize(UseIterate()))
     @test_deprecated(UseTable())
-    # TODO: add more deprecations
 end
 
 @testset "Aqua" begin
