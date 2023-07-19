@@ -224,7 +224,7 @@ struct FnHash{F,H}
     result_method::H # if non-nothing, apply to result of `fn`
 end
 FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
-get_value_(x, method::FnHash{<:Base.Callable}) = method.fn(x)
+get_value_(x, method::FnHash) = method.fn(x)
 
 struct ConstantHash{T,H}
     constant::T
@@ -241,7 +241,7 @@ function stable_hash_helper(x, hash_state, context, method::Union{FnHash,Constan
         msg = """`$methodstr` is incorrectly called inside 
               `hash_method(::$(typeof(x)), ::$(typeof(context))). Applying
               it would lead to infinite recursion. This can usually be
-        fixed by passing a second argument to `$methodstr`."""
+              fixed by passing a second argument to `$methodstr`."""
         throw(ArgumentError(replace(msg, r"\s+" => " ")))
     end
 
@@ -301,7 +301,7 @@ end
 """
     StableHashTraits.parent_context(context)
 
-Return the parent_context context of the given context object. (See [`hash_method`](@ref)
+Return the parent context of the given context object. (See [`hash_method`](@ref)
 for details of using context). The default method falls back to returning `HashVersion{1}`,
 but this is flagged as a deprecation warning; in the future it is expected that all contexts
 define this method.
