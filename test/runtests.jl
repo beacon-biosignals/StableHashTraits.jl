@@ -129,7 +129,7 @@ include("setup_tests.jl")
           stable_hash("12")
     @test_deprecated(UseProperties(:ByName))
     @test_deprecated(UseQualifiedName())
-    @test_deprecated(UseSize())
+    @test_deprecated(UseSize(UseIterate()))
     @test_deprecated(UseTable())
     # TODO: add more deprecations
 end
