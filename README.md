@@ -109,7 +109,7 @@ However, far fewer manual defintions of `hash_method` become necessary. The fall
     - Reaplce `UseTable` with `HashFn(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn))`
 - **Deprecation**: The fallback methods above are defined within a specific context
   (`HashContext{1}`). Any contexts you make should should define a
-  `StableHashTraits.parent_context` method that returns e.g. `HashContext{1}` so that the
+  `parent_context` method that returns e.g. `HashContext{1}` so that the
   fallback implementation for any methods of `hash_method` you don't implement work
   properly. (A default version of `parent_context` raises a deprecation warning and returns
   `HashContext{1}`). Refer to the discussion below about contexts.
