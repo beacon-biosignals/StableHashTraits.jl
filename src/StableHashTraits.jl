@@ -27,8 +27,9 @@ methods change in a future release, the hash you get by passing an explicit `Has
 should *not* change. (Note that the number in `HashVersion` may not necessarily match the
 package verison of `StableHashTraits`).
 
-To change the hash algorithm used, pass a different function to `alg`. It accepts sha1,
-sha256 or any function of the form hash(x, [old_hash]), such as CRC32c.crc32c.
+To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
+related function from `SHA` or any function of the form `hash(x, [old_hash])`, such as
+CRC32c.crc32c.
 
 The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
 third argument to [`StableHashTraits.write`](@ref)
@@ -43,7 +44,8 @@ const HASH_TRAITS_DOCS, HASH_CONTEXT_DOCS = let
     readme = read(joinpath(pkgdir(StableHashTraits), "README.md"), String)
     traits = match(r"START_HASH_TRAITS -->(.*)<!-- END_HASH_TRAITS"s, readme).captures[1]
     contexts = match(r"START_CONTEXTS -->(.*)<!-- END_CONTEXTS"s, readme).captures[1]
-    # TODO: wrap any exported functions in [`fun`]
+    # TODO: if we ever generate `Documenter.jl` docs we need to revise the
+    # links to symbols here
 
     traits, contexts
 end
@@ -98,9 +100,12 @@ end
 digest!(fn::GenericFunHash) = fn.hash
 similar_hasher(fn::GenericFunHash) = GenericFunHash(fn.hasher)
 
-# TODO: support more sha versions?
-setup_hash(::typeof(SHA.sha256)) = SHA.SHA2_256_CTX()
-setup_hash(::typeof(SHA.sha1)) = SHA.SHA1_CTX()
+for fn in filter(startswith("sha") ∘ string, names(SHA))
+    CTX = Symbol(uppercase(string(fn)), :_CTX)
+    if CTX in names(SHA)
+        @eval setup_hash(::typeof(SHA.$(fn))) = SHA.$(CTX)()
+    end
+end
 similar_hasher(ctx::SHA.SHA_CTX) = typeof(ctx)()
 update!(sha::SHA.SHA_CTX, bytes) = SHA.update!(sha, bytes)
 digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)

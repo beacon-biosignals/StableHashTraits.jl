@@ -47,7 +47,6 @@ You can customize the hash behavior for particular types by implementing the tra
 `StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional second argument, the context. The `hash_method` you define can dispatch on just this first argument, or it can dispatch on both the object to hash *and* the context. Any method of `hash_method` should simply return one of the following values, typically based only on the *ype* of its input.
 
 <!-- START_HASH_TRAITS -->
-
 1. `WriteHash()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
     and takes a hash of that (this is the default behavior). `StableHashTraits.write(io, x)`
     falls back to `Base.write(io, x)` if no specialized methods are defined for x.
@@ -65,7 +64,7 @@ You can customize the hash behavior for particular types by implementing the tra
         `pair[1]`—or `:ByName`—which sorts by lexigraphical order.
 4. `FnHash(fn, [method])`: hash the result of applying `fn` to the given object. Optionally,
    use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result to
-   determine how to hash it. There are two built-in functions common to make use of with
+   determine how to hash it. There are two built-in functions commonly used with
    `FnHash`
     - `qualified_name`: Get the qualified name of an objects type, e.g. `Base.String`
     - `qualified_type`: Get the qualified name and type parameters of a type, e.g.
@@ -75,13 +74,12 @@ You can customize the hash behavior for particular types by implementing the tra
     string-ification of types.
 5. `ConstantHash(value, [method])`: hash the constant `value`. Optionally, use `method` to
     hash the `value`, otherwise call `hash_method` on `value` to determine how to hash it.
-5. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
+6. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
     results. 
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
 fields are the same for `StructHash`, the hash will be the same; etc...
-
 <!-- END_HASH_TRAITS -->
 
 ## Breaking changes
@@ -97,20 +95,21 @@ However, far fewer manual defintions of `hash_method` become necessary. The fall
 - **Breaking**: `stable_hash` no longer accepts mutliple objects to hash (wrap them in a
   tuple instead); it now accepts a single object to hash, and the second positional argument
   is the context (see below for details on contexts).
-- **Deprecation**: The options to return from `hash_method` have changed quite a bit. You
-  will need to replace the old names to avoid deprecation warnings:
+- **Deprecation**: The traits to return from `hash_method` have changed quite a bit. You
+  will need to replace the old names as follows to avoid deprecation warnings during your
+  tests:
     - Favor `StructHash()` (which uses `fieldnames` instead of `propertynames`) 
       to `UseProperties()`.
     - *BUT* to reproduce `UseProperties()`, call `StructHash(propertynames => getproperty)`
     - Replace `UseQualifiedName()` with `HashFn(qualified_name, HashWrite())`
     - Replace `UseSize(method)` with `HashFn(size, method)`
     - Reaplce `UseTable` with `HashFn(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn))`
-- **Deprecation**: The fallback methods above are defined within a specific context
-  (`HashContext{1}`). Any contexts you make should should define a
-  `parent_context` method that returns e.g. `HashContext{1}` so that the
-  fallback implementation for any methods of `hash_method` you don't implement work
-  properly. (A default version of `parent_context` raises a deprecation warning and returns
-  `HashContext{1}`). Refer to the discussion below about contexts.
+- **Deprecation**: The fallback methods above for hashing are defined within a specific
+  context (`HashContext{1}`). Any contexts you make should should define a `parent_context`
+  method that returns e.g. `HashContext{1}` so that the fallback implementation for any
+  methods of `hash_method` you don't implement work properly. (A default version of
+  `parent_context` raises a deprecation warning and returns `HashContext{1}`). Refer to the
+  discussion below about contexts.
 
 ### In 0.3:
 
@@ -138,7 +137,6 @@ you only defined a `StableHashTraits.write` method and no `hash_method`, its has
 changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 
 <!-- START_CONTEXTS -->
-
 ## Customizing hash computations with contexts
 
 You can customize how hashes are computed within a given scope using a context object. This
@@ -179,5 +177,4 @@ call to `stable_hash` above to succeede.
 Contexts can be customized not only when you call `stable_hash` but also when you hash the
 contents of a particular object. This lets you change how hashing occurs within the object.
 See the docstring of `HashAndContext` for details. 
-
 <!-- END_CONTEXTS -->
