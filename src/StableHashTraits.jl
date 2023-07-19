@@ -1,6 +1,7 @@
 module StableHashTraits
 
-export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash, HashAndContext, HashVersion,
+export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash,
+       HashAndContext, HashVersion,
        qualified_name, qualified_type, TablesEq, ViewsEq
 using CRC32c, TupleTools, Compat, Tables
 using SHA: SHA, sha256
@@ -159,7 +160,8 @@ contents of a particular object. This lets you change how hashing occurs within 
 See the docstring of [`HashAndContext`](@ref) for details. 
 """
 hash_method(x, context) = hash_method(x, parent_context(context))
-hash_method(_, ::Nothing) = nothing # signals that no method is available
+hash_method(x, ::Nothing) = hash_method(x)
+hash_method(_) = nothing # signals that no method is available
 
 function stable_hash_helper(x, hash_state, context, method::Tuple{})
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects"*
@@ -203,7 +205,8 @@ digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 @deprecate UseProperties(order=:ByOrder) StructHash(propertynames => getproperty, order)
 @deprecate UseQualifiedName(method=nothing) (FnHash(qualified_name), method)
 @deprecate UseSize(method=nothing) (FnHash(size), method)
-@deprecate UseTable() FnHash(Tables.columntable, StructHash)
+@deprecate UseTable() FnHash(Tables.columns, 
+                             StructHash(Tables.columnnames => Tables.getcolumn))
 
 # These are the various methods to compute a hash from an object
 
@@ -317,9 +320,12 @@ function stable_hash_helper(x, hash_state, context, method::Union{FnHash, Consta
     y = get_value_(x, method)
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method
-        throw(ArgumentError("Your use of `$(nameof(method))` for an object of type "*
-                            "`$(typeof(x))` in context of type `$(typeof(context))` "*
-                            "would cause a `StackOverflowError`."))
+        methodstr = nameof(typeof(method))
+        msg = """`$methodstr` is incorrectly called inside 
+              `hash_method(::$(typeof(x)), ::$(typeof(context))). Applying
+              it would lead to infinite recursion. This can usually be
+        fixed by passing a second argument to `$methodstr`."""
+        throw(ArgumentError(replace(msg, r"\s+" => " ")))
     end
 
     return stable_hash_helper(something(y), hash_state, context, new_method)
@@ -430,7 +436,10 @@ function is_columntable(::Type{T}) where {T}
     return T <: NamedTuple && all(f -> f <: AbstractVector, fieldtypes(T))
 end
 function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
-    Tables.istable(T) && return FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn))
+    if Tables.istable(T)
+        return (ConstantHash("Tables.istable"), 
+                FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn)))
+    end
     return StableHashTraits.hash_method(x, parent_context(m))
 end
 
@@ -447,7 +456,7 @@ end
 ViewsEq() = ViewsEq(HashVersion{1}())
 StableHashTraits.parent_context(x::ViewsEq) = x.parent
 function StableHashTraits.hash_method(::AbstractArray, ::ViewsEq)
-    return (ConstantHash("Base.AbstractArray"), FnHash(size, IterateHash()))
+    return (ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
 end
 function StableHashTraits.hash_method(::AbstractString, ::ViewsEq)
     return (ConstantHash("Base.AbstractString", WriteHash()), WriteHash())
