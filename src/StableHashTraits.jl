@@ -73,11 +73,13 @@ is_implemented(::Any) = true
 function stable_hash_helper(x, hash_state, context, method::NotImplemented)
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects" *
                         " of type $(typeof(x)) in context of type `$(typeof(context))`."))
+    return nothing
 end
 
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when " *
                         "hashing object $x."))
+    return nothing
 end
 
 #####
