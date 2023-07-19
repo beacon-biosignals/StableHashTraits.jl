@@ -391,9 +391,6 @@ struct TablesEq{T}
 end
 TablesEq() = TablesEq(HashVersion{1}())
 StableHashTraits.parent_context(x::TablesEq) = x.parent
-function is_columntable(::Type{T}) where {T}
-    return T <: NamedTuple && all(f -> f <: AbstractVector, fieldtypes(T))
-end
 function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
         return (ConstantHash("Tables.istable"),
