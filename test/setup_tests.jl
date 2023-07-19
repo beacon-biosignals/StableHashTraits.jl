@@ -5,6 +5,7 @@ using Test
 using Dates
 using UUIDs
 using SHA
+using CRC32c
 using DataFrames
 using Tables
 using AWSS3

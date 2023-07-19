@@ -2,6 +2,7 @@ module StableHashTraits
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq
+using TupleTools, Tables, Compat
 using SHA: SHA, sha256
 
 """
@@ -59,11 +60,22 @@ $HASH_CONTEXT_DOCS
 """
 hash_method(x, context) = hash_method(x, parent_context(context))
 hash_method(x, ::Nothing) = hash_method(x)
-hash_method(_) = () # signals that no method is available
+# we signal that a method specific to a type is not available using `NotImplemented`; we
+# need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext{1}) where T`
+# below for details
+struct NotImplemented end
+hash_method(_) = NotImplemented()
+is_implemented(::NotImplemented) = false
+is_implemented(::Any) = true
 
-function stable_hash_helper(x, hash_state, context, method::Tuple{})
+function stable_hash_helper(x, hash_state, context, method::NotImplemented)
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects"*
                         " of type $(typeof(x)) in context of type `$(typeof(context))`."))
+end
+
+function stable_hash_helper(x, hash_state, context, method)
+    throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when "*
+                        "hashing object $x."))
 end
 
 #####
@@ -100,12 +112,13 @@ digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 # deprecations
 @deprecate UseWrite() WriteHash()
 @deprecate UseIterate() IterateHash()
-@deprecate UseProperties(order=:ByOrder) StructHash(propertynames => getproperty, order)
-@deprecate UseQualifiedName(method=nothing) (FnHash(qualified_name), method)
-@deprecate UseSize(method=nothing) (FnHash(size), method)
+@deprecate UseProperties(order) StructHash(propertynames => getproperty, order)
+@deprecate UseProperties() StructHash(propertynames => getproperty)
+@deprecate UseQualifiedName(method) (FnHash(qualified_name, HashWrite()), method)
+@deprecate UseQualifiedName() FnHash(qualified_name, HashWrite())
+@deprecate UseSize(method)  (FnHash(size), method)
 @deprecate UseTable() FnHash(Tables.columns, 
                              StructHash(Tables.columnnames => Tables.getcolumn))
-
 # These are the various methods to compute a hash from an object
 
 struct WriteHash end
@@ -147,7 +160,7 @@ function stable_hash_helper(x, hash_state, context, ::IterateHash)
     return hash_foreach(identity, hash_state, context, x)
 end
 function hash_foreach(fn, hash_state, context, args...)
-    update!(hash_state, UInt8[])
+    update!(hash_state, UInt8[]) # marks this hash state so it can be digest!'ed
     foreach(args...) do as...
         el = fn(as...)
         val = stable_hash_helper(el, similar_hasher(hash_state), context,
@@ -180,10 +193,8 @@ end
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
 qualified_name(fn::Function) = qname_(fn, nameof)
 qualified_type(fn::Function) = qname_(fn, string)
-qualified_name(x::T) where {T} = qname_(T, nameof)
-qualified_type(x::T) where {T} = qname_(T, string)
-qualified_name(::Type{T}, p) where {T} = qname_(T, nameof)
-qualified_type(::Type{T}, p) where {T} = qname_(T, string)
+qualified_name(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
+qualified_type(x::T) where {T} = qname_(T <: DataType ? x : T, string)
 
 function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
@@ -226,10 +237,11 @@ function stable_hash_helper(x, hash_state, context, method::Union{FnHash, Consta
         throw(ArgumentError(replace(msg, r"\s+" => " ")))
     end
 
-    return stable_hash_helper(something(y), hash_state, context, new_method)
+    return stable_hash_helper(y, hash_state, context, new_method)
 end
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
+    update!(hash_state, UInt8[]) # marks the hash state as `digest!`able
     for method in methods
         val = stable_hash_helper(x, similar_hasher(hash_state), context, method)
         recursive_hash!(hash_state, val)
@@ -262,6 +274,9 @@ end
 StableHashTraits.hash_method(::Number, ::EndianInvariant) = FnHash(htol, WriteHash())
 StableHashTraits.hash_method(::CrossPlatformData) = HashAndContext(IterateHash(), EndianInvariant)
 ```
+
+Not that we could accomplish this same behavior using `HashFn(x -> htol.(x.data))`, but it
+would require copying that data to do so.
 """
 struct HashAndContext{F,M}
     parent::M
@@ -294,13 +309,17 @@ function parent_context(x::Any)
 end
 
 function hash_method(x::T, c::HashVersion{1}) where {T}
-    # we need to compute `default_method` here because `hash_method(x::MyType, ::Any)` is
-    # less specific than the current method, but if we have something defined for a specific
-    # type as the first argument, we want to use it. (note that changing to x::Any, and
-    # using T = typeof(x) would just lead to method ambiguities)
+    # we need to find `default_method` here because `hash_method(x::MyType, ::Any)` is less
+    # specific than the current method, but if we have something defined for a specific type
+    # as the first argument, we want that to be used, rather than this fallback (as if it
+    # were defined as `hash_method(::Any)`). Note that changing this method to be x::Any,
+    # and using T = typeof(x) would just lead to method ambiguities when trying to decide
+    # between `hash_method(::Any, ::HashVersion{1})` vs. `hash_method(::MyType, ::Any)`.
+    # Furthermore, this would would require the user to define `hash_method` with two
+    # arguments.
     default_method = hash_method(x, parent_context(c))
-    isempty(default_method) || return default_method
-    Base.isprimitivetype(T) && return UseWrite()
+    is_implemented(default_method) && return default_method
+    Base.isprimitivetype(T) && return WriteHash()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
     return (FnHash(qualified_type), StructHash(:ByName))
@@ -317,7 +336,7 @@ function hash_method(::AbstractDict, ::HashVersion{1})
 end
 hash_method(::Tuple, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
 hash_method(::Pair, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
-hash_method(::Type, ::HashVersion{1}) = FnHash(qualified_name)
+hash_method(::Type, ::HashVersion{1}) = (ConstantHash("Base.DataType"), FnHash(qualified_name))
 hash_method(::Function, ::HashVersion{1}) = (ConstantHash("Base.Function"), FnHash(qualified_name))
 hash_method(::AbstractSet, ::HashVersion{1}) = (FnHash(qualified_name), FnHash(sort! ∘ collect))
 

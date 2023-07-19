@@ -76,10 +76,7 @@ You can customize the hash behavior for particular types by implementing the tra
 5. `ConstantHash(value, [method])`: hash the constant `value`. Optionally, use `method` to
     hash the `value`, otherwise call `hash_method` on `value` to determine how to hash it.
 5. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
-    results. You can use an empty tuple to indicate that no customized hash method exists
-    for your type; this is roughly equivalent to not implementing the method, but this may
-    be useful in some cases to avoid method ambiguities, and is used internally to
-    approriately handle the fallbacks for the default hash context.
+    results. 
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
@@ -105,8 +102,8 @@ However, far fewer manual defintions of `hash_method` become necessary. The fall
     - Favor `StructHash()` (which uses `fieldnames` instead of `propertynames`) 
       to `UseProperties()`.
     - *BUT* to reproduce `UseProperties()`, call `StructHash(propertynames => getproperty)`
-    - Replace `UseQualifiedName()` with `HashFn(qualified_name)`
-    - Replace `UseSize` with `HashFn(size)`
+    - Replace `UseQualifiedName()` with `HashFn(qualified_name, HashWrite())`
+    - Replace `UseSize(method)` with `HashFn(size, method)`
     - Reaplce `UseTable` with `HashFn(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn))`
 - **Deprecation**: The fallback methods above are defined within a specific context
   (`HashContext{1}`). Any contexts you make should should define a
@@ -151,8 +148,8 @@ is passed as the second argument to `stable_hash`. By default it is equal to
 defined.
 
 This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
-is the method called for `UseWrite`, and falls back to `Base.write`). Because of the way the
-default context (`HashVersion{1}`) is defined, you normally don't have to include this
+is the method called for `WriteHash`, and falls back to `Base.write`). Because of the way
+the default context (`HashVersion{1}`) is defined, you normally don't have to include this
 context as an argument when you define a method of `hash_context` or `write` because there
 are appropriate fallback methods.
 
