@@ -69,12 +69,12 @@ is_implemented(::NotImplemented) = false
 is_implemented(::Any) = true
 
 function stable_hash_helper(x, hash_state, context, method::NotImplemented)
-    throw(ArgumentError("There is no appropriate `hash_method` defined for objects"*
+    throw(ArgumentError("There is no appropriate `hash_method` defined for objects" *
                         " of type $(typeof(x)) in context of type `$(typeof(context))`."))
 end
 
 function stable_hash_helper(x, hash_state, context, method)
-    throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when "*
+    throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when " *
                         "hashing object $x."))
 end
 
@@ -116,8 +116,8 @@ digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 @deprecate UseProperties() StructHash(propertynames => getproperty)
 @deprecate UseQualifiedName(method) (FnHash(qualified_name, HashWrite()), method)
 @deprecate UseQualifiedName() FnHash(qualified_name, HashWrite())
-@deprecate UseSize(method)  (FnHash(size), method)
-@deprecate UseTable() FnHash(Tables.columns, 
+@deprecate UseSize(method) (FnHash(size), method)
+@deprecate UseTable() FnHash(Tables.columns,
                              StructHash(Tables.columnnames => Tables.getcolumn))
 # These are the various methods to compute a hash from an object
 
@@ -222,10 +222,10 @@ struct ConstantHash{T,H}
     constant::T
     result_method::H # if non-nothing, apply to value `constant`
 end
-ConstantHash(val) = ConstantHash{typeof(val), Nothing}(val, nothing)
+ConstantHash(val) = ConstantHash{typeof(val),Nothing}(val, nothing)
 get_value_(x, method::ConstantHash) = method.constant
 
-function stable_hash_helper(x, hash_state, context, method::Union{FnHash, ConstantHash})
+function stable_hash_helper(x, hash_state, context, method::Union{FnHash,ConstantHash})
     y = get_value_(x, method)
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method
@@ -325,20 +325,30 @@ function hash_method(x::T, c::HashVersion{1}) where {T}
     return (FnHash(qualified_type), StructHash(:ByName))
 end
 hash_method(::NamedTuple, ::HashVersion{1}) = (FnHash(qualified_name), StructHash())
-hash_method(::AbstractRange, ::HashVersion{1}) = (FnHash(qualified_name), StructHash(:ByName))
+function hash_method(::AbstractRange, ::HashVersion{1})
+    return (FnHash(qualified_name), StructHash(:ByName))
+end
 function hash_method(::AbstractArray, ::HashVersion{1})
     return (FnHash(qualified_name), FnHash(size), IterateHash())
 end
-hash_method(::AbstractString, ::HashVersion{1}) = (FnHash(qualified_name, WriteHash()), WriteHash())
+function hash_method(::AbstractString, ::HashVersion{1})
+    return (FnHash(qualified_name, WriteHash()), WriteHash())
+end
 hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
 function hash_method(::AbstractDict, ::HashVersion{1})
     return (FnHash(qualified_name), StructHash(keys => getindex, :ByName))
 end
 hash_method(::Tuple, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
 hash_method(::Pair, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
-hash_method(::Type, ::HashVersion{1}) = (ConstantHash("Base.DataType"), FnHash(qualified_name))
-hash_method(::Function, ::HashVersion{1}) = (ConstantHash("Base.Function"), FnHash(qualified_name))
-hash_method(::AbstractSet, ::HashVersion{1}) = (FnHash(qualified_name), FnHash(sort! ∘ collect))
+function hash_method(::Type, ::HashVersion{1})
+    return (ConstantHash("Base.DataType"), FnHash(qualified_name))
+end
+function hash_method(::Function, ::HashVersion{1})
+    return (ConstantHash("Base.Function"), FnHash(qualified_name))
+end
+function hash_method(::AbstractSet, ::HashVersion{1})
+    return (FnHash(qualified_name), FnHash(sort! ∘ collect))
+end
 
 """
     TablesEq(parent_context)
@@ -357,7 +367,7 @@ function is_columntable(::Type{T}) where {T}
 end
 function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
-        return (ConstantHash("Tables.istable"), 
+        return (ConstantHash("Tables.istable"),
                 FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn)))
     end
     return StableHashTraits.hash_method(x, parent_context(m))

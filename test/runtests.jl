@@ -19,7 +19,8 @@ include("setup_tests.jl")
     @test_reference "references/ref14.txt" bytes2hex(stable_hash(Time("12:00")))
     @test_reference "references/ref15.txt" bytes2hex(stable_hash(TimePeriod(Nanosecond(0))))
     @test_reference "references/ref16.txt" bytes2hex(stable_hash(Hour(1) + Minute(2)))
-    @test_reference "references/ref17.txt" bytes2hex(stable_hash(DataFrame(; x=1:10, y=1:10)))
+    @test_reference "references/ref17.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
+                                                                           y=1:10)))
     @test_reference "references/ref18.txt" bytes2hex(stable_hash(Dict(:a => "1", :b => "2")))
     @test_reference "references/ref19.txt" bytes2hex(stable_hash(ExtraTypeParams{:A,Int}(2)))
 
@@ -37,8 +38,9 @@ include("setup_tests.jl")
     @test_reference "references/ref27.txt" bytes2hex(stable_hash(v"0.1.0"; alg=sha1))
     @test_reference "references/ref28.txt" bytes2hex(stable_hash(sin; alg=sha1))
     @test_reference "references/ref29.txt" bytes2hex(stable_hash(Set(1:3); alg=sha1))
-    @test_reference "references/ref30.txt" bytes2hex(stable_hash(DataFrame(; x=1:10, y=1:10),
-                                                       TablesEq(); alg=sha1))
+    @test_reference "references/ref30.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
+                                                                           y=1:10),
+                                                                 TablesEq(); alg=sha1))
     @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
 
     # verifies that transform can be called recursively
