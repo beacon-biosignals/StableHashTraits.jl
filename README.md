@@ -43,8 +43,8 @@ It isn't intended for secure hashing.
 
 You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hasing occurs (it defaults to `HashVersion{1}()`), see the final section in the README for more details.
 
-There are sensible defaults that ensure that if two values are different the input to the
-hash algorithm will differ. 
+There are sensible defaults for `stable_hash` that aim to ensure that if two values are
+different the input to the hash algorithm will differ. 
 
 You can customize the hash behavior for particular types by implementing the trait
 `StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional
@@ -100,7 +100,8 @@ However, far fewer manual defintions of `hash_method` become necessary. The fall
   `HashAndContext`.
 - **Breaking**: `stable_hash` no longer accepts mutliple objects to hash (wrap them in a
   tuple instead); it now accepts a single object to hash, and the second positional argument
-  is the context (see below for details on contexts).
+  is the context (see below for details on contexts). 
+- **Breaking**: The default `alg` for `stable_hash` is `sha256`
 - **Deprecation**: The traits to return from `hash_method` have changed quite a bit. You
   will need to replace the old names as follows to avoid deprecation warnings during your
   tests:
