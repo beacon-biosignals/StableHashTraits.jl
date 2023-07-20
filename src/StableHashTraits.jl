@@ -36,7 +36,8 @@ third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(x, context=HashVersion{1}(); alg=sha256)
-    return digest!(stable_hash_helper(x, setup_hash_state(alg), context, hash_method(x, context)))
+    return digest!(stable_hash_helper(x, setup_hash_state(alg), context,
+                                      hash_method(x, context)))
 end
 
 # extract contents of README so we can insert it into the some of the docstrings
@@ -106,9 +107,9 @@ digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 mutable struct GenericFunHash{F,T}
     hasher::F
     hash::Union{T,Nothing}
-    function GenericFunHash(fn) 
+    function GenericFunHash(fn)
         hash = fn(UInt8[])
-        new{typeof(fn),typeof(hash)}(fn, hash)
+        return new{typeof(fn),typeof(hash)}(fn, hash)
     end
 end
 setup_hash_state(fn) = GenericFunHash(fn)
