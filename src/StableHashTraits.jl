@@ -36,7 +36,7 @@ third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(x, context=HashVersion{1}(); alg=sha256)
-    return digest!(stable_hash_helper(x, setup_hash(alg), context, hash_method(x, context)))
+    return digest!(stable_hash_helper(x, setup_hash_state(alg), context, hash_method(x, context)))
 end
 
 # extract contents of README so we can insert it into the some of the docstrings
@@ -87,31 +87,36 @@ end
 ##### Hash Function API 
 #####
 
-# SHA functions need to `update!` an context object for each object to hash and then
-# `digest!` to get a final result. Many simpler hashing functions just take a second
-# argument that is the output of a previous call to that function. We convert these generic
-# functional hashes to match the interface of `SHA`, since it is the more general case.
+# setup_hash_state: given a function that identifies the hash, setup up the state used for hashing
+for fn in filter(startswith("sha") ∘ string, names(SHA))
+    CTX = Symbol(uppercase(string(fn)), :_CTX)
+    if CTX in names(SHA)
+        @eval setup_hash_state(::typeof(SHA.$(fn))) = SHA.$(CTX)()
+    end
+end
+# similar_hash_state: setup up a new hasher, given some existing state created by `setup_hash_state`
+similar_hash_state(ctx::SHA.SHA_CTX) = typeof(ctx)()
+# update!: update the hash state with some new data to hash
+update!(sha::SHA.SHA_CTX, bytes) = SHA.update!(sha, bytes)
+# digest!: convert the hash state to the final hashed value
+digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
+
+# convert a function of the form `new_hash = hasher(x, [old_hash])`, to conform to the API
+# above that uses `setup_hash_state`, `similar_hash_state`, `update!` and `digest!`
 mutable struct GenericFunHash{F,T}
     hasher::F
     hash::Union{T,Nothing}
-    GenericFunHash(fn) = new{typeof(fn),typeof(fn(""))}(fn, nothing)
+    function GenericFunHash(fn) 
+        hash = fn(UInt8[])
+        new{typeof(fn),typeof(hash)}(fn, hash)
+    end
 end
-setup_hash(fn) = GenericFunHash(fn)
+setup_hash_state(fn) = GenericFunHash(fn)
 function update!(fn::GenericFunHash, bytes)
     return fn.hash = isnothing(fn.hash) ? fn.hasher(bytes) : fn.hasher(bytes, fn.hash)
 end
 digest!(fn::GenericFunHash) = fn.hash
-similar_hasher(fn::GenericFunHash) = GenericFunHash(fn.hasher)
-
-for fn in filter(startswith("sha") ∘ string, names(SHA))
-    CTX = Symbol(uppercase(string(fn)), :_CTX)
-    if CTX in names(SHA)
-        @eval setup_hash(::typeof(SHA.$(fn))) = SHA.$(CTX)()
-    end
-end
-similar_hasher(ctx::SHA.SHA_CTX) = typeof(ctx)()
-update!(sha::SHA.SHA_CTX, bytes) = SHA.update!(sha, bytes)
-digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
+similar_hash_state(fn::GenericFunHash) = GenericFunHash(fn.hasher)
 
 #####
 ##### Hash Traits
@@ -155,12 +160,8 @@ end
 
 function recursive_hash!(hash_state, nested_hash_state)
     nested_hash = digest!(nested_hash_state)
-    # digest will return nothing if no objects have been added to the hash when using
-    # GenericFunHash; in this case, don't update the hash at all
-    if !isnothing(nested_hash)
-        update!(hash_state, copy(reinterpret(UInt8, vcat(nested_hash))))
-    end
-    return hash
+    update!(hash_state, copy(reinterpret(UInt8, vcat(nested_hash))))
+    return hash_state
 end
 
 struct IterateHash end
@@ -168,10 +169,9 @@ function stable_hash_helper(x, hash_state, context, ::IterateHash)
     return hash_foreach(identity, hash_state, context, x)
 end
 function hash_foreach(fn, hash_state, context, args...)
-    update!(hash_state, UInt8[]) # marks this hash state so it can be digest!'ed
     foreach(args...) do as...
         el = fn(as...)
-        val = stable_hash_helper(el, similar_hasher(hash_state), context,
+        val = stable_hash_helper(el, similar_hash_state(hash_state), context,
                                  hash_method(el, context))
         return recursive_hash!(hash_state, val)
     end
@@ -249,9 +249,8 @@ function stable_hash_helper(x, hash_state, context, method::Union{FnHash,Constan
 end
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
-    update!(hash_state, UInt8[]) # marks the hash state as `digest!`able
     for method in methods
-        val = stable_hash_helper(x, similar_hasher(hash_state), context, method)
+        val = stable_hash_helper(x, similar_hash_state(hash_state), context, method)
         recursive_hash!(hash_state, val)
     end
 
