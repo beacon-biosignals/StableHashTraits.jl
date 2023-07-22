@@ -169,11 +169,11 @@ struct IterateHash end
 function stable_hash_helper(x, hash_state, context, ::IterateHash)
     return hash_foreach(identity, hash_state, context, x)
 end
-function hash_foreach(fn, hash_state, context, args...)
-    foreach(args...) do as...
-        el = fn(as...)
-        val = stable_hash_helper(el, similar_hash_state(hash_state), context,
-                                 hash_method(el, context))
+function hash_foreach(fn, hash_state, context, xs)
+    for x in xs
+        f_x = fn(x)
+        val = stable_hash_helper(f_x, similar_hash_state(hash_state), context,
+                                 hash_method(f_x, context))
         return recursive_hash!(hash_state, val)
     end
     return hash_state
@@ -283,7 +283,7 @@ StableHashTraits.hash_method(::Number, ::EndianInvariant) = FnHash(htol, WriteHa
 StableHashTraits.hash_method(::CrossPlatformData) = HashAndContext(IterateHash(), EndianInvariant)
 ```
 
-Not that we could accomplish this same behavior using `HashFn(x -> htol.(x.data))`, but it
+Note that we could accomplish this same behavior using `HashFn(x -> htol.(x.data))`, but it
 would require copying that data to do so.
 """
 struct HashAndContext{F,M}
@@ -313,7 +313,7 @@ should return `nothing` so that the single argument fallback for `hash_method` c
 called. 
 
 Furthermore, if you implement a root context and want to implement `hash_method` over `Any`
-you will instead have to manually mangae the fallback mechanism as follows:
+you will instead have to manually manage the fallback mechanism as follows:
 
 ```julia
 # generic fallback method
