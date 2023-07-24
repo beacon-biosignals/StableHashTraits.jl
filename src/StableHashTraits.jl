@@ -177,7 +177,7 @@ function hash_foreach(fn, hash_state, context, xs)
         f_x = fn(x)
         val = stable_hash_helper(f_x, similar_hash_state(hash_state), context,
                                  hash_method(f_x, context))
-        return recursive_hash!(hash_state, val)
+        recursive_hash!(hash_state, val)
     end
     return hash_state
 end
