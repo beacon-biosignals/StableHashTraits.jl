@@ -114,7 +114,7 @@ However, far fewer manual defintions of `hash_method` become necessary. The fall
     - Replace `UseQualifiedName()` with `FnHash(qualified_name, HashWrite())`
     - Replace `UseSize(method)` with `(FnHash(size), method)`
     - Replace `UseTable` with `FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn))`
-- **Deprecation**: The fallback methods above for hashing are defined within a specific
+- **Deprecation**: The fallback methods for hashing are defined within a specific
   context (`HashContext{1}`). Any contexts you make should define a `parent_context`
   method that returns e.g. `HashContext{1}` so that the fallback implementation for any
   methods of `hash_method` you don't implement work properly. (A default version of
@@ -178,9 +178,9 @@ c = NamedTuplesEq(HashVersion{1}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
 ```
 
-If we did not define a method of `parent_context`, our context would need to implement a
-`hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and `Pair` for the
-call to `stable_hash` above to succeede. 
+If we instead defined `parent_context` to return `nothing`, our context would need to
+implement a `hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and
+`Pair` for the call to `stable_hash` above to succeed. 
 
 ### Customizing hashes within an object
 
