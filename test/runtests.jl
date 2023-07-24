@@ -24,14 +24,15 @@ include("setup_tests.jl")
     @test_reference "references/ref18.txt" bytes2hex(stable_hash(Dict(:a => "1", :b => "2")))
     @test_reference "references/ref19.txt" bytes2hex(stable_hash(ExtraTypeParams{:A,Int}(2)))
 
-    # get some code coverage (and reference tests) for crc32c
-    @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=crc32c)
-    @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=crc32c)
-    @test_reference "references/ref22.txt" stable_hash(sin; alg=crc32c)
-    @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=crc32c)
+    # get some code coverage (and reference tests) for a generic hash function
+    hashfn = (x, s=0x000000) -> crc32c(copy(x), s)
+    @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=hashfn)
+    @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=hashfn)
+    @test_reference "references/ref22.txt" stable_hash(sin; alg=hashfn)
+    @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=hashfn)
     @test_reference "references/ref24.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
-                                                       TablesEq(); alg=crc32c)
-    @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=crc32c)
+                                                       TablesEq(); alg=hashfn)
+    @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=hashfn)
 
     # get some code coverage (and reference tests) for sha1
     @test_reference "references/ref26.txt" bytes2hex(stable_hash([1, 2, 3]; alg=sha1))

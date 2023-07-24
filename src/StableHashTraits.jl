@@ -28,8 +28,8 @@ should *not* change. (Note that the number in `HashVersion` may not necessarily 
 package verison of `StableHashTraits`).
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
-related function from `SHA` or any function of the form `hash(x, [old_hash])`, such as
-CRC32c.crc32c.
+related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
+[old_hash])`.
 
 The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
 third argument to [`StableHashTraits.write`](@ref)
@@ -61,7 +61,10 @@ $HASH_TRAITS_DOCS
 
 $HASH_CONTEXT_DOCS
 """
+# recurse up to the parent until a method is defined or we hit the root (with parent `nothing`)
 hash_method(x, context) = hash_method(x, parent_context(context))
+# if we hit the root context, we call the one-argument form, which could be extended by a
+# user
 hash_method(x, ::Nothing) = hash_method(x)
 # we signal that a method specific to a type is not available using `NotImplemented`; we
 # need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext{1}) where T`
@@ -69,7 +72,7 @@ hash_method(x, ::Nothing) = hash_method(x)
 struct NotImplemented end
 hash_method(_) = NotImplemented()
 is_implemented(::NotImplemented) = false
-is_implemented(::Any) = true
+is_implemented(_) = true
 
 function stable_hash_helper(x, hash_state, context, method::NotImplemented)
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects" *
@@ -161,7 +164,7 @@ end
 
 function recursive_hash!(hash_state, nested_hash_state)
     nested_hash = digest!(nested_hash_state)
-    update!(hash_state, copy(reinterpret(UInt8, vcat(nested_hash))))
+    update!(hash_state, reinterpret(UInt8, vcat(nested_hash)))
     return hash_state
 end
 
@@ -301,9 +304,9 @@ end
 """
     StableHashTraits.parent_context(context)
 
-Return the parent context of the given context object. (See [`hash_method`](@ref)
-for details of using context). The default method falls back to returning `HashVersion{1}`,
-but this is flagged as a deprecation warning; in the future it is expected that all contexts
+Return the parent context of the given context object. (See [`hash_method`](@ref) for
+details of using context). The default method falls back to returning `HashVersion{1}`, but
+this is flagged as a deprecation warning; in the future it is expected that all contexts
 define this method.
 
 This is normally all that you need to know to implement a new context. However, if your
@@ -325,11 +328,12 @@ function hash_method(x::T, ::MyRootContext) where T
 end
 ```
 
-This works because `hash_method(::Any)` returns a sentinal value that indicates that there
-is no more specific method available. This pattern is necessary to avoid the method
-ambiguities that would arise between `hash_method(x::MyType, ::Any)` and
-`hash_method(x::Any, ::MyRootContext)`. Generally if a type implements hash_method for
-itself, but absent a context, we want this `hash_method` to be used.
+This works because `hash_method(::Any)` returns a sentinal value
+(`StableHashTraits.NotImplemented()`) that indicates that there is no more specific method
+available. This pattern is necessary to avoid the method ambiguities that would arise
+between `hash_method(x::MyType, ::Any)` and `hash_method(x::Any, ::MyRootContext)`.
+Generally if a type implements hash_method for itself, but absent a context, we want this
+`hash_method` to be used.
 """
 function parent_context(x::Any)
     Base.depwarn("You should explicitly define a `parent_context` method for context " *
@@ -370,7 +374,7 @@ end
 hash_method(::Tuple, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
 hash_method(::Pair, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
 function hash_method(::Type, ::HashVersion{1})
-    return (ConstantHash("Base.DataType"), FnHash(qualified_name))
+    return (ConstantHash("Base.DataType"), FnHash(qualified_type))
 end
 function hash_method(::Function, ::HashVersion{1})
     return (ConstantHash("Base.Function"), FnHash(qualified_name))
