@@ -1,193 +1,144 @@
-using StableHashTraits
-using Aqua
-using Test
-using Dates
-using UUIDs
-using SHA
-using DataFrames
-Aqua.test_all(StableHashTraits)
-
-struct TestType
-    a::Any
-    b::Any
-end
-
-struct TestType2
-    a::Any
-    b::Any
-end
-
-struct TestType3
-    b::Any
-    a::Any
-end
-
-struct TestType4
-    b::Any
-    a::Any
-end
-
-struct TypeType
-    atype::Type
-end
-
-struct TestType5
-    bob::String
-end
-
-StableHashTraits.hash_method(::TestType) = UseProperties()
-StableHashTraits.hash_method(::TestType2) = UseQualifiedName(UseProperties())
-StableHashTraits.hash_method(::TestType3) = UseProperties(:ByName)
-StableHashTraits.hash_method(::TestType4) = UseProperties()
-StableHashTraits.hash_method(::TypeType) = UseProperties()
-StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
-
-struct MyContext end
-StableHashTraits.hash_method(::TestType, ::MyContext) = UseQualifiedName(UseProperties())
-
-struct NonTableStruct
-    x::Vector{Int}
-    y::Vector{Int}
-end
-StableHashTraits.hash_method(::NonTableStruct) = UseProperties()
-
-struct NestedObject{T}
-    x::T
-    index::Int
-end
-
-struct BasicHashObject
-    x::AbstractRange
-    y::Vector{Float64}
-end
-StableHashTraits.hash_method(x::BasicHashObject) = UseProperties()
-struct CustomHashObject
-    x::AbstractRange
-    y::Vector{Float64}
-end
-struct CustomContext{T}
-    old_context::T
-end
-function StableHashTraits.transform(val::CustomHashObject, context)
-    return (val.x, val.y), CustomContext(context)
-end
-StableHashTraits.hash_method(x::AbstractRange, ::CustomContext) = UseIterate()
-function StableHashTraits.hash_method(x, context::CustomContext)
-    return StableHashTraits.hash_method(x, context.old_context)
-end
+include("setup_tests.jl")
 
 @testset "StableHashTraits.jl" begin
     # reference tests to ensure hash consistency
-    @test stable_hash(()) == 0x48674bc7
-    @test stable_hash([1, 2, 3]) == 0x1a366aea
-    @test stable_hash([1 2; 3 4]) == 0x62398575
-    @test stable_hash((a=1, b=2)) == 0x240bb84c
-    @test stable_hash(Set(1:3)) == 0xba7294d4
-    @test stable_hash(sin) == 0x7706a39f
-    @test stable_hash(TestType2(1, 2)) == 0x1f99ed3b
-    @test stable_hash(TypeType(Array)) == 0xae27dba8
-    @test stable_hash(TestType5("bobo")) == 0x85c469dd
-    @test stable_hash(Nothing) == 0xb9695255
-    @test stable_hash(Missing) == 0xafd1df92
-    @test stable_hash(v"0.1.0") == 0x50cda5b5
-    @test stable_hash(UUID("8d70055f-1864-48ff-8a94-2c16d4e1d1cd")) == 0x81d55a52
-    @test stable_hash(Date("2002-01-01")) == 0x1e1a60e2
-    @test stable_hash(Time("12:00")) == 0xbe0d1056
-    @test stable_hash(TimePeriod(Nanosecond(0))) == 0x4bf33649
-    @test stable_hash(Hour(1) + Minute(2)) == 0xffe46034
-    @test stable_hash(DataFrame(; x=1:10, y=1:10)) == 0x2281617d
+    @test_reference "references/ref00.txt" bytes2hex(stable_hash(()))
+    @test_reference "references/ref01.txt" bytes2hex(stable_hash([1, 2, 3]))
+    @test_reference "references/ref02.txt" bytes2hex(stable_hash([1 2; 3 4]))
+    @test_reference "references/ref03.txt" bytes2hex(stable_hash((a=1, b=2)))
+    @test_reference "references/ref04.txt" bytes2hex(stable_hash(Set(1:3)))
+    @test_reference "references/ref05.txt" bytes2hex(stable_hash(sin))
+    @test_reference "references/ref06.txt" bytes2hex(stable_hash(TestType2(1, 2)))
+    @test_reference "references/ref07.txt" bytes2hex(stable_hash(TypeType(Array)))
+    @test_reference "references/ref08.txt" bytes2hex(stable_hash(TestType5("bobo")))
+    @test_reference "references/ref09.txt" bytes2hex(stable_hash(Nothing))
+    @test_reference "references/ref10.txt" bytes2hex(stable_hash(Missing))
+    @test_reference "references/ref11.txt" bytes2hex(stable_hash(v"0.1.0"))
+    @test_reference "references/ref12.txt" bytes2hex(stable_hash(UUID("8d70055f-1864-48ff-8a94-2c16d4e1d1cd")))
+    @test_reference "references/ref13.txt" bytes2hex(stable_hash(Date("2002-01-01")))
+    @test_reference "references/ref14.txt" bytes2hex(stable_hash(Time("12:00")))
+    @test_reference "references/ref15.txt" bytes2hex(stable_hash(TimePeriod(Nanosecond(0))))
+    @test_reference "references/ref16.txt" bytes2hex(stable_hash(Hour(1) + Minute(2)))
+    @test_reference "references/ref17.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
+                                                                           y=1:10)))
+    @test_reference "references/ref18.txt" bytes2hex(stable_hash(Dict(:a => "1", :b => "2")))
+    @test_reference "references/ref19.txt" bytes2hex(stable_hash(ExtraTypeParams{:A,Int}(2)))
 
-    # get some code coverage (and reference tests) for sha256
-    bytes = [0xe2, 0x4c, 0xcd, 0x9d, 0xed, 0xaf, 0x29, 0xa7, 0x70, 0x82, 0x2f, 0x5c, 0x30,
-             0x01, 0xd6, 0xa4, 0x45, 0x35, 0x18, 0x1d, 0xdd, 0x0f, 0x5c, 0x45, 0xb1, 0xd2,
-             0x67, 0xa9, 0x92, 0x19, 0x52, 0x3f]
-    @test stable_hash([1, 2, 3]; alg=sha256) == bytes
-
-    bytes = [0xef, 0xf2, 0x3f, 0x82, 0xb1, 0x2f, 0xf2, 0xb6, 0x92, 0x53, 0xb7, 0x53, 0xca,
-             0x06, 0xe6, 0xcf, 0x0b, 0xd5, 0xd7, 0xf1, 0xec, 0x7b, 0xce, 0xdc, 0x84, 0x7d,
-             0xbc, 0xf0, 0x5d, 0x70, 0x9b, 0x4e]
-    @test stable_hash(v"0.1.0"; alg=sha256) == bytes
-
-    bytes = [0x2e, 0x83, 0x68, 0xcb, 0x4a, 0x04, 0x5b, 0x11, 0xf5, 0x4b, 0x0d, 0xb6, 0x9a,
-             0x2d, 0x94, 0x73, 0x73, 0xe7, 0x03, 0xe1, 0x04, 0x7c, 0x49, 0x59, 0xec, 0x5f,
-             0xcc, 0x45, 0x62, 0xc0, 0x02, 0x4b]
-    @test stable_hash(sin; alg=sha256) == bytes
-
-    bytes = [0x93, 0x7a, 0x29, 0x84, 0xfd, 0x52, 0xb3, 0x8e, 0x1e, 0xf3, 0x0d, 0x9e, 0x9a,
-             0x59, 0x0d, 0xcf, 0x05, 0x43, 0x7c, 0xa7, 0xdf, 0x1e, 0x49, 0xb3, 0x4b, 0x0a,
-             0xcb, 0x8a, 0x67, 0x27, 0x38, 0xfc]
-    @test stable_hash(Set(1:3); alg=sha256) == bytes
-
-    bytes = [0x0b, 0x88, 0x79, 0x65, 0xf6, 0x26, 0xa4, 0xcd, 0x71, 0xa1, 0x6c, 0x77, 0xdf,
-             0x1e, 0x80, 0xc5, 0x4d, 0x67, 0x6d, 0xa0, 0x5e, 0xa6, 0xe9, 0x07, 0x28, 0xbb,
-             0xa4, 0x8d, 0x29, 0x02, 0x1f, 0x6a]
-    @test stable_hash(DataFrame(; x=1:10, y=1:10); alg=sha256) == bytes
-
-    bytes = [0xe1, 0x11, 0x53, 0xb9, 0xa6, 0x3d, 0x36, 0x2b, 0x2c, 0x02, 0x91, 0x1b, 0xfe,
-             0x3d, 0xbb, 0xc8, 0xa8, 0x29, 0x44, 0x55, 0x03, 0x70, 0x68, 0xd7, 0x19, 0x6d,
-             0x92, 0xa0, 0x92, 0xd4, 0x1e, 0xdb]
-    @test stable_hash([1 2; 3 4]; alg=sha256) == bytes
+    # get some code coverage (and reference tests) for a generic hash function
+    hashfn = (x, s=0x000000) -> crc32c(copy(x), s)
+    @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=hashfn)
+    @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=hashfn)
+    @test_reference "references/ref22.txt" stable_hash(sin; alg=hashfn)
+    @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=hashfn)
+    @test_reference "references/ref24.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
+                                                       TablesEq(); alg=hashfn)
+    @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=hashfn)
 
     # get some code coverage (and reference tests) for sha1
-    bytes = [0x2e, 0xa6, 0x1b, 0xde, 0xfe, 0x6e, 0x0a, 0x91, 0x07, 0xb0, 0x3d, 0x82, 0xf6,
-             0x55, 0xd7, 0x97, 0x7a, 0x8c, 0x8a, 0x60]
-    @test stable_hash([1, 2, 3]; alg=sha1) == bytes
+    @test_reference "references/ref26.txt" bytes2hex(stable_hash([1, 2, 3]; alg=sha1))
+    @test_reference "references/ref27.txt" bytes2hex(stable_hash(v"0.1.0"; alg=sha1))
+    @test_reference "references/ref28.txt" bytes2hex(stable_hash(sin; alg=sha1))
+    @test_reference "references/ref29.txt" bytes2hex(stable_hash(Set(1:3); alg=sha1))
+    @test_reference "references/ref30.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
+                                                                           y=1:10),
+                                                                 TablesEq(); alg=sha1))
+    @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
 
-    bytes = [0xa9, 0x01, 0x2a, 0x6e, 0xc7, 0xf0, 0x85, 0x6b, 0x00, 0xee, 0x05, 0xb5, 0x57,
-             0xa5, 0x8d, 0x4e, 0xd5, 0x50, 0x33, 0x0a]
-    @test stable_hash(v"0.1.0"; alg=sha1) == bytes
-
-    bytes = [0xa2, 0x5d, 0x76, 0xe5, 0xb6, 0x0c, 0x52, 0xca, 0x9d, 0xcb, 0xec, 0xf2, 0x10,
-             0x86, 0x00, 0x1c, 0xf9, 0xc5, 0x24, 0x6c]
-    @test stable_hash(sin; alg=sha1) == bytes
-
-    bytes = [0x16, 0xb3, 0x11, 0xf3, 0x75, 0xed, 0x41, 0xb8, 0x14, 0x51, 0x15, 0xb5, 0x7d,
-             0x5f, 0xb2, 0x48, 0x2e, 0x7e, 0xfc, 0xd1]
-    @test stable_hash(Set(1:3); alg=sha1) == bytes
-
-    bytes = [0xf0, 0xfd, 0x61, 0x9b, 0x9c, 0x53, 0xff, 0x5b, 0xda, 0x46, 0x9b, 0x83, 0x2a,
-             0x28, 0x86, 0xe0, 0x4e, 0x10, 0x69, 0x85]
-    @test stable_hash(DataFrame(; x=1:10, y=1:10); alg=sha1) == bytes
-
-    bytes = [0xc2, 0xea, 0x81, 0x6d, 0x33, 0x07, 0xf2, 0xdf, 0xb7, 0xd2, 0xb1, 0xa6, 0xaa,
-             0x1d, 0xc9, 0x6b, 0x37, 0xeb, 0xd8, 0x2b]
-    @test stable_hash([1 2; 3 4]; alg=sha1) == bytes
+    # verifies that transform can be called recursively
+    @test stable_hash(GoodTransform(2)) == stable_hash(GoodTransform("-0.2"))
+    @test stable_hash(GoodTransform(3)) != stable_hash(GoodTransform("-0.2"))
 
     # various (in)equalities
+    @test_throws ArgumentError stable_hash(BadTransform())
+
+    # dictionary like
+    @test stable_hash(Dict(:a => 1, :b => 2)) == stable_hash(Dict(:b => 2, :a => 1))
+    @test ((; kwargs...) -> stable_hash(kwargs))(; a=1, b=2) ==
+          ((; kwargs...) -> stable_hash(kwargs))(; b=2, a=1)
+    @test stable_hash((; a=1, b=2)) != stable_hash((; b=2, a=1))
+    @test stable_hash((; a=1, b=2)) != stable_hash((; a=2, b=1))
+
+    # table like
+    @test stable_hash((; x=collect(1:10), y=collect(1:10))) !=
+          stable_hash([(; x=i, y=i) for i in 1:10])
+    @test stable_hash([(; x=i, y=i) for i in 1:10]) !=
+          stable_hash(DataFrame(; x=1:10, y=1:10))
+    @test stable_hash((; x=collect(1:10), y=collect(1:10)), TablesEq()) ==
+          stable_hash([(; x=i, y=i) for i in 1:10], TablesEq())
+    @test stable_hash([(; x=i, y=i) for i in 1:10], TablesEq()) ==
+          stable_hash(DataFrame(; x=1:10, y=1:10), TablesEq())
+    @test stable_hash(DataFrame(; x=1:10, y=1:10)) !=
+          stable_hash(NonTableStruct(1:10, 1:10))
+    @test stable_hash(DataFrame(; x=1:10, y=1:10), TablesEq()) !=
+          stable_hash(NonTableStruct(1:10, 1:10), TablesEq())
+
+    # test out UseAndReplaceContext
     @test stable_hash(CustomHashObject(1:5, 1:10)) !=
           stable_hash(BasicHashObject(1:5, 1:10))
     @test stable_hash(Set(1:20)) == stable_hash(Set(reverse(1:20)))
     @test stable_hash([]) != stable_hash([(), (), ()])
+
     @test stable_hash([1 2; 3 4]) != stable_hash(vec([1 2; 3 4]))
-    @test stable_hash([1 2; 3 4]) == stable_hash([1 3; 2 4]')
+    @test stable_hash([1 2; 3 4]) != stable_hash([1 3; 2 4]')
+    @test stable_hash([1 2; 3 4]) != stable_hash([1 3; 2 4])
+    @test stable_hash([1 2; 3 4], ViewsEq()) != stable_hash(vec([1 2; 3 4]), ViewsEq())
+    @test stable_hash([1 2; 3 4], ViewsEq()) == stable_hash([1 3; 2 4]', ViewsEq())
+    @test stable_hash([1 2; 3 4], ViewsEq()) != stable_hash([1 3; 2 4], ViewsEq())
     @test stable_hash(reshape(1:10, 2, 5)) != stable_hash(reshape(1:10, 5, 2))
+    @test stable_hash(view(collect(1:5), 1:2)) != stable_hash([1, 2])
+    @test stable_hash(view(collect(1:5), 1:2), ViewsEq()) == stable_hash([1, 2], ViewsEq())
+
     @test stable_hash([(), ()]) != stable_hash([(), (), ()])
-    @test stable_hash(DataFrame(; x=1:10, y=1:10)) ==
-          stable_hash(NonTableStruct(1:10, 1:10))
-    @test stable_hash(1:10) == stable_hash((; start=1, stop=10))
+
+    @test stable_hash(1:10) != stable_hash((; start=1, stop=10))
+    @test stable_hash(1:10) != stable_hash(collect(1:10))
     @test stable_hash([1, 2, 3]) != stable_hash([3, 2, 1])
-    @test stable_hash((1, 2, 3)) == stable_hash([1, 2, 3])
+    @test stable_hash((1, 2, 3)) != stable_hash([1, 2, 3])
+
     @test stable_hash(v"0.1.0") != stable_hash(v"0.1.2")
-    @test stable_hash((a=1, b=2)) != stable_hash((b=2, a=1))
-    @test stable_hash((a=1, b=2)) != stable_hash((a=2, b=1))
-    @test stable_hash(sin) == stable_hash("Base.sin")
+
     @test stable_hash([:ab]) != stable_hash([:a, :b])
-    @test stable_hash("a", "b") != stable_hash("ab")
+    @test stable_hash(("a", "b")) != stable_hash("ab")
     @test stable_hash(["ab"]) != stable_hash(["a", "b"])
+    @test stable_hash(:foo) != stable_hash("foo")
+    @test stable_hash(:foo) != stable_hash(:bar)
+    @test stable_hash(view("bob", 1:2)) != stable_hash("bo")
+    @test stable_hash(view("bob", 1:2), ViewsEq()) == stable_hash("bo", ViewsEq())
+    @test stable_hash(S3Path("s3://foo/bar")) != stable_hash(S3Path("s3://foo/baz"))
+
     @test stable_hash(sin) != stable_hash(cos)
     @test stable_hash(sin) != stable_hash(:sin)
     @test stable_hash(sin) != stable_hash("sin")
-    @test stable_hash(1:10) != stable_hash(collect(1:10))
-    @test stable_hash(view(collect(1:5), 1:2)) == stable_hash([1, 2])
-    @test_throws ErrorException stable_hash(x -> x + 1)
+    @test stable_hash(sin) != stable_hash("Base.sin")
+    @test stable_hash(Int) != stable_hash("Base.Int")
+    @test_throws ArgumentError stable_hash(x -> x + 1)
+
+    @test stable_hash(Float64) != stable_hash("Base.Float64")
+    @test stable_hash(Array{Int,3}) != stable_hash(Array{Int,4})
+
+    @test stable_hash(ExtraTypeParams{:A,Int}(2)) != stable_hash(ExtraTypeParams{:B,Int}(2))
     @test stable_hash(TestType(1, 2)) == stable_hash(TestType(1, 2))
-    @test stable_hash(TestType(1, 2)) == stable_hash((a=1, b=2))
+    @test stable_hash(TestType(1, 2)) != stable_hash((a=1, b=2))
     @test stable_hash(TestType2(1, 2)) != stable_hash((a=1, b=2))
     @test stable_hash(TestType4(1, 2)) == stable_hash(TestType4(1, 2))
     @test stable_hash(TestType4(1, 2)) != stable_hash(TestType3(1, 2))
     @test stable_hash(TestType(1, 2)) == stable_hash(TestType3(2, 1))
     @test stable_hash(TestType(1, 2)) != stable_hash(TestType4(2, 1))
-    @test stable_hash(TestType(1, 2); context=MyContext()) != stable_hash(TestType(1, 2))
-    @test stable_hash(TestType2(1, 2); context=MyContext()) ==
-          stable_hash(TestType2(1, 2); context=MyContext())
+
+    @test_throws ArgumentError stable_hash(BadHashMethod())
+    @test_throws ArgumentError stable_hash("bob", BadRootContext())
+    @test stable_hash(1, BadRootContext()) isa Vector{UInt8}
+
+    @test (@test_deprecated(r"`parent_context`", stable_hash([1, 2], MyOldContext()))) !=
+          stable_hash([1, 2])
+    @test (@test_deprecated(r"`parent_context`", stable_hash("12", MyOldContext()))) ==
+          stable_hash("12")
+    @test_deprecated(UseProperties(:ByName))
+    @test_deprecated(UseQualifiedName())
+    @test_deprecated(UseSize(UseIterate()))
+    @test_deprecated(UseTable())
+end
+
+@testset "Aqua" begin
+    Aqua.test_all(StableHashTraits)
 end
