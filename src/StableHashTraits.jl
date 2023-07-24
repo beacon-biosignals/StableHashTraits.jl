@@ -61,6 +61,8 @@ $HASH_TRAITS_DOCS
 
 $HASH_CONTEXT_DOCS
 """
+function hash_method end
+
 # recurse up to the parent until a method is defined or we hit the root (with parent `nothing`)
 hash_method(x, context) = hash_method(x, parent_context(context))
 # if we hit the root context, we call the one-argument form, which could be extended by a

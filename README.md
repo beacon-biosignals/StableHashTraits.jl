@@ -37,8 +37,6 @@ This package can be useful any time one of the following holds:
 
 This is useful for content-addressed caching, in which e.g. some function of a value is stored at a location determined by a hash. Given the value, one can recompute the hash to determine where to look to see if the function evaluation on that value has already been cached.
 
-It isn't intended for secure hashing.
-
 ## Details
 
 You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section in the README for more details.
@@ -105,7 +103,8 @@ However, far fewer manual defintions of `hash_method` become necessary. The fall
 - **Breaking**: `stable_hash` no longer accepts mutliple objects to hash (wrap them in a
   tuple instead); it now accepts a single object to hash, and the second positional argument
   is the context (see below for details on contexts). 
-- **Breaking**: The default `alg` for `stable_hash` is `sha256`
+- **Breaking**: The default `alg` for `stable_hash` is `sha256`; to use the old default
+  (crc32c) you can pass `alg=(x,s=UInt32(0)) -> crc32c(copy(x),s)`.
 - **Deprecation**: The traits to return from `hash_method` have changed quite a bit. You
   will need to replace the old names as follows to avoid deprecation warnings during your
   tests:
@@ -154,8 +153,7 @@ changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 You can customize how hashes are computed within a given scope using a context object. This
 is also a very useful way to avoid type piracy. The context can be any object you'd like and
 is passed as the second argument to `stable_hash`. By default it is equal to
-`HashVersion{1}()` and this is the context for which the default fallbacks listed above are
-defined.
+`HashVersion{1}()` and this determines how objects are hashed when a more method specific is not defined.
 
 This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
 is the method called for `WriteHash`, and falls back to `Base.write`). Because of the way
