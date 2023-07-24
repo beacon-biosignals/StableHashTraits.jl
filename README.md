@@ -41,10 +41,10 @@ It isn't intended for secure hashing.
 
 ## Details
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hasing occurs (it defaults to `HashVersion{1}()`), see the final section in the README for more details.
+You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section in the README for more details.
 
 There are sensible defaults for `stable_hash` that aim to ensure that if two values are
-different the input to the hash algorithm will differ. 
+different, the input to the hash algorithm will differ. 
 
 You can customize the hash behavior for particular types by implementing the trait
 `StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional
@@ -52,6 +52,7 @@ second argument, the context. If you define a method that does not accept a cont
 be used in all contexts. Any method of `hash_method` should simply return one of the
 following values, typically based only on the *type* of its input.
 
+<!-- The text between START_ and END_ comments are extracted from this readme and inserted into julia docstrings -->
 <!-- START_HASH_TRAITS -->
 1. `WriteHash()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
     and takes a hash of that. `StableHashTraits.write(io, x)`
@@ -88,6 +89,7 @@ following values, typically based only on the *type* of its input.
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
 fields are the same for `StructHash`, the hash will be the same; etc...
+
 <!-- END_HASH_TRAITS -->
 
 ## Breaking changes
@@ -145,6 +147,7 @@ previous hash value. For example if you had a custom table type `MyCustomTable` 
 you only defined a `StableHashTraits.write` method and no `hash_method`, its hash will be
 changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 
+<!-- The text between START_ and END_ comments are extracted from this readme and inserted into julia docstrings -->
 <!-- START_CONTEXTS -->
 ## Customizing hash computations with contexts
 

@@ -113,6 +113,7 @@ include("setup_tests.jl")
     @test_throws ArgumentError stable_hash(x -> x + 1)
 
     @test stable_hash(Float64) != stable_hash("Base.Float64")
+    @test stable_hash(Array{Int, 3}) != stable_hash(Array{Int, 4})
 
     @test stable_hash(ExtraTypeParams{:A,Int}(2)) != stable_hash(ExtraTypeParams{:B,Int}(2))
     @test stable_hash(TestType(1, 2)) == stable_hash(TestType(1, 2))
