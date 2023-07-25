@@ -39,7 +39,7 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 
 ## Details
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section in the README for more details.
+You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section below for more details.
 
 There are sensible defaults for `stable_hash` that aim to ensure that if two values are
 different, the input to the hash algorithm will differ. 
@@ -87,6 +87,8 @@ following values, typically based only on the *type* of its input.
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
 fields are the same for `StructHash`, the hash will be the same; etc...
+
+Missing from the above list is one final, advanced, trait: `HashAndContext` which can be used to change the context within the scope of a given object. You can learn more about contexts below.
 
 <!-- END_HASH_TRAITS -->
 
