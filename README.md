@@ -80,8 +80,8 @@ following values, typically based only on the *type* of its input.
 5. `ConstantHash(value, [method])`: hash the constant `value`. Optionally, use `method` to
     hash the `value`, otherwise call `hash_method` on `value` to determine how to hash it.
 6. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
-    results. For example: (ConstantHash("header"), StructHash()) would compute a hash for
-    both the string `"header"` and the fields of the object, and the recursively hash
+    results. For example: `(ConstantHash("header"), StructHash())` would compute a hash for
+    both the string `"header"` and the fields of the object, and then recursively hash
     these two hashes.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
