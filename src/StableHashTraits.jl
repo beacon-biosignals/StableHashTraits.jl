@@ -205,10 +205,10 @@ function stable_hash_helper(x, hash_state, context, use::StructHash)
 end
 
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
-qualifier(fn::Function) = fn
-qualifier(x::T) where {T} = T <: DataType ? x : T
-qualified_name(x) = qname(qualifier(x), nameof)
-qualified_name(x) = qname(qualifier(x), string)
+qualified_name(fn::Function) = qname_(fn, nameof)
+qualified_type(fn::Function) = qname_(fn, string)
+qualified_name(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
+qualified_type(x::T) where {T} = qname_(T <: DataType ? x : T, string)
 
 function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
@@ -252,19 +252,6 @@ function stable_hash_helper(x, hash_state, context, method::Union{FnHash,Constan
     end
 
     return stable_hash_helper(y, hash_state, context, new_method)
-end
-
-qualifier_object(x::T) 
-qualifier_object(x::Function) = typeof(x)
-qualifier_object(::Type{T}) where T = T
-function stable_hash_helper(x, hash_state, context, method::FnHash{typeof(qualified_name)})
-    # TODO: how to reference the `alg` here (something from the hash_state)
-    type_cache = get!((context_type_cache, hash), contxt) do
-        return IdDict{DataType, hash_type(hash_state)}()
-        return get!()
-        @invoke stable_hash_helper(x::Any, hash_state::Any, context::Any,
-                                   method::Union{FnHash,ConstantHash})
-    end
 end
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
