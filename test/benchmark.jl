@@ -35,20 +35,17 @@ suite["tuples"]["base"] = @benchmarkable fnv(reinterpret(UInt8, data1))
 suite["tuples"]["trait"] = @benchmarkable stable_hash(data2; alg=$(fnv))
 
 # DATAPOINT: the recursive hashing itself, even without slowdowns from SHA
-# buffers is substantial
+# buffers is substantial; this can be fixed by optimizing how primitive
+# types are hashed (when `UseWrite` is set)
+
+# DATAPOINT: hashing arrays of tuples vs. matrices has overhead
+# because of the qualified name; if we can cash this string computation
+# per type, we should hopefully be much faster (try that next)
 
 # NEXT DATAPOINT: how much does sha's allocations slow things down?
 
 # NEXT DATAPOINT: how does this work when working with many small structs
 # (does the type hashing add a lot or is it mostly about the allocations?)
-
-# POSSIBLEY STRATEGY: assuming this all looks somewhat similar above,
-# we can address the above issues by changing how the recusive hashing
-# works: the 'recursive' bit will be replaced by sentitnal values 
-# that are unique to the depth of the calls to `stable_hash_helper`
-# one such sentinal value needs to be added per call to `stable_hash_helper`
-# this will need to be specific to the HashVersion{2}; HashVersion{1}
-# has to be slow in this case
 
 # NOTE: we can also probably further optimize by circumventing the `write`
 # operations for primitive types that can be directly hashed
@@ -68,8 +65,8 @@ end
 result = run(suite)
 
 for case in keys(result)
-    m1 = median(result[case]["base"])
-    m2 = median(result[case]["trait"])
+    m2 = median(result[case]["base"])
+    m1 = median(result[case]["trait"])
     println("")
     println("$case: ratio to baseline")
     println("----------------------------------------")
