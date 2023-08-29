@@ -34,6 +34,22 @@ data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
 suite["tuples"]["base"] = @benchmarkable hash(data)
 suite["tuples"]["trait"] = @benchmarkable stable_hash(data; alg=$(fnv))
 
+# DATAPOINT: the recursive hashing itself, even without slowdowns from SHA
+# buffers is substantial
+
+# NEXT DATAPOINT: how much does sha's allocations slow things down?
+
+# NEXT DATAPOINT: how does this work when working with many small structs
+# (does the type hashing add a lot or is it mostly about the allocations?)
+
+# POSSIBLEY STRATEGY: assuming this all looks somewhat similar above,
+# we can address the above issues by changing how the recusive hashing
+# works: the 'recursive' bit will be replaced by sentitnal values 
+# that are unique to the depth of the calls to `stable_hash_helper`
+# one such sentinal value needs to be added per call to `stable_hash_helper`
+# this will need to be specific to the HashVersion{2}; HashVersion{1}
+# has to be slow in this case
+
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
 # the benchmark parameters. Reusing cached parameters is faster and more reliable
 # than re-tuning `suite` every time the file is included.
