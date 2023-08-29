@@ -50,6 +50,9 @@ suite["tuples"]["trait"] = @benchmarkable stable_hash(data; alg=$(fnv))
 # this will need to be specific to the HashVersion{2}; HashVersion{1}
 # has to be slow in this case
 
+# NOTE: we can also probably further optimize by circumventing the `write`
+# operations for primitive types that can be directly hashed
+
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
 # the benchmark parameters. Reusing cached parameters is faster and more reliable
 # than re-tuning `suite` every time the file is included.
