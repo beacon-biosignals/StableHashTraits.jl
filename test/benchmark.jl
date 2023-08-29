@@ -15,8 +15,8 @@ const suite = BenchmarkGroup()
 # https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
 const FNV_BASIS=0xcbf29ce484222325
 const FNV_PRIME=0x00000100000001B3
-function fnv(bytes::AbstractArray{UInt8}, hash::UInt64=FNV_BASIS)
-    for b in bytes
+function fnv(bytes, hash::UInt64=FNV_BASIS)
+    @inbounds for b in bytes
         hash *= FNV_PRIME
         hash ⊻= b
     end
@@ -25,14 +25,14 @@ end
 
 suite["numbers"] = BenchmarkGroup(["numbers"])
 data = rand(Int, 10_000)
-suite["numbers"]["base"] = @benchmarkable hash(data)
+suite["numbers"]["base"] = @benchmarkable fnv(data)
 suite["numbers"]["trait"] = @benchmarkable stable_hash(data; alg=$(fnv))
 
 suite["tuples"] = BenchmarkGroup(["tuples"])
 data1 = rand(Int, 2, 10_000)
 data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
-suite["tuples"]["base"] = @benchmarkable hash(data)
-suite["tuples"]["trait"] = @benchmarkable stable_hash(data; alg=$(fnv))
+suite["tuples"]["base"] = @benchmarkable fnv(reinterpret(UInt8, data1))
+suite["tuples"]["trait"] = @benchmarkable stable_hash(data2; alg=$(fnv))
 
 # DATAPOINT: the recursive hashing itself, even without slowdowns from SHA
 # buffers is substantial

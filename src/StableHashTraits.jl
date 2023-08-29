@@ -111,18 +111,22 @@ digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 # above that uses `setup_hash_state`, `similar_hash_state`, `update!` and `digest!`
 mutable struct GenericFunHash{F,T}
     hasher::F
-    hash::Union{T,Nothing}
+    hash::T
+    init::T
     function GenericFunHash(fn)
         hash = fn(UInt8[])
-        return new{typeof(fn),typeof(hash)}(fn, hash)
+        return new{typeof(fn),typeof(hash)}(fn, hash, hash)
+    end
+    function GenericFunHash(fn, hash, init)
+        return new{typeof(fn), typeof(hash)}(fn, hash, init)
     end
 end
 setup_hash_state(fn) = GenericFunHash(fn)
 function update!(fn::GenericFunHash, bytes)
-    return fn.hash = isnothing(fn.hash) ? fn.hasher(bytes) : fn.hasher(bytes, fn.hash)
+    return fn.hash = fn.hasher(bytes, fn.hash)
 end
 digest!(fn::GenericFunHash) = fn.hash
-similar_hash_state(fn::GenericFunHash) = GenericFunHash(fn.hasher)
+similar_hash_state(fn::GenericFunHash) = GenericFunHash(fn.hasher, fn.init, fn.init)
 
 #####
 ##### Hash Traits
@@ -164,6 +168,20 @@ function stable_hash_helper(x, hash_state, context, ::WriteHash)
     return hash_state
 end
 
+# optimized hash helpers for primitive types
+bytesof(x::Int64) = (UInt8(x & 0xff), UInt8((x >> 8) & 0xff), UInt8((x >> 16) & 0xff), 
+                     UInt8((x >> 32) & 0xff))
+# TODO: make a more generic version of `bytesof` for all primitive types
+function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
+    update!(hash_state, bytesof(x))
+    return hash_state
+end
+
+function stable_hash_helper(x::String, hash_state, context, ::WriteHash)
+    update!(hash_state, codeunits(x))
+    return hash_state
+end
+
 function recursive_hash!(hash_state, nested_hash_state)
     nested_hash = digest!(nested_hash_state)
     update!(hash_state, reinterpret(UInt8, vcat(nested_hash)))
@@ -174,15 +192,28 @@ struct IterateHash end
 function stable_hash_helper(x, hash_state, context, ::IterateHash)
     return hash_foreach(identity, hash_state, context, x)
 end
+
+# TODO: handle when recursive hashing occurs based on
+# the HashContext{1} vs. HashContext{2}
 function hash_foreach(fn, hash_state, context, xs)
+    inner_state = similar_hash_state(hash_state)
     for x in xs
         f_x = fn(x)
-        val = stable_hash_helper(f_x, similar_hash_state(hash_state), context,
-                                 hash_method(f_x, context))
-        recursive_hash!(hash_state, val)
+        stable_hash_helper(f_x, inner_state, context,
+                           hash_method(f_x, context))
     end
-    return hash_state
+    return recursive_hash!(hash_state, inner_state)
 end
+
+# function hash_foreach(fn::typeof(identity), hash_state, context, xs::AbstractVector{<:Real})
+#     inner_state = similar_hash_state(hash_state)
+#     for x in xs
+#         f_x = fn(x)
+#         stable_hash_helper(f_x, inner_state, context,
+#                            hash_method(f_x, context))
+#     end
+#     return recursive_hash!(hash_state, inner_state)
+# end
 
 struct StructHash{P,S}
     fnpair::P
