@@ -31,7 +31,7 @@ suite["numbers"]["trait"] = @benchmarkable stable_hash(data; alg=$(fnv))
 suite["tuples"] = BenchmarkGroup(["tuples"])
 data1 = rand(Int, 2, 10_000)
 data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
-suite["tuples"]["base"] = @benchmarkable fnv(reinterpret(UInt8, data1))
+suite["tuples"]["base"] = @benchmarkable stable_hash(data1, alg=$(fnv))
 suite["tuples"]["trait"] = @benchmarkable stable_hash(data2; alg=$(fnv))
 
 # DATAPOINT: the recursive hashing itself, even without slowdowns from SHA
@@ -46,6 +46,8 @@ suite["tuples"]["trait"] = @benchmarkable stable_hash(data2; alg=$(fnv))
 
 # NEXT DATAPOINT: how does this work when working with many small structs
 # (does the type hashing add a lot or is it mostly about the allocations?)
+
+# NEXT DATAPOINT: what about hashing an array of strings?
 
 # NOTE: we can also probably further optimize by circumventing the `write`
 # operations for primitive types that can be directly hashed
