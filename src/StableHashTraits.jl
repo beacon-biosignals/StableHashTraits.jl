@@ -239,9 +239,12 @@ end
 
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
 qualifier(fn::Function) = fn
-qualifier(x::T) where {T} = T <: DataType ? x : T
-qualified_name(x) = qname_(qualifier(x), nameof)
-qualified_name(x) = qname_(qualifier(x), string)
+qualifier(::Type{T}) where T = T
+qualifier(::T) where T = T
+qualified_name(fn::Function) = qname_(fn, nameof)
+qualified_type(fn::Function) = qname_(fn, string)
+qualified_name(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
+qualified_type(x::T) where {T} = qname_(T <: DataType ? x : T, string)
 
 function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
@@ -292,9 +295,13 @@ end
 
 const type_caches = Dict()
 const type_cache_lock = ReentrantLock()
-function stable_hash_helper(x, hash_state, context, 
-                            method::FnHash{Union{typeof(qualified_type), 
-                                                 typeof(qualified_name)}})
+function stable_hash_helper(x, hash_state, context, method::FnHash{typeof(qualified_name)})
+    stable_hash_of_cached_get_value(x, hash_state, context, method)
+end
+function stable_hash_helper(x, hash_state, context, method::FnHash{typeof(qualified_type)})
+    stable_hash_of_cached_get_value(x, hash_state, context, method)
+end
+function stable_hash_of_cached_get_value(x, hash_state, context, method)
     T = IdDict{DataType, hash_type(hash_state)}
     lock(type_cache_lock) do
         key = (typeof(hash_state), context, typeof(method.fn))
@@ -302,6 +309,11 @@ function stable_hash_helper(x, hash_state, context,
             return T()
         end
         return get!(type_cache, qualifier(x)) do
+            # TODO: the problem here is that the current API
+            # assumes we return an intermediate hash state
+            # but we want to cache the hash value (post `digest!`)
+            # we need to change how stable_hash_helper works for
+            # qualified_name and qualified_type... or FnHash in general???
             stable_hash_of_get_value(x, hash_state, context, method)
         end
     end
