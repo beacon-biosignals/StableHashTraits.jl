@@ -106,6 +106,7 @@ similar_hash_state(ctx::SHA.SHA_CTX) = typeof(ctx)()
 update!(sha::SHA.SHA_CTX, bytes) = SHA.update!(sha, bytes)
 # digest!: convert the hash state to the final hashed value
 digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
+hash_type(::SHA.SHA_CTX) = Vector{UInt8}
 
 # convert a function of the form `new_hash = hasher(x, [old_hash])`, to conform to the API
 # above that uses `setup_hash_state`, `similar_hash_state`, `update!` and `digest!`
@@ -127,6 +128,7 @@ function update!(fn::GenericFunHash, bytes)
 end
 digest!(fn::GenericFunHash) = fn.hash
 similar_hash_state(fn::GenericFunHash) = GenericFunHash(fn.hasher, fn.init, fn.init)
+hash_type(::GenericFunHash{<:Any, T}) where {T} = T
 
 #####
 ##### Hash Traits
@@ -236,10 +238,10 @@ function stable_hash_helper(x, hash_state, context, use::StructHash)
 end
 
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
-qualified_name(fn::Function) = qname_(fn, nameof)
-qualified_type(fn::Function) = qname_(fn, string)
-qualified_name(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
-qualified_type(x::T) where {T} = qname_(T <: DataType ? x : T, string)
+qualifier(fn::Function) = fn
+qualifier(x::T) where {T} = T <: DataType ? x : T
+qualified_name(x) = qname_(qualifier(x), nameof)
+qualified_name(x) = qname_(qualifier(x), string)
 
 function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
@@ -271,6 +273,9 @@ ConstantHash(val) = ConstantHash{typeof(val),Nothing}(val, nothing)
 get_value_(x, method::ConstantHash) = method.constant
 
 function stable_hash_helper(x, hash_state, context, method::Union{FnHash,ConstantHash})
+    stable_hash_of_get_value(x, hash_state, context, method)
+end
+function stable_hash_of_get_value(x, hash_state, context, method::Union{FnHash,ConstantHash})
     y = get_value_(x, method)
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method
@@ -283,6 +288,23 @@ function stable_hash_helper(x, hash_state, context, method::Union{FnHash,Constan
     end
 
     return stable_hash_helper(y, hash_state, context, new_method)
+end
+
+const type_caches = Dict()
+const type_cache_lock = ReentrantLock()
+function stable_hash_helper(x, hash_state, context, 
+                            method::FnHash{Union{typeof(qualified_type), 
+                                                 typeof(qualified_name)}})
+    T = IdDict{DataType, hash_type(hash_state)}
+    lock(type_cache_lock) do
+        key = (typeof(hash_state), context, typeof(method.fn))
+        type_cache::T = get!(type_caches, key) do
+            return T()
+        end
+        return get!(type_cache, qualifier(x)) do
+            stable_hash_of_get_value(x, hash_state, context, method)
+        end
+    end
 end
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
