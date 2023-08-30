@@ -34,6 +34,9 @@ data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
 suite["tuples"]["base"] = @benchmarkable stable_hash(data1, alg=$(fnv))
 suite["tuples"]["trait"] = @benchmarkable stable_hash(data2; alg=$(fnv))
 
+suite["sha_nubmers"]["base"] = @benchmarkable sha256(data)
+suite["sha_nubmers"]["trait"] = @benchmarkable stable_hash(data; alg=$(sha256))
+
 # DATAPOINT: the recursive hashing itself, even without slowdowns from SHA
 # buffers is substantial; this can be fixed by optimizing how primitive
 # types are hashed (when `UseWrite` is set)
