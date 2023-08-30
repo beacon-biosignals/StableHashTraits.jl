@@ -95,6 +95,16 @@ end
 ##### Hash Function API 
 #####
 
+# TODO: redesign the API
+# 2 things to do:
+# 1. make it possible for GenericFunHash to be immutable
+# 2. make it possible to avoid recurising the SHA hashes by
+# allowing them to a depth value that gets incremented on each call to 
+# `similar_hash_state` (whatever it's new name is)
+# THEN: we need two versions of the sha algorithms; those that do and do not recurse
+# FINALLY: we want the equivalent of `setup_hash_state` to take the context
+# so that whether SHA recurses depends on `HashVersion{1}` vs. `HashVersion{2}`.
+
 # setup_hash_state: given a function that identifies the hash, setup up the state used for hashing
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
@@ -165,6 +175,11 @@ See also: [`StableHashTraits.hash_method`](@ref).
 """
 write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
+# TODO: we could reduce memory usage for all types if we could interpret
+# any calls to `write` as calls to `update!`; this would require making
+# a new special `HashStream` which would be annoying 
+# see:
+# https://discourse.julialang.org/t/making-a-simple-wrapper-for-an-io-stream/52587/9
 function stable_hash_helper(x, hash_state, context, ::WriteHash)
     io = IOBuffer()
     write(io, x, context)
@@ -172,11 +187,21 @@ function stable_hash_helper(x, hash_state, context, ::WriteHash)
     return hash_state
 end
 
-# optimized hash helpers for primitive types
-bytesof(x::Int64) = (unsafe_trunc(UInt8, x & 0xff), unsafe_trunc(UInt8, (x >> 8) & 0xff), unsafe_trunc(UInt8, (x >> 16) & 0xff), 
-                     unsafe_trunc(UInt8, (x >> 32) & 0xff))
-bytesof(x::UInt64) = (unsafe_trunc(UInt8, x & 0xff), unsafe_trunc(UInt8, (x >> 8) & 0xff), unsafe_trunc(UInt8, (x >> 16) & 0xff), 
-                      unsafe_trunc(UInt8, (x >> 32) & 0xff))
+# convert a primitive type to a tuple of its bytes
+@generated function bytesof(x::Number)
+    nbytes = sizeof(x)
+    UIntX = Symbol(:UInt, nbytes << 3)
+    uint_var = gensym("bytes")
+    tuple_args = map(1:nbytes) do i
+        :(unsafe_trunc(UInt8, ($uint_var >> $((i-1) << 3)) & 0xff))
+    end
+    tuple_result = Expr(:tuple, tuple_args...)
+    return quote
+        $uint_var = reinterpret($UIntX, x)
+        return $tuple_result
+    end
+end
+
 # TODO: make a more generic version of `bytesof` for all primitive types
 function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
     update!(hash_state, bytesof(x))
@@ -190,7 +215,6 @@ end
 
 function recursive_hash!(hash_state, nested_hash_state)
     nested_hash = digest!(nested_hash_state)
-    # TODO: rather than using vcat use the `bytesof` here
     update!(hash_state, bytesof(nested_hash))
     return hash_state
 end
@@ -251,6 +275,12 @@ qualified_type(fn::Function) = qname_(fn, string)
 qualified_name(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
 qualified_type(x::T) where {T} = qname_(T <: DataType ? x : T, string)
 
+# TODO: create stable_type_id, and stable_typename_id, which compute
+# a hash value for each type, and thus allow for a compile time mapping from type to number
+# @generated function stable_typename_id(x)
+    # TODO
+# end
+
 function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
     # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
@@ -298,39 +328,6 @@ function stable_hash_of_get_value(x, hash_state, context, method::Union{FnHash,C
     return stable_hash_helper(y, hash_state, context, new_method)
 end
 
-# TODO: we can make this even faster by using a new (generated?) function
-# e.g. stable_type_id, and stable_typename_id, which compute
-# a hash, and thus allow for a compile time mapping from type to number
-# NOTE: the below isn't even really all that vaible, since it avoids the lock
-# (we coudl do something clever to avoid the lock, but the above approach would still
-# be faster, and will would still have to create a breaking HashVersion
-# even if we went with the above approach, since the recursive thing needs to change)
-const type_caches = Dict()
-const type_cache_lock = ReentrantLock()
-function stable_hash_helper(x, hash_state, context, method::FnHash{typeof(qualified_name)})
-    stable_hash_of_cached_get_value(x, hash_state, context, method)
-end
-function stable_hash_helper(x, hash_state, context, method::FnHash{typeof(qualified_type)})
-    stable_hash_of_cached_get_value(x, hash_state, context, method)
-end
-struct PrecomputedHash{T}
-    x::T
-end
-recursive_hash!(x, val::PrecomputedHash) = update!(x, val.x)
-function stable_hash_of_cached_get_value(x, hash_state, context, method)
-    T = IdDict{DataType, hash_type(hash_state)}
-    # return lock(type_cache_lock) do
-        key = (typeof(hash_state), context, typeof(method.fn))
-        type_cache::T = get!(type_caches, key) do
-            return T()
-        end
-        hash_value = get!(type_cache, qualifier(x)) do
-            result = stable_hash_of_get_value(x, hash_state, context, method)
-            return digest!(result)
-        end
-        return PrecomputedHash(hash_value)
-    # end
-end
 
 # TODO: maybe we can just do one recursive hash here?
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
