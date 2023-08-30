@@ -52,6 +52,8 @@ const HASH_TRAITS_DOCS, HASH_CONTEXT_DOCS = let
 end
 
 """
+# alternative: return some special  that just wraps
+# the 
     hash_method(x, [context])
 
 Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
@@ -171,8 +173,10 @@ function stable_hash_helper(x, hash_state, context, ::WriteHash)
 end
 
 # optimized hash helpers for primitive types
-bytesof(x::Int64) = (UInt8(x & 0xff), UInt8((x >> 8) & 0xff), UInt8((x >> 16) & 0xff), 
-                     UInt8((x >> 32) & 0xff))
+bytesof(x::Int64) = (unsafe_trunc(UInt8, x & 0xff), unsafe_trunc(UInt8, (x >> 8) & 0xff), unsafe_trunc(UInt8, (x >> 16) & 0xff), 
+                     unsafe_trunc(UInt8, (x >> 32) & 0xff))
+bytesof(x::UInt64) = (unsafe_trunc(UInt8, x & 0xff), unsafe_trunc(UInt8, (x >> 8) & 0xff), unsafe_trunc(UInt8, (x >> 16) & 0xff), 
+                      unsafe_trunc(UInt8, (x >> 32) & 0xff))
 # TODO: make a more generic version of `bytesof` for all primitive types
 function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
     update!(hash_state, bytesof(x))
@@ -186,7 +190,8 @@ end
 
 function recursive_hash!(hash_state, nested_hash_state)
     nested_hash = digest!(nested_hash_state)
-    update!(hash_state, reinterpret(UInt8, vcat(nested_hash)))
+    # TODO: rather than using vcat use the `bytesof` here
+    update!(hash_state, bytesof(nested_hash))
     return hash_state
 end
 
@@ -293,6 +298,13 @@ function stable_hash_of_get_value(x, hash_state, context, method::Union{FnHash,C
     return stable_hash_helper(y, hash_state, context, new_method)
 end
 
+# TODO: we can make this even faster by using a new (generated?) function
+# e.g. stable_type_id, and stable_typename_id, which compute
+# a hash, and thus allow for a compile time mapping from type to number
+# NOTE: the below isn't even really all that vaible, since it avoids the lock
+# (we coudl do something clever to avoid the lock, but the above approach would still
+# be faster, and will would still have to create a breaking HashVersion
+# even if we went with the above approach, since the recursive thing needs to change)
 const type_caches = Dict()
 const type_cache_lock = ReentrantLock()
 function stable_hash_helper(x, hash_state, context, method::FnHash{typeof(qualified_name)})
@@ -301,24 +313,26 @@ end
 function stable_hash_helper(x, hash_state, context, method::FnHash{typeof(qualified_type)})
     stable_hash_of_cached_get_value(x, hash_state, context, method)
 end
+struct PrecomputedHash{T}
+    x::T
+end
+recursive_hash!(x, val::PrecomputedHash) = update!(x, val.x)
 function stable_hash_of_cached_get_value(x, hash_state, context, method)
     T = IdDict{DataType, hash_type(hash_state)}
-    lock(type_cache_lock) do
+    # return lock(type_cache_lock) do
         key = (typeof(hash_state), context, typeof(method.fn))
         type_cache::T = get!(type_caches, key) do
             return T()
         end
-        return get!(type_cache, qualifier(x)) do
-            # TODO: the problem here is that the current API
-            # assumes we return an intermediate hash state
-            # but we want to cache the hash value (post `digest!`)
-            # we need to change how stable_hash_helper works for
-            # qualified_name and qualified_type... or FnHash in general???
-            stable_hash_of_get_value(x, hash_state, context, method)
+        hash_value = get!(type_cache, qualifier(x)) do
+            result = stable_hash_of_get_value(x, hash_state, context, method)
+            return digest!(result)
         end
-    end
+        return PrecomputedHash(hash_value)
+    # end
 end
 
+# TODO: maybe we can just do one recursive hash here?
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
     for method in methods
         val = stable_hash_helper(x, similar_hash_state(hash_state), context, method)
