@@ -6,17 +6,19 @@ using TupleTools, Tables, Compat
 using SHA: SHA, sha256
 
 """
-    HashVersion{1}()
+    HashVersion{V}()
 
-The default `hash_context` used by `stable_hash`. There is currently only one version (`1`)
-and it is the default context. By explicitly passing this context to `stable_hash` you
-ensure that hash values for these fallback methods will not change even if new fallbacks are
-defined. This is a "root" context, meaning that `parent_context(::HashVersion) = nothing`.
+The default `hash_context` used by `stable_hash`. There are currently two versions
+(1 and 2). Version 2 is far more optimized than 1 and should generally be used in newly 
+written code (it is the default version).
+
+By explicitly passing this hash version in `stable_hash` you ensure that hash values for 
+these fallback methods will not change even if new fallbacks are defined. 
 """
 struct HashVersion{V} end
 
 """
-    stable_hash(x, context=HashVersion{1}(); alg=sha256)
+    stable_hash(x, context=HashVersion{2}(); alg=sha256)
 
 Create a stable hash of the given objects. As long as the context remains the same, this is
 intended to remain unchanged across julia verisons. How each object is hashed is determined
@@ -35,8 +37,8 @@ The `context` value gets passed as the second argument to [`hash_method`](@ref),
 third argument to [`StableHashTraits.write`](@ref)
 
 """
-function stable_hash(x, context=HashVersion{1}(); alg=sha256)
-    return digest!(stable_hash_helper(x, setup_hash_state(alg), context,
+function stable_hash(x, context=HashVersion{2}(); alg=sha256)
+    return digest!(stable_hash_helper(x, setup_hash_state(alg, context), context,
                                       hash_method(x, context)))
 end
 
@@ -99,9 +101,9 @@ end
 # 2 things to do:
 # 1. make it possible for GenericFunHash to be immutable
 # 2. make it possible to avoid recurising the SHA hashes by
-# allowing them to a depth value that gets incremented on each call to 
-# `similar_hash_state` (whatever it's new name is)
-# THEN: we need two versions of the sha algorithms; those that do and do not recurse
+# allowing them to a depth value that gets incremented on each call result
+# `start_hash` (whatever it's new name is)
+# stop_hash!: we need two versions of the sha algorithms; those that do and do not recurse
 # FINALLY: we want the equivalent of `setup_hash_state` to take the context
 # so that whether SHA recurses depends on `HashVersion{1}` vs. `HashVersion{2}`.
 
@@ -109,38 +111,55 @@ end
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
     if CTX in names(SHA)
-        @eval setup_hash_state(::typeof(SHA.$(fn))) = SHA.$(CTX)()
+        @eval function setup_hash_state(::typeof(SHA.$(fn)), ::HashVersion{V}) where V 
+            return V < 2 ? SHA.$(CTX)() : MarkerHash(SHA.$(CTX)())
+        end
+        @eval function setup_hash_state(::typeof(SHA.$(fn)), c::Any) where V 
+            return setup_hash_state(SHA.$(fn), parent_context(c))
+        end
     end
 end
-# similar_hash_state: setup up a new hasher, given some existing state created by `setup_hash_state`
-similar_hash_state(ctx::SHA.SHA_CTX) = typeof(ctx)()
+# start_hash: setup up a new hasher, given some existing state created by `setup_hash_state`
+
+start_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
 # update!: update the hash state with some new data to hash
-update!(sha::SHA.SHA_CTX, bytes) = SHA.update!(sha, bytes)
+update_hash!(sha::SHA.SHA_CTX, bytes) = (SHA.update!(sha, bytes); sha)
 # digest!: convert the hash state to the final hashed value
-digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
+function stop_hash!(hash_state, nested_hash_state)
+    return update_hash!(hash_state, digest!(nested_hash_state))
+end
+compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 hash_type(::SHA.SHA_CTX) = Vector{UInt8}
 
-# convert a function of the form `new_hash = hasher(x, [old_hash])`, to conform to the API
-# above that uses `setup_hash_state`, `similar_hash_state`, `update!` and `digest!`
-mutable struct GenericFunHash{F,T}
-    hasher::F
+struct MarkerHash{T}
     hash::T
-    init::T
-    function GenericFunHash(fn)
-        hash = fn(UInt8[])
-        return new{typeof(fn),typeof(hash)}(fn, hash, hash)
-    end
-    function GenericFunHash(fn, hash, init)
-        return new{typeof(fn), typeof(hash)}(fn, hash, init)
-    end
 end
-setup_hash_state(fn) = GenericFunHash(fn)
-function update!(fn::GenericFunHash, bytes)
-    return fn.hash = fn.hasher(bytes, fn.hash)
+function start_hash!(x::MarkerHash)
+    return MarkerHash(update_hash!(x.hash, (0x01,)))
 end
-digest!(fn::GenericFunHash) = fn.hash
-similar_hash_state(fn::GenericFunHash) = GenericFunHash(fn.hasher, fn.init, fn.init)
-hash_type(::GenericFunHash{<:Any, T}) where {T} = T
+update_hash!(x::MarkerHash, bytes) = MarkerHash(update_hash!(x.hash, bytes))
+function stop_hash!(::MarkerHash, nested::MarkerHash) 
+    return MarkerHash(update_hash!(nested.hash, (0x02,)))
+end
+compute_hash!(x::MarkerHash) = compute_hash!(x.hash)
+hash_type(x::MarkerHash) = hash_type(x.hash)
+
+setup_hash_state(fn::Function, ::Any) = RecursiveHash(fn)
+struct RecursiveHash{F,T}
+   fn::F 
+   val::T
+end
+function RecursiveHash(fn)
+    hash = fn(())
+    return RecursiveHash(fn, hash)
+end
+start_hash!(x::RecursiveHash) = RecursiveHash(x.fn)
+update_hash!(x::RecursiveHash, bytes) = RecursiveHash(x.fn, x.fn(bytes, x.hash))
+function stop_hash!(fn::RecursiveHash, nested::RecursiveHash)
+    return update_hash!(fn, bytesof(nested.hash))
+end
+compnute_hash!(x::RecursiveHash) = x.hash
+hash_type(::RecursiveHash{<:Any, T}) where {T} = T
 
 #####
 ##### Hash Traits
@@ -213,38 +232,43 @@ function stable_hash_helper(x::String, hash_state, context, ::WriteHash)
     return hash_state
 end
 
-function recursive_hash!(hash_state, nested_hash_state)
-    nested_hash = digest!(nested_hash_state)
-    update!(hash_state, bytesof(nested_hash))
-    return hash_state
-end
-
 struct IterateHash end
 function stable_hash_helper(x, hash_state, context, ::IterateHash)
     return hash_foreach(identity, hash_state, context, x)
 end
 
-# TODO: handle when recursive hashing occurs based on
-# the HashContext{1} vs. HashContext{2}
+abstract type IterateMarking end
+struct MarkLoop <: IterateMarking end
+struct MarkElements <: IterateMarking end
+IterateMarking(x) = IterateMarking(parent_context(x))
+IterateMarking(::Nothing) = MarkLoop()
+IterateMarking(::HashVersion{N}) where N = N < 2 : MarkElements() : MarkLoop()
+
 function hash_foreach(fn, hash_state, context, xs)
-    inner_state = similar_hash_state(hash_state)
+    hash_foreach_(fn, hash_state, context, xs, IterateMarking(context))
+end
+
+function hash_foreach(fn, hash_state, context, xs, ::MarkLoop)
+    inner_state = start_hash!(hash_state)
     for x in xs
         f_x = fn(x)
         stable_hash_helper(f_x, inner_state, context,
                            hash_method(f_x, context))
     end
-    return recursive_hash!(hash_state, inner_state)
+    hash_state = stop_hash!(hash_state, inner_state)
+    return hash_state
 end
 
-# function hash_foreach(fn::typeof(identity), hash_state, context, xs::AbstractVector{<:Real})
-#     inner_state = similar_hash_state(hash_state)
-#     for x in xs
-#         f_x = fn(x)
-#         stable_hash_helper(f_x, inner_state, context,
-#                            hash_method(f_x, context))
-#     end
-#     return recursive_hash!(hash_state, inner_state)
-# end
+function hash_foreach(fn, hash_state, context, xs, ::MarkElements)
+    for x in xs
+        f_x = fn(x)
+        inner_state = start_hash!(hash_state)
+        stable_hash_helper(f_x, inner_state, context,
+                           hash_method(f_x, context))
+        hash_state = stop_hash!(hash_state, inner_state)
+    end
+    return hash_state
+end
 
 struct StructHash{P,S}
     fnpair::P
@@ -275,11 +299,21 @@ qualified_type(fn::Function) = qname_(fn, string)
 qualified_name(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
 qualified_type(x::T) where {T} = qname_(T <: DataType ? x : T, string)
 
-# TODO: create stable_type_id, and stable_typename_id, which compute
-# a hash value for each type, and thus allow for a compile time mapping from type to number
-# @generated function stable_typename_id(x)
-    # TODO
-# end
+@generated function stable_typename_id(x)
+    T = x <: Function ? x.instance : x
+    str = qualified_name(T)
+    bytes = sha256(str)
+    number = first(reintrepret(UInt128, [bytes]))
+    :(return $number)
+end
+
+@generated function stable_type_id(x)
+    T = x <: Function ? x.instance : x
+    str = qualified_type(T)
+    bytes = sha256(str)
+    number = first(reintrepret(UInt128, [bytes]))
+    :(return $number)
+end
 
 function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
@@ -332,8 +366,8 @@ end
 # TODO: maybe we can just do one recursive hash here?
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
     for method in methods
-        val = stable_hash_helper(x, similar_hash_state(hash_state), context, method)
-        recursive_hash!(hash_state, val)
+        result = stable_hash_helper(x, start_hash(hash_state), context, method)
+        stop_hash!(hash_state, result)
     end
 
     return hash_state
@@ -501,5 +535,6 @@ function StableHashTraits.hash_method(::AbstractString, ::ViewsEq)
 end
 
 parent_context(::HashVersion) = nothing
+parent_context(::HashVersion{2}) = HashVersion{1}()
 
 end
