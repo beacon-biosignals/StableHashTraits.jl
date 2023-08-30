@@ -1,5 +1,6 @@
 using BenchmarkTools
 using StableHashTraits
+using SHA
 
 # Define a parent BenchmarkGroup to contain our suite
 const suite = BenchmarkGroup()
@@ -23,9 +24,11 @@ function fnv(bytes, hash::UInt64=FNV_BASIS)
     return hash
 end
 
+# NOTE: this result is supiciously fast, not clear why it would be
+# better than `fnv` alone
 suite["numbers"] = BenchmarkGroup(["numbers"])
 data = rand(Int, 10_000)
-suite["numbers"]["base"] = @benchmarkable fnv(data)
+suite["numbers"]["base"] = @benchmarkable $(fnv)(data)
 suite["numbers"]["trait"] = @benchmarkable stable_hash(data; alg=$(fnv))
 
 suite["tuples"] = BenchmarkGroup(["tuples"])
@@ -34,8 +37,35 @@ data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
 suite["tuples"]["base"] = @benchmarkable stable_hash(data1, alg=$(fnv))
 suite["tuples"]["trait"] = @benchmarkable stable_hash(data2; alg=$(fnv))
 
-suite["sha_nubmers"]["base"] = @benchmarkable sha256(data)
-suite["sha_nubmers"]["trait"] = @benchmarkable stable_hash(data; alg=$(sha256))
+suite["sha_numbers"] = BenchmarkGroup(["sha_numbers"])
+suite["sha_numbers"]["base"] = @benchmarkable sha256(reinterpret(UInt8, data))
+suite["sha_numbers"]["trait"] = @benchmarkable stable_hash(data; alg=$(sha256))
+
+suite["strings"] = BenchmarkGroup(["strings"])
+strings = [String(rand('a':'z', 30)) for _ in 1:10_000]
+strdata = [c for str in strings for c in str]
+suite["strings"]["base"] = @benchmarkable fnv($(reinterpret(UInt8, strdata)))
+suite["strings"]["trait"] = @benchmarkable stable_hash(strings, alg=$(fnv))
+
+struct BenchTest
+    a::Int
+    b::Int
+end
+structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:1_000_000]
+struct_data = [x for st in structs for x in (st.a, st.b)]
+suite["structs"] = BenchmarkGroup(["structs"])
+suite["structs"]["base"] = @benchmarkable fnv($(reinterpret(UInt8, struct_data)))
+suite["structs"]["trait"] = @benchmarkable stable_hash(structs, alg=$(fnv))
+
+struct BenchTest
+    a::Int
+    b::Int
+end
+structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:10_000]
+struct_data = [x for st in structs for x in (st.a, st.b)]
+suite["sha_structs"] = BenchmarkGroup(["sha_structs"])
+suite["sha_structs"]["base"] = @benchmarkable sha256($(reinterpret(UInt8, struct_data)))
+suite["sha_structs"]["trait"] = @benchmarkable stable_hash(structs, alg=$(sha256))
 
 # DATAPOINT: the recursive hashing itself, even without slowdowns from SHA
 # buffers is substantial; this can be fixed by optimizing how primitive
@@ -45,12 +75,13 @@ suite["sha_nubmers"]["trait"] = @benchmarkable stable_hash(data; alg=$(sha256))
 # because of the qualified name; if we can cash this string computation
 # per type, we should hopefully be much faster (try that next)
 
-# NEXT DATAPOINT: how much does sha's allocations slow things down?
+# DATAPOINT: how much does sha's allocations slow things down? with the optimization
+# to avoid recursive sha, we get decent SHA performance
+
+# NEXT DATAPOINT: what about hashing an array of strings?
 
 # NEXT DATAPOINT: how does this work when working with many small structs
 # (does the type hashing add a lot or is it mostly about the allocations?)
-
-# NEXT DATAPOINT: what about hashing an array of strings?
 
 # NOTE: we can also probably further optimize by circumventing the `write`
 # operations for primitive types that can be directly hashed

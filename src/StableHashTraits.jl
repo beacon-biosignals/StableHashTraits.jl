@@ -38,8 +38,8 @@ third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(x, context=HashVersion{2}(); alg=sha256)
-    return digest!(stable_hash_helper(x, setup_hash_state(alg, context), context,
-                                      hash_method(x, context)))
+    return compute_hash!(stable_hash_helper(x, setup_hash_state(alg, context), context,
+                                            hash_method(x, context)))
 end
 
 # extract contents of README so we can insert it into the some of the docstrings
@@ -111,10 +111,10 @@ end
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
     if CTX in names(SHA)
-        @eval function setup_hash_state(::typeof(SHA.$(fn)), ::HashVersion{V}) where V 
+        @eval function setup_hash_state(::typeof(SHA.$(fn)), ::HashVersion{V}) where {V} 
             return V < 2 ? SHA.$(CTX)() : MarkerHash(SHA.$(CTX)())
         end
-        @eval function setup_hash_state(::typeof(SHA.$(fn)), c::Any) where V 
+        @eval function setup_hash_state(::typeof(SHA.$(fn)), c::Any)
             return setup_hash_state(SHA.$(fn), parent_context(c))
         end
     end
@@ -126,7 +126,7 @@ start_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
 update_hash!(sha::SHA.SHA_CTX, bytes) = (SHA.update!(sha, bytes); sha)
 # digest!: convert the hash state to the final hashed value
 function stop_hash!(hash_state, nested_hash_state)
-    return update_hash!(hash_state, digest!(nested_hash_state))
+    return update_hash!(hash_state, SHA.digest!(nested_hash_state))
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 hash_type(::SHA.SHA_CTX) = Vector{UInt8}
@@ -148,17 +148,18 @@ setup_hash_state(fn::Function, ::Any) = RecursiveHash(fn)
 struct RecursiveHash{F,T}
    fn::F 
    val::T
+   init::T
 end
 function RecursiveHash(fn)
-    hash = fn(())
-    return RecursiveHash(fn, hash)
+    hash = fn(UInt8[])
+    return RecursiveHash(fn, hash, init)
 end
-start_hash!(x::RecursiveHash) = RecursiveHash(x.fn)
-update_hash!(x::RecursiveHash, bytes) = RecursiveHash(x.fn, x.fn(bytes, x.hash))
+start_hash!(x::RecursiveHash) = RecursiveHash(x.fn, x.init, x.init)
+update_hash!(x::RecursiveHash, bytes) = RecursiveHash(x.fn, x.fn(bytes, x.val), x.init)
 function stop_hash!(fn::RecursiveHash, nested::RecursiveHash)
-    return update_hash!(fn, bytesof(nested.hash))
+    return update_hash!(fn, bytesof(nested.val))
 end
-compnute_hash!(x::RecursiveHash) = x.hash
+compute_hash!(x::RecursiveHash) = x.val
 hash_type(::RecursiveHash{<:Any, T}) where {T} = T
 
 #####
@@ -202,8 +203,7 @@ write(io, x) = Base.write(io, x)
 function stable_hash_helper(x, hash_state, context, ::WriteHash)
     io = IOBuffer()
     write(io, x, context)
-    update!(hash_state, take!(io))
-    return hash_state
+    return update_hash!(hash_state, take!(io))
 end
 
 # convert a primitive type to a tuple of its bytes
@@ -223,13 +223,11 @@ end
 
 # TODO: make a more generic version of `bytesof` for all primitive types
 function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
-    update!(hash_state, bytesof(x))
-    return hash_state
+    return update_hash!(hash_state, bytesof(x))
 end
 
 function stable_hash_helper(x::String, hash_state, context, ::WriteHash)
-    update!(hash_state, codeunits(x))
-    return hash_state
+    return update_hash!(hash_state, codeunits(x))
 end
 
 struct IterateHash end
@@ -242,28 +240,28 @@ struct MarkLoop <: IterateMarking end
 struct MarkElements <: IterateMarking end
 IterateMarking(x) = IterateMarking(parent_context(x))
 IterateMarking(::Nothing) = MarkLoop()
-IterateMarking(::HashVersion{N}) where N = N < 2 : MarkElements() : MarkLoop()
+IterateMarking(::HashVersion{N}) where N = N < 2 ? MarkElements() : MarkLoop()
 
 function hash_foreach(fn, hash_state, context, xs)
-    hash_foreach_(fn, hash_state, context, xs, IterateMarking(context))
+    return hash_foreach_(fn, hash_state, context, xs, IterateMarking(context))
 end
 
-function hash_foreach(fn, hash_state, context, xs, ::MarkLoop)
+function hash_foreach_(fn, hash_state, context, xs, ::MarkLoop)
     inner_state = start_hash!(hash_state)
     for x in xs
         f_x = fn(x)
-        stable_hash_helper(f_x, inner_state, context,
-                           hash_method(f_x, context))
+        inner_state = stable_hash_helper(f_x, inner_state, context,
+                                         hash_method(f_x, context))
     end
     hash_state = stop_hash!(hash_state, inner_state)
     return hash_state
 end
 
-function hash_foreach(fn, hash_state, context, xs, ::MarkElements)
+function hash_foreach_(fn, hash_state, context, xs, ::MarkElements)
     for x in xs
         f_x = fn(x)
         inner_state = start_hash!(hash_state)
-        stable_hash_helper(f_x, inner_state, context,
+        inner_state = stable_hash_helper(f_x, inner_state, context,
                            hash_method(f_x, context))
         hash_state = stop_hash!(hash_state, inner_state)
     end
@@ -303,7 +301,7 @@ qualified_type(x::T) where {T} = qname_(T <: DataType ? x : T, string)
     T = x <: Function ? x.instance : x
     str = qualified_name(T)
     bytes = sha256(str)
-    number = first(reintrepret(UInt128, [bytes]))
+    number = first(reinterpret(UInt128, bytes))
     :(return $number)
 end
 
@@ -311,7 +309,7 @@ end
     T = x <: Function ? x.instance : x
     str = qualified_type(T)
     bytes = sha256(str)
-    number = first(reintrepret(UInt128, [bytes]))
+    number = first(reinterpret(UInt128, bytes))
     :(return $number)
 end
 
@@ -366,8 +364,8 @@ end
 # TODO: maybe we can just do one recursive hash here?
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
     for method in methods
-        result = stable_hash_helper(x, start_hash(hash_state), context, method)
-        stop_hash!(hash_state, result)
+        result = stable_hash_helper(x, start_hash!(hash_state), context, method)
+        hash_state = stop_hash!(hash_state, result)
     end
 
     return hash_state
@@ -453,7 +451,7 @@ function parent_context(x::Any)
     return HashVersion{1}()
 end
 
-function hash_method(x::T, c::HashVersion{1}) where {T}
+function hash_method(x::T, c::HashVersion) where {T}
     # we need to find `default_method` here because `hash_method(x::MyType, ::Any)` is less
     # specific than the current method, but if we have something defined for a specific type
     # as the first argument, we want that to be used, rather than this fallback (as if it
@@ -467,32 +465,36 @@ function hash_method(x::T, c::HashVersion{1}) where {T}
     Base.isprimitivetype(T) && return WriteHash()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
-    return (FnHash(qualified_type), StructHash(:ByName))
+    return (FnHash(typefn_for(c)), StructHash(:ByName))
 end
-hash_method(::NamedTuple, ::HashVersion{1}) = (FnHash(qualified_name), StructHash())
-function hash_method(::AbstractRange, ::HashVersion{1})
-    return (FnHash(qualified_name), StructHash(:ByName))
+namefn_for(::HashVersion{1}) = qualified_name
+namefn_for(::HashVersion{2}) = stable_typename_id
+typefn_for(::HashVersion{1}) = qualified_type
+typefn_for(::HashVersion{2}) = stable_type_id
+hash_method(::NamedTuple, c::HashVersion) = (FnHash(namefn_for(c)), StructHash())
+function hash_method(::AbstractRange, c::HashVersion)
+    return (FnHash(namefn_for(c)), StructHash(:ByName))
 end
-function hash_method(::AbstractArray, ::HashVersion{1})
-    return (FnHash(qualified_name), FnHash(size), IterateHash())
+function hash_method(::AbstractArray, c::HashVersion)
+    return (FnHash(namefn_for(c)), FnHash(size), IterateHash())
 end
-function hash_method(::AbstractString, ::HashVersion{1})
-    return (FnHash(qualified_name, WriteHash()), WriteHash())
+function hash_method(::AbstractString, c::HashVersion)
+    return (FnHash(namefn_for(c), WriteHash()), WriteHash())
 end
-hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
-function hash_method(::AbstractDict, ::HashVersion{1})
-    return (FnHash(qualified_name), StructHash(keys => getindex, :ByName))
+hash_method(::Symbol, ::HashVersion) = (ConstantHash(":"), WriteHash())
+function hash_method(::AbstractDict, c::HashVersion)
+    return (FnHash(namefn_for(c)), StructHash(keys => getindex, :ByName))
 end
-hash_method(::Tuple, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
-hash_method(::Pair, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
-function hash_method(::Type, ::HashVersion{1})
-    return (ConstantHash("Base.DataType"), FnHash(qualified_type))
+hash_method(::Tuple, c::HashVersion) = (FnHash(namefn_for(c)), IterateHash())
+hash_method(::Pair, c::HashVersion) = (FnHash(namefn_for(c)), IterateHash())
+function hash_method(::Type, c::HashVersion)
+    return (ConstantHash("Base.DataType"), FnHash(typefn_for(c)))
 end
-function hash_method(::Function, ::HashVersion{1})
-    return (ConstantHash("Base.Function"), FnHash(qualified_name))
+function hash_method(::Function, c::HashVersion)
+    return (ConstantHash("Base.Function"), FnHash(namefn_for(c)))
 end
-function hash_method(::AbstractSet, ::HashVersion{1})
-    return (FnHash(qualified_name), FnHash(sort! ∘ collect))
+function hash_method(::AbstractSet, c::HashVersion)
+    return (FnHash(namefn_for(c)), FnHash(sort! ∘ collect))
 end
 
 """
@@ -505,7 +507,7 @@ of the individual columns matter.
 struct TablesEq{T}
     parent::T
 end
-TablesEq() = TablesEq(HashVersion{1}())
+TablesEq() = TablesEq(HashVersion{2}())
 StableHashTraits.parent_context(x::TablesEq) = x.parent
 function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
@@ -525,7 +527,7 @@ value.
 struct ViewsEq{T}
     parent::T
 end
-ViewsEq() = ViewsEq(HashVersion{1}())
+ViewsEq() = ViewsEq(HashVersion{2}())
 StableHashTraits.parent_context(x::ViewsEq) = x.parent
 function StableHashTraits.hash_method(::AbstractArray, ::ViewsEq)
     return (ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
@@ -535,6 +537,5 @@ function StableHashTraits.hash_method(::AbstractString, ::ViewsEq)
 end
 
 parent_context(::HashVersion) = nothing
-parent_context(::HashVersion{2}) = HashVersion{1}()
 
 end
