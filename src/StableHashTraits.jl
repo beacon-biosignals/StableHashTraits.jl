@@ -152,7 +152,7 @@ struct RecursiveHash{F,T}
 end
 function RecursiveHash(fn)
     hash = fn(UInt8[])
-    return RecursiveHash(fn, hash, init)
+    return RecursiveHash(fn, hash, hash)
 end
 start_hash!(x::RecursiveHash) = RecursiveHash(x.fn, x.init, x.init)
 update_hash!(x::RecursiveHash, bytes) = RecursiveHash(x.fn, x.fn(bytes, x.val), x.init)
