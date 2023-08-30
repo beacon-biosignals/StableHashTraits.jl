@@ -1,48 +1,49 @@
 include("setup_tests.jl")
 
 @testset "StableHashTraits.jl" begin
-    # reference tests to ensure hash consistency
-    @test_reference "references/ref00.txt" bytes2hex(stable_hash(()))
-    @test_reference "references/ref01.txt" bytes2hex(stable_hash([1, 2, 3]))
-    @test_reference "references/ref02.txt" bytes2hex(stable_hash([1 2; 3 4]))
-    @test_reference "references/ref03.txt" bytes2hex(stable_hash((a=1, b=2)))
-    @test_reference "references/ref04.txt" bytes2hex(stable_hash(Set(1:3)))
-    @test_reference "references/ref05.txt" bytes2hex(stable_hash(sin))
-    @test_reference "references/ref06.txt" bytes2hex(stable_hash(TestType2(1, 2)))
-    @test_reference "references/ref07.txt" bytes2hex(stable_hash(TypeType(Array)))
-    @test_reference "references/ref08.txt" bytes2hex(stable_hash(TestType5("bobo")))
-    @test_reference "references/ref09.txt" bytes2hex(stable_hash(Nothing))
-    @test_reference "references/ref10.txt" bytes2hex(stable_hash(Missing))
-    @test_reference "references/ref11.txt" bytes2hex(stable_hash(v"0.1.0"))
-    @test_reference "references/ref12.txt" bytes2hex(stable_hash(UUID("8d70055f-1864-48ff-8a94-2c16d4e1d1cd")))
-    @test_reference "references/ref13.txt" bytes2hex(stable_hash(Date("2002-01-01")))
-    @test_reference "references/ref14.txt" bytes2hex(stable_hash(Time("12:00")))
-    @test_reference "references/ref15.txt" bytes2hex(stable_hash(TimePeriod(Nanosecond(0))))
-    @test_reference "references/ref16.txt" bytes2hex(stable_hash(Hour(1) + Minute(2)))
-    @test_reference "references/ref17.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
-                                                                           y=1:10)))
-    @test_reference "references/ref18.txt" bytes2hex(stable_hash(Dict(:a => "1", :b => "2")))
-    @test_reference "references/ref19.txt" bytes2hex(stable_hash(ExtraTypeParams{:A,Int}(2)))
-
-    # get some code coverage (and reference tests) for a generic hash function
-    hashfn = (x, s=0x000000) -> crc32c(copy(x), s)
-    @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=hashfn)
-    @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=hashfn)
-    @test_reference "references/ref22.txt" stable_hash(sin; alg=hashfn)
-    @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=hashfn)
-    @test_reference "references/ref24.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
-                                                       TablesEq(); alg=hashfn)
-    @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=hashfn)
-
-    # get some code coverage (and reference tests) for sha1
-    @test_reference "references/ref26.txt" bytes2hex(stable_hash([1, 2, 3]; alg=sha1))
-    @test_reference "references/ref27.txt" bytes2hex(stable_hash(v"0.1.0"; alg=sha1))
-    @test_reference "references/ref28.txt" bytes2hex(stable_hash(sin; alg=sha1))
-    @test_reference "references/ref29.txt" bytes2hex(stable_hash(Set(1:3); alg=sha1))
-    @test_reference "references/ref30.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
-                                                                           y=1:10),
-                                                                 TablesEq(); alg=sha1))
-    @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
+    for V in (1, 2)
+        ctx = HashVersion{V}()
+        # reference tests to ensure hash consistency
+        @test_reference "references/ref00_$V.txt" bytes2hex(stable_hash((), ctx))
+        @test_reference "references/ref01_$V.txt" bytes2hex(stable_hash([1, 2, 3], ctx))
+        @test_reference "references/ref02_$V.txt" bytes2hex(stable_hash([1 2; 3 4], ctx))
+        @test_reference "references/ref03_$V.txt" bytes2hex(stable_hash((a=1, b=2), ctx))
+        @test_reference "references/ref04_$V.txt" bytes2hex(stable_hash(Set(1:3), ctx))
+        @test_reference "references/ref05_$V.txt" bytes2hex(stable_hash(sin, ctx))
+        @test_reference "references/ref06_$V.txt" bytes2hex(stable_hash(TestType2(1, 2), ctx))
+        @test_reference "references/ref07_$V.txt" bytes2hex(stable_hash(TypeType(Array), ctx))
+        @test_reference "references/ref08_$V.txt" bytes2hex(stable_hash(TestType5("bobo"), ctx))
+        @test_reference "references/ref09_$V.txt" bytes2hex(stable_hash(Nothing, ctx))
+        @test_reference "references/ref10_$V.txt" bytes2hex(stable_hash(Missing, ctx))
+        @test_reference "references/ref11_$V.txt" bytes2hex(stable_hash(v"0.1.0", ctx))
+        @test_reference "references/ref12_$V.txt" bytes2hex(stable_hash(UUID("8d70055f-1864-48ff-8a94-2c16d4e1d1cd"), ctx))
+        @test_reference "references/ref13_$V.txt" bytes2hex(stable_hash(Date("2002-01-01"), ctx))
+        @test_reference "references/ref14_$V.txt" bytes2hex(stable_hash(Time("12:00"), ctx))
+        @test_reference "references/ref15_$V.txt" bytes2hex(stable_hash(TimePeriod(Nanosecond(0)), ctx))
+        @test_reference "references/ref16_$V.txt" bytes2hex(stable_hash(Hour(1) + Minute(2), ctx))
+        @test_reference "references/ref17_$V.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
+                                                                               y=1:10), ctx))
+        @test_reference "references/ref18_$V.txt" bytes2hex(stable_hash(Dict(:a => "1", :b => "2"), ctx))
+        @test_reference "references/ref19_$V.txt" bytes2hex(stable_hash(ExtraTypeParams{:A,Int}(2), ctx))
+        # get some code coverage (and reference tests) for a generic hash function
+        hashfn = (x, s=0x000000) -> crc32c(copy(x), s)
+        @test_reference "references/ref20_$V.txt" stable_hash([1, 2, 3]; alg=hashfn)
+        @test_reference "references/ref21_$V.txt" stable_hash(v"0.1.0"; alg=hashfn)
+        @test_reference "references/ref22_$V.txt" stable_hash(sin; alg=hashfn)
+        @test_reference "references/ref23_$V.txt" stable_hash(Set(1:3); alg=hashfn)
+        @test_reference "references/ref24_$V.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
+                                                           TablesEq(); alg=hashfn)
+        @test_reference "references/ref25_$V.txt" stable_hash([1 2; 3 4]; alg=hashfn)
+        # get some code coverage (and reference tests) for sha1
+        @test_reference "references/ref26_$V.txt" bytes2hex(stable_hash([1, 2, 3]; alg=sha1, ctx))
+        @test_reference "references/ref27_$V.txt" bytes2hex(stable_hash(v"0.1.0"; alg=sha1, ctx))
+        @test_reference "references/ref28_$V.txt" bytes2hex(stable_hash(sin; alg=sha1, ctx))
+        @test_reference "references/ref29_$V.txt" bytes2hex(stable_hash(Set(1:3); alg=sha1, ctx))
+        @test_reference "references/ref30_$V.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
+                                                                               y=1:10),
+                                                                     TablesEq(); alg=sha1, ctx))
+        @test_reference "references/ref31_$V.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1, ctx))
+    end
 
     # verifies that transform can be called recursively
     @test stable_hash(GoodTransform(2)) == stable_hash(GoodTransform("-0.2"))
