@@ -78,13 +78,14 @@ suite["sha_structs"]["trait"] = @benchmarkable stable_hash(structs, alg=$(sha256
 # DATAPOINT: how much does sha's allocations slow things down? with the optimization
 # to avoid recursive sha, we get decent SHA performance
 
-# NEXT DATAPOINT: what about hashing an array of strings?
+# DATAPOINT: what about hashing an array of strings? looks reasonable
 
-# NEXT DATAPOINT: how does this work when working with many small structs
-# (does the type hashing add a lot or is it mostly about the allocations?)
-
-# NOTE: we can also probably further optimize by circumventing the `write`
-# operations for primitive types that can be directly hashed
+# DATAPOINT: how does this work when working with many small structs? this seems to break
+# down when using SHA algorithsm; I could probably work around this for a lot of cases if
+# the data is composed of long arrays of objects (but I don't know if that's a good
+# assumption) why is this happening? is it that calls to `update!` with small amounts of
+# data are slower than large chunks of data? (if that were the case, why isn't sha_numbers
+# worse?)
 
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
 # the benchmark parameters. Reusing cached parameters is faster and more reliable
