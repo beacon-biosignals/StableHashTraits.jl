@@ -18,7 +18,7 @@ these fallback methods will not change even if new fallbacks are defined.
 struct HashVersion{V} end
 
 """
-    stable_hash(x, context=HashVersion{2}(); alg=sha256)
+    stable_hash(x, context=HashVersion{1}(); alg=sha256)
 
 Create a stable hash of the given objects. As long as the context remains the same, this is
 intended to remain unchanged across julia verisons. How each object is hashed is determined
@@ -37,7 +37,7 @@ The `context` value gets passed as the second argument to [`hash_method`](@ref),
 third argument to [`StableHashTraits.write`](@ref)
 
 """
-function stable_hash(x, context=HashVersion{2}(); alg=sha256)
+function stable_hash(x, context=HashVersion{1}(); alg=sha256)
     return compute_hash!(stable_hash_helper(x, setup_hash_state(alg, context), context,
                                             hash_method(x, context)))
 end
@@ -303,23 +303,30 @@ function hash_foreach_(fn, hash_state, context, xs, ::MarkElements)
     return hash_state
 end
 
-struct StructHash{P,S}
+struct StructHash{P,S,D}
     fnpair::P
 end
-StructHash(x::Symbol) = StructHash((fieldnames ∘ typeof) => getfield, x)
-function StructHash(fnpair::Pair=(fieldnames ∘ typeof) => getfield, by::Symbol=:ByOrder)
+function StructHash(sort::Symbol, drop::Symbol=:KeepNames)
+    return StructHash((fieldnames ∘ typeof) => getfield, sort, drop)
+end
+function StructHash(fnpair::Pair=(fieldnames ∘ typeof) => getfield, by::Symbol=:ByOrder, drop::Symbol=:KeepNames)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
-    return StructHash{typeof(fnpair),by}(fnpair)
+    drop ∈ (:DropNames, :KeepNames) || error("Expected a valid drop flag of :DropNames or :KeepNames")
+    return StructHash{typeof(fnpair),by,drop}(fnpair)
 end
 orderfields(::StructHash{<:Any,:ByOrder}, props) = props
 orderfields(::StructHash{<:Any,:ByName}, props) = sort_(props)
 sort_(x::Tuple) = TupleTools.sort(x; by=string)
 sort_(x::AbstractSet) = sort!(collect(x); by=string)
 sort_(x) = sort(x; by=string)
-function stable_hash_helper(x, hash_state, context, use::StructHash)
+function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,<:Any,D}) where {D}
     fieldsfn, getfieldfn = use.fnpair
     return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
-        return k => getfieldfn(x, k)
+        if D == :KeepNames
+            return k => getfieldfn(x, k)
+        else
+            return getfieldfn(x, k)
+        end
     end
 end
 
@@ -486,13 +493,13 @@ function parent_context(x::Any)
     return HashVersion{1}()
 end
 
-function hash_method(x::T, c::HashVersion) where {T}
+function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # we need to find `default_method` here because `hash_method(x::MyType, ::Any)` is less
     # specific than the current method, but if we have something defined for a specific type
     # as the first argument, we want that to be used, rather than this fallback (as if it
     # were defined as `hash_method(::Any)`). Note that changing this method to be x::Any,
     # and using T = typeof(x) would just lead to method ambiguities when trying to decide
-    # between `hash_method(::Any, ::HashVersion{1})` vs. `hash_method(::MyType, ::Any)`.
+    # between `hash_method(::Any, ::HashVersion{V})` vs. `hash_method(::MyType, ::Any)`.
     # Furthermore, this would would require the user to define `hash_method` with two
     # arguments.
     default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
@@ -500,15 +507,18 @@ function hash_method(x::T, c::HashVersion) where {T}
     Base.isprimitivetype(T) && return WriteHash()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
-    return (FnHash(typefn_for(c)), StructHash(:ByName))
+    return (FnHash(typefn_for(c)), StructHash(:ByName, V > 1 ? :DropNames : :KeepNames))
 end
 namefn_for(::HashVersion{1}) = qualified_name
 namefn_for(::HashVersion{2}) = stable_typename_id
 typefn_for(::HashVersion{1}) = qualified_type
 typefn_for(::HashVersion{2}) = stable_type_id
-hash_method(::NamedTuple, c::HashVersion) = (FnHash(namefn_for(c)), StructHash())
-function hash_method(::AbstractRange, c::HashVersion)
-    return (FnHash(namefn_for(c)), StructHash(:ByName))
+function hash_method(::NamedTuple, c::HashVersion{V}) where {V}
+    return (FnHash(V > 1 ? stable_type_id : qualified_name),
+            StructHash(:ByName, V > 1 ? :DropNames : :KeepNames))
+end
+function hash_method(::AbstractRange, c::HashVersion{V}) where {V}
+    return (FnHash(namefn_for(c)), StructHash(:ByName, V > 1 ? :DropNames : :KeepNames))
 end
 function hash_method(::AbstractArray, c::HashVersion)
     return (FnHash(namefn_for(c)), FnHash(size), IterateHash())
@@ -542,7 +552,7 @@ of the individual columns matter.
 struct TablesEq{T}
     parent::T
 end
-TablesEq() = TablesEq(HashVersion{2}())
+TablesEq() = TablesEq(HashVersion{1}())
 StableHashTraits.parent_context(x::TablesEq) = x.parent
 function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
@@ -562,7 +572,7 @@ value.
 struct ViewsEq{T}
     parent::T
 end
-ViewsEq() = ViewsEq(HashVersion{2}())
+ViewsEq() = ViewsEq(HashVersion{1}())
 StableHashTraits.parent_context(x::ViewsEq) = x.parent
 function StableHashTraits.hash_method(::AbstractArray, ::ViewsEq)
     return (ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())

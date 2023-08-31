@@ -24,7 +24,7 @@ end
 StableHashTraits.stable_hash(::MyType) = FnHash(x -> x.data) 
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
-stable_hash(a) == stable_hash(b) # true
+stable_hash(a) == stable_hash(b, HashVersion{2}()) # true
 ```
 
 ## Why use `stable_hash` instead of `Base.hash`?
@@ -39,7 +39,7 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 
 ## Details
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section below for more details.
+You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs. The context defaults to `HashVersion{1}()`, but it is highly recommended you use the most recent version `HashVersion{2}` as it is much faster. See the final section below for details on how to create your own custom contexts.
 
 There are sensible defaults for `stable_hash` that aim to ensure that if two values are
 different, the input to the hash algorithm will differ. 
@@ -56,7 +56,7 @@ following values, typically based only on the *type* of its input.
     and takes a hash of that. `StableHashTraits.write(io, x)`
     falls back to `Base.write(io, x)` if no specialized methods are defined for x.
 2. `IterateHash()`: assumes the object is iterable and finds a hash of all elements
-3. `StructHash([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
+3. `StructHash([pair = (fieldnames ∘ typeof) => getfield], [order], [name_storage])`: hash the structure of
     the object as defined by a sequence of pairs. How precisely this occurs is determined by
     the two arugments: 
       - `pair` Defines how fields are extracted; the default is 
@@ -67,16 +67,19 @@ following values, typically based only on the *type* of its input.
         function used to extract the keys from the object. 
       - `order` can be `:ByOrder` (the default)—which sorts by the order returned by
         `pair[1]`—or `:ByName`—which sorts by lexigraphical order.
+      - `name_storage` can be `:KeepNames` or `:DropNames`; the former will hash the value of each name returned by `pair[1]`, `:DropNames` only hashes the values returned
+      by `pair[2]`. `:DropNames` can be much faster, and is useful when the names are 
+      defined redundant with the type (e.g. `fieldnames`)
 4. `FnHash(fn, [method])`: hash the result of applying `fn` to the given object. Optionally,
    use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result to
    determine how to hash it. There are two built-in functions commonly used with
    `FnHash`
-    - `qualified_name`: Get the qualified name of an objects type, e.g. `Base.String`
-    - `qualified_type`: Get the qualified name and type parameters of a type, e.g.
-       `Base.Vector{Int}`. 
+    - `stable_typename_id`: Get the qualified name of an objects type, e.g. `Base.String` and return 128 bit hash of this string
+    - `stable_name_id`: Get the qualified name and type parameters of a type, e.g.
+       `Base.Vector{Int}`, and return a 128 bit hash of this string
     Favor these functions over e.g. `string ∘ typeof` as they have been tested to provide
     more stable values across julia verisons and sessions than the naive
-    string-ification of types.
+    string-ification of types, and are much faster.
 5. `ConstantHash(value, [method])`: hash the constant `value`. Optionally, use `method` to
     hash the `value`, otherwise call `hash_method` on `value` to determine how to hash it.
 6. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
@@ -92,7 +95,18 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 
 <!-- END_HASH_TRAITS -->
 
-## Breaking changes
+## Change Log
+
+### In 1.1
+
+This release includes substantial speed improvements. Refer to the benchmark results
+under **TODO**.
+
+- `HashVersion{2}` is a new hash context that is much faster than `HashVersion{1}`, favor
+it over `HashVersion{1}` in all cases. To avoid breaking existing code, `HashVersion{1}` is still the default.
+
+- `qualified_name` and `qualified_type` have been deprected, favor `stable_typename_id`
+and `stable_type_id` which are much faster.
 
 ### In 1.0:
 

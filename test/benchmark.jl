@@ -96,6 +96,15 @@ suite["sha_structs"]["trait"] = @benchmarkable stable_hash(structs, alg=$(sha256
 # and then compute the sha, rather than make many small updates??? that seems plausible
 # if so, we should setup some buffer that stores data and writes it as needed
 
+# DATAPOINT: buffering sha seems to help a little (75% of unbuffered speed)
+
+# DATAPOINT: structs are still slow I think because we need to repeatedly hash symbols, can
+# we do better? (test by breaking stability,
+
+# We could speed things up by hashing the symbols all together, and compute a single
+# value that works for that in all cases; alternatively, since we are caching
+# the type, the fields are implied, so we could just cache the values
+
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
 # the benchmark parameters. Reusing cached parameters is faster and more reliable
 # than re-tuning `suite` every time the file is included.
