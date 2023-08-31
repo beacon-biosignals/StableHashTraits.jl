@@ -67,43 +67,7 @@ suite["sha_structs"] = BenchmarkGroup(["sha_structs"])
 suite["sha_structs"]["base"] = @benchmarkable sha256($(reinterpret(UInt8, struct_data)))
 suite["sha_structs"]["trait"] = @benchmarkable stable_hash(structs, HashVersion{2}(), alg=$(sha256))
 
-# DATAPOINT: the recursive hashing itself, even without slowdowns from SHA
-# buffers is substantial; this can be fixed by optimizing how primitive
-# types are hashed (when `UseWrite` is set)
-
-# DATAPOINT: hashing arrays of tuples vs. matrices has overhead
-# because of the qualified name; if we can cash this string computation
-# per type, we should hopefully be much faster (try that next)
-
-# DATAPOINT: how much does sha's allocations slow things down? with the optimization
-# to avoid recursive sha, we get decent SHA performance
-
-# DATAPOINT: what about hashing an array of strings? looks reasonable
-
-# DATAPOINT: how does this work when working with many small structs? this seems to break
-# down when using SHA algorithsm; I could probably work around this for a lot of cases if
-# the data is composed of long arrays of objects (but I don't know if that's a good
-# assumption) why is this happening? is it that calls to `update!` with small amounts of
-# data are slower than large chunks of data? (if that were the case, why isn't sha_numbers
-# worse?); 
-# THOUGHT: in looking at where the calls are dominating, this looks to be something about
-# bounds checking, and handling the block offsets (i.e. if the update is not
-# for a complete block)
-# ANSWER: nope, that doesn't seem to do the trick, even if we manually set 
-# we still see slow times, though it is no longer completley dominated by `copyto`
-# (its' still there but more of the time is in the actual guts of `update!`)
-# NOTE: it seems like, for SHA, it is better to write out a bunch of data
-# and then compute the sha, rather than make many small updates??? that seems plausible
-# if so, we should setup some buffer that stores data and writes it as needed
-
-# DATAPOINT: buffering sha seems to help a little (75% of unbuffered speed)
-
-# DATAPOINT: structs are still slow I think because we need to repeatedly hash symbols, can
-# we do better? (test by breaking stability,
-
-# We could speed things up by hashing the symbols all together, and compute a single
-# value that works for that in all cases; alternatively, since we are caching
-# the type, the fields are implied, so we could just cache the values
+# TODO: create a benchmark for DataFrames
 
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
 # the benchmark parameters. Reusing cached parameters is faster and more reliable

@@ -313,19 +313,20 @@ end
 @generated function bytesof(x::Number)
     nbytes = sizeof(x)
     UIntX = Symbol(:UInt, nbytes << 3)
-    uint_var = gensym("bytes")
+    bytes = gensym("bytes")
     tuple_args = map(1:nbytes) do i
-        :(unsafe_trunc(UInt8, ($uint_var >> $((i-1) << 3)) & 0xff))
+        :(unsafe_trunc(UInt8, ($bytes >> $((i-1) << 3)) & 0xff))
     end
     tuple_result = Expr(:tuple, tuple_args...)
     return quote
-        $uint_var = reinterpret($UIntX, x)
+        $bytes = reinterpret($UIntX, x)
         return $tuple_result
     end
 end
 
 # TODO: make a more generic version of `bytesof` for all primitive types
 function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
+    # NOTE: `bytesof` increases speed by ~3x
     return update_hash!(hash_state, bytesof(x))
 end
 
@@ -398,6 +399,8 @@ function qualified_type(x)
                  :qualified_type)
 end
 
+# NOTE: using stable_{typename|type}_id increases speed by ~x10-20 vs. `qualified_name`
+
 """
     stable_typename_id(::Type)
 
@@ -466,9 +469,6 @@ ConstantHash(val) = ConstantHash{typeof(val),Nothing}(val, nothing)
 get_value_(x, method::ConstantHash) = method.constant
 
 function stable_hash_helper(x, hash_state, context, method::Union{FnHash,ConstantHash})
-    stable_hash_of_get_value(x, hash_state, context, method)
-end
-function stable_hash_of_get_value(x, hash_state, context, method::Union{FnHash,ConstantHash})
     y = get_value_(x, method)
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method
@@ -482,6 +482,10 @@ function stable_hash_of_get_value(x, hash_state, context, method::Union{FnHash,C
 
     return stable_hash_helper(y, hash_state, context, new_method)
 end
+
+#####
+##### Tuples 
+#####
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
     for method in methods
@@ -599,7 +603,6 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # NOTE: :DropNames increases speed by ~10x
     return (FnHash(typefn_for(c)), StructHash(:ByName, V > 1 ? :DropNames : :KeepNames))
 end
-# using stable_{typename|type}_id increases speed by ~x10-20
 namefn_for(::HashVersion{1}) = qualified_name_
 namefn_for(::HashVersion{2}) = stable_typename_id
 typefn_for(::HashVersion{1}) = qualified_type_
