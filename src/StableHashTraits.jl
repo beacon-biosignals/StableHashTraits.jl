@@ -95,7 +95,56 @@ function stable_hash_helper(x, hash_state, context, method)
 end
 
 #####
-##### Hash Function API 
+##### ================ Hash Algorithms ================
+#####
+"""
+    update_hash!(state, bytes)
+
+Returns the updated hash state given a set of bytes (either a tuple or array of UInt8
+values).
+"""
+function update_hash! end
+
+"""
+    setup_hash_state(alg)
+
+Given a function that specifies the hash algorithm to use, setup the necessary
+state to track updates to hashing as we traverse an object's structure and return it.
+"""
+function setup_hash_state! end
+
+"""
+    compute_hash!(state)
+
+Return the final hash value to return for `state`
+"""
+function compute_hash! end
+
+"""
+    start_hash!(state)
+
+Return an updated state that delimits hashing of a nested struture; calls made to
+`update_hash!` after start_hash! will be handled as nested elements up until `stop_hash!` is
+called.
+"""
+function start_hash! end
+
+"""
+    stop_hash!(state)
+
+Return an updated state that delimints the end of a nested structure.
+"""
+function stop_hash! end
+
+"""
+    hash_type(state)
+
+The return type of `compute_hash!`
+"""
+function hash_type end
+
+#####
+##### BufferedHash: wrapper that buffers bytes before passing them to the hash algorithm 
 #####
 
 struct BufferedHash{T}
@@ -144,6 +193,10 @@ end
 
 hash_type(x::BufferedHash) = hash_type(x.hash)
 
+#####
+##### SHA Hashing: support use of `sha256` and related hash functions
+#####
+
 # setup_hash_state: given a function that identifies the hash, setup up the state used for hashing
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
@@ -169,6 +222,10 @@ end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 hash_type(::SHA.SHA_CTX) = Vector{UInt8}
 
+#####
+##### MarkerHash: wrapper that uses delimiters to handle `start/stop_hash!` 
+#####
+
 struct MarkerHash{T}
     hash::T
 end
@@ -181,6 +238,10 @@ function stop_hash!(::MarkerHash, nested::MarkerHash)
 end
 compute_hash!(x::MarkerHash) = compute_hash!(x.hash)
 hash_type(x::MarkerHash) = hash_type(x.hash)
+
+#####
+##### RecursiveHash: handles a function of the form hash(bytes, [old_hash]) 
+#####
 
 setup_hash_state(fn::Function, ::Any) = RecursiveHash(fn)
 struct RecursiveHash{F,T}
@@ -201,7 +262,7 @@ compute_hash!(x::RecursiveHash) = x.val
 hash_type(::RecursiveHash{<:Any, T}) where {T} = T
 
 #####
-##### Hash Traits
+##### ================ Hash Traits ================
 #####
 
 # deprecations
@@ -215,6 +276,10 @@ hash_type(::RecursiveHash{<:Any, T}) where {T} = T
 @deprecate UseTable() FnHash(Tables.columns,
                              StructHash(Tables.columnnames => Tables.getcolumn))
 # These are the various methods to compute a hash from an object
+
+#####
+##### WriteHash 
+#####
 
 struct WriteHash end
 """
@@ -268,6 +333,10 @@ function stable_hash_helper(x::String, hash_state, context, ::WriteHash)
     return update_hash!(hash_state, codeunits(x))
 end
 
+#####
+##### IterateHash 
+#####
+
 struct IterateHash end
 function stable_hash_helper(x, hash_state, context, ::IterateHash)
     return hash_foreach(identity, hash_state, context, x)
@@ -310,6 +379,10 @@ function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,<:Any,
         end
     end
 end
+
+#####
+##### Stable values for types
+#####
 
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
 qualified_name_(fn::Function) = qname_(fn, nameof)
@@ -374,6 +447,10 @@ function validate_name(str)
     return str
 end
 
+#####
+##### FnHash 
+#####
+
 struct FnHash{F,H}
     fn::F
     result_method::H # if non-nothing, apply to result of `fn`
@@ -406,8 +483,6 @@ function stable_hash_of_get_value(x, hash_state, context, method::Union{FnHash,C
     return stable_hash_helper(y, hash_state, context, new_method)
 end
 
-
-# TODO: maybe we can just do one recursive hash here?
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
     for method in methods
         result = stable_hash_helper(x, start_hash!(hash_state), context, method)
@@ -416,6 +491,10 @@ function stable_hash_helper(x, hash_state, context, methods::Tuple)
 
     return hash_state
 end
+
+#####
+##### HashAndContext 
+#####
 
 """
 
@@ -454,7 +533,7 @@ function stable_hash_helper(x, hash_state, context, method::HashAndContext)
 end
 
 #####
-##### Contexts
+##### ================ Hash Contexts ================
 #####
 
 """
@@ -496,6 +575,12 @@ function parent_context(x::Any)
                  "`$x`. See details in the docstring of `hash_method`.", :parent_context)
     return HashVersion{1}()
 end
+
+#####
+##### HashVersion{V} (root contexts)
+#####
+
+parent_context(::HashVersion) = nothing
 
 function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # we need to find `default_method` here because `hash_method(x::MyType, ::Any)` is less
@@ -549,6 +634,10 @@ function hash_method(::AbstractSet, c::HashVersion)
     return (FnHash(namefn_for(c)), FnHash(sort! ∘ collect))
 end
 
+#####
+##### TablesEq 
+#####
+
 """
     TablesEq(parent_context)
 
@@ -569,6 +658,10 @@ function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
     return StableHashTraits.hash_method(x, parent_context(m))
 end
 
+#####
+##### ViewsEq 
+#####
+
 """
     ViewsEq(parent_context)
 
@@ -587,7 +680,5 @@ end
 function StableHashTraits.hash_method(::AbstractString, ::ViewsEq)
     return (ConstantHash("Base.AbstractString", WriteHash()), WriteHash())
 end
-
-parent_context(::HashVersion) = nothing
 
 end
