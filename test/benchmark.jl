@@ -29,29 +29,29 @@ end
 suite["numbers"] = BenchmarkGroup(["numbers"])
 data = rand(Int, 10_000)
 suite["numbers"]["base"] = @benchmarkable $(fnv)(data)
-suite["numbers"]["trait"] = @benchmarkable stable_hash(data; alg=$(fnv))
+suite["numbers"]["trait"] = @benchmarkable stable_hash(data, HashVersion{2}(); alg=$(fnv))
 
 suite["tuples"] = BenchmarkGroup(["tuples"])
 data1 = rand(Int, 2, 10_000)
 data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
-suite["tuples"]["base"] = @benchmarkable stable_hash(data1, alg=$(fnv))
-suite["tuples"]["trait"] = @benchmarkable stable_hash(data2; alg=$(fnv))
+suite["tuples"]["base"] = @benchmarkable stable_hash(data1, HashVersion{2}(), alg=$(fnv))
+suite["tuples"]["trait"] = @benchmarkable stable_hash(data2, HashVersion{2}(); alg=$(fnv))
 
 suite["sha_tuples"] = BenchmarkGroup(["sha_tuples"])
 data1 = rand(Int, 2, 10_000)
 data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
-suite["sha_tuples"]["base"] = @benchmarkable stable_hash(data1, alg=$(sha256))
-suite["sha_tuples"]["trait"] = @benchmarkable stable_hash(data2; alg=$(sha256))
+suite["sha_tuples"]["base"] = @benchmarkable stable_hash(data1, HashVersion{2}(), alg=$(sha256))
+suite["sha_tuples"]["trait"] = @benchmarkable stable_hash(data2, HashVersion{2}(); alg=$(sha256))
 
 suite["sha_numbers"] = BenchmarkGroup(["sha_numbers"])
 suite["sha_numbers"]["base"] = @benchmarkable sha256(reinterpret(UInt8, data))
-suite["sha_numbers"]["trait"] = @benchmarkable stable_hash(data; alg=$(sha256))
+suite["sha_numbers"]["trait"] = @benchmarkable stable_hash(data, HashVersion{2}(); alg=$(sha256))
 
 suite["strings"] = BenchmarkGroup(["strings"])
 strings = [String(rand('a':'z', 30)) for _ in 1:10_000]
 strdata = [c for str in strings for c in str]
 suite["strings"]["base"] = @benchmarkable fnv($(reinterpret(UInt8, strdata)))
-suite["strings"]["trait"] = @benchmarkable stable_hash(strings, alg=$(fnv))
+suite["strings"]["trait"] = @benchmarkable stable_hash(strings, HashVersion{2}(), alg=$(fnv))
 
 struct BenchTest
     a::Int
@@ -61,11 +61,11 @@ structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:10_000]
 struct_data = [x for st in structs for x in (st.a, st.b)]
 suite["structs"] = BenchmarkGroup(["structs"])
 suite["structs"]["base"] = @benchmarkable fnv($(reinterpret(UInt8, struct_data)))
-suite["structs"]["trait"] = @benchmarkable stable_hash(structs, alg=$(fnv))
+suite["structs"]["trait"] = @benchmarkable stable_hash(structs, HashVersion{2}(), alg=$(fnv))
 
 suite["sha_structs"] = BenchmarkGroup(["sha_structs"])
 suite["sha_structs"]["base"] = @benchmarkable sha256($(reinterpret(UInt8, struct_data)))
-suite["sha_structs"]["trait"] = @benchmarkable stable_hash(structs, alg=$(sha256))
+suite["sha_structs"]["trait"] = @benchmarkable stable_hash(structs, HashVersion{2}(), alg=$(sha256))
 
 # DATAPOINT: the recursive hashing itself, even without slowdowns from SHA
 # buffers is substantial; this can be fixed by optimizing how primitive
@@ -108,7 +108,7 @@ suite["sha_structs"]["trait"] = @benchmarkable stable_hash(structs, alg=$(sha256
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
 # the benchmark parameters. Reusing cached parameters is faster and more reliable
 # than re-tuning `suite` every time the file is included.
-paramspath = joinpath(dirname(@__FILE__), "params.json")
+paramspath = joinpath(dirname(@__FILE__), "benchparams.json")
 
 if isfile(paramspath)
     loadparams!(suite, BenchmarkTools.load(paramspath)[1], :evals)

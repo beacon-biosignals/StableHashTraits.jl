@@ -102,11 +102,13 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 This release includes substantial speed improvements. Refer to the benchmark results
 under **TODO**.
 
-- `HashVersion{2}` is a new hash context that is much faster than `HashVersion{1}`, favor
-it over `HashVersion{1}` in all cases. To avoid breaking existing code, `HashVersion{1}` is still the default.
-
-- `qualified_name` and `qualified_type` have been deprected, favor `stable_typename_id`
-and `stable_type_id` which are much faster.
+- `HashVersion{1}` benefits from some limited speed improvements.
+- `HashVersion{2}` is a new hash context that is much faster (~1000x in some cases) than
+  `HashVersion{1}`, favor it over `HashVersion{1}` in all cases. Since this version changes
+  the hash values of some objects, to avoid breaking existing code `HashVersion{1}` is still
+  the default. 
+- `qualified_name` and `qualified_type` have been deprected, favor `stable_typename_id` and
+  `stable_type_id` which are much faster.
 
 ### In 1.0:
 

@@ -148,6 +148,8 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
     if CTX in names(SHA)
         @eval function setup_hash_state(::typeof(SHA.$(fn)), ::HashVersion{V}) where {V} 
+            # NOTE: BufferedHash speeds things up by about 1.8x
+            # NOTE: MarkerHash speeds things up by about 4.5x
             return V < 2 ? SHA.$(CTX)() : MarkerHash(BufferedHash(SHA.$(CTX)()))
         end
         @eval function setup_hash_state(::typeof(SHA.$(fn)), c::Any)
@@ -270,29 +272,7 @@ function stable_hash_helper(x, hash_state, context, ::IterateHash)
     return hash_foreach(identity, hash_state, context, x)
 end
 
-abstract type IterateMarking end
-struct MarkLoop <: IterateMarking end
-struct MarkElements <: IterateMarking end
-IterateMarking(x) = IterateMarking(parent_context(x))
-IterateMarking(::Nothing) = MarkLoop()
-IterateMarking(::HashVersion{N}) where N = N < 2 ? MarkElements() : MarkLoop()
-
 function hash_foreach(fn, hash_state, context, xs)
-    return hash_foreach_(fn, hash_state, context, xs, IterateMarking(context))
-end
-
-function hash_foreach_(fn, hash_state, context, xs, ::MarkLoop)
-    inner_state = start_hash!(hash_state)
-    for x in xs
-        f_x = fn(x)
-        inner_state = stable_hash_helper(f_x, inner_state, context,
-                                         hash_method(f_x, context))
-    end
-    hash_state = stop_hash!(hash_state, inner_state)
-    return hash_state
-end
-
-function hash_foreach_(fn, hash_state, context, xs, ::MarkElements)
     for x in xs
         f_x = fn(x)
         inner_state = start_hash!(hash_state)
@@ -334,6 +314,7 @@ qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T
 qualifier(fn::Function) = fn
 qualifier(::Type{T}) where T = T
 qualifier(::T) where T = T
+# TODO: create deprecation warnings
 qualified_name(fn::Function) = qname_(fn, nameof)
 qualified_type(fn::Function) = qname_(fn, string)
 qualified_name(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
@@ -507,12 +488,15 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     Base.isprimitivetype(T) && return WriteHash()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
+    # NOTE: :DropNames increases speed by ~10x
     return (FnHash(typefn_for(c)), StructHash(:ByName, V > 1 ? :DropNames : :KeepNames))
 end
+# using stable_{typename|type}_id increases speed by ~x10-20
 namefn_for(::HashVersion{1}) = qualified_name
 namefn_for(::HashVersion{2}) = stable_typename_id
 typefn_for(::HashVersion{1}) = qualified_type
 typefn_for(::HashVersion{2}) = stable_type_id
+
 function hash_method(::NamedTuple, c::HashVersion{V}) where {V}
     return (FnHash(V > 1 ? stable_type_id : qualified_name),
             StructHash(:ByName, V > 1 ? :DropNames : :KeepNames))
