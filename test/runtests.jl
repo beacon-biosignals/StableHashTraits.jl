@@ -148,7 +148,9 @@ include("setup_tests.jl")
             @test_deprecated(UseSize(UseIterate()))
             @test_deprecated(UseTable())
 
-            # TODO: code coveraged for buffered hash
+            # TODO: code coveraged for buffered hash (when the buffer is
+            # too small to need or the buffer overruns)
+            # TODO: verify deprecation warnings for qualified_name
         end
     end
 end

@@ -75,7 +75,7 @@ following values, typically based only on the *type* of its input.
    determine how to hash it. There are two built-in functions commonly used with
    `FnHash`
     - `stable_typename_id`: Get the qualified name of an objects type, e.g. `Base.String` and return 128 bit hash of this string
-    - `stable_name_id`: Get the qualified name and type parameters of a type, e.g.
+    - `stable_type_id`: Get the qualified name and type parameters of a type, e.g.
        `Base.Vector{Int}`, and return a 128 bit hash of this string
     Favor these functions over e.g. `string ∘ typeof` as they have been tested to provide
     more stable values across julia verisons and sessions than the naive

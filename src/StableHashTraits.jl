@@ -1,7 +1,8 @@
 module StableHashTraits
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash,
-       HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq
+       HashAndContext, HashVersion, qualified_name, qualified_type, 
+       stable_type_id, stable_typename_id, TablesEq, ViewsEq
 using TupleTools, Tables, Compat
 using SHA: SHA, sha256
 
@@ -10,7 +11,8 @@ using SHA: SHA, sha256
 
 The default `hash_context` used by `stable_hash`. There are currently two versions
 (1 and 2). Version 2 is far more optimized than 1 and should generally be used in newly 
-written code (it is the default version).
+written code. Version 1 is the default version, so as to changing the hash computed
+by existing code.
 
 By explicitly passing this hash version in `stable_hash` you ensure that hash values for 
 these fallback methods will not change even if new fallbacks are defined. 
@@ -24,14 +26,15 @@ Create a stable hash of the given objects. As long as the context remains the sa
 intended to remain unchanged across julia verisons. How each object is hashed is determined
 by [`hash_method`](@ref), which aims to have sensible fallbacks.
 
-To ensure the greattest stability, explicitly pass the context object. Even if the fallback
-methods change in a future release, the hash you get by passing an explicit `HashVersin{N}`
-should *not* change. (Note that the number in `HashVersion` may not necessarily match the
-package verison of `StableHashTraits`).
+To ensure the greattest stability, you should explicitly pass the context object. It is also
+best to pass an explicit version, since `HashVersion{2}` is generally faster than
+`HashVerison{1}`. If the fallback methods change in a future release, the hash you get
+by passing an explicit `HashVersin{N}` should *not* change. (Note that the number in
+`HashVersion` may not necessarily match the package verison of `StableHashTraits`).
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
-related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
-[old_hash])`.
+related function from `SHA` or any function of the form 
+`hash(x::Union{NTuple{<:Any, UInt8}, AbstractArray{UInt8}, [old_hash])`.
 
 The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
 third argument to [`StableHashTraits.write`](@ref)
@@ -54,8 +57,6 @@ const HASH_TRAITS_DOCS, HASH_CONTEXT_DOCS = let
 end
 
 """
-# alternative: return some special  that just wraps
-# the 
     hash_method(x, [context])
 
 Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
@@ -311,26 +312,48 @@ function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,<:Any,
 end
 
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
-qualifier(fn::Function) = fn
-qualifier(::Type{T}) where T = T
-qualifier(::T) where T = T
-# TODO: create deprecation warnings
-qualified_name(fn::Function) = qname_(fn, nameof)
-qualified_type(fn::Function) = qname_(fn, string)
-qualified_name(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
-qualified_type(x::T) where {T} = qname_(T <: DataType ? x : T, string)
+qualified_name_(fn::Function) = qname_(fn, nameof)
+qualified_type_(fn::Function) = qname_(fn, string)
+qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
+qualified_type_(x::T) where {T} = qname_(T <: DataType ? x : T, string)
+function qualified_name(x)
+    Base.depwarn("`qualified_name` is deprecated, use `stable_typename_id` instead", 
+                 :qualified_name)
+end
+function qualified_type(x)
+    Base.depwarn("`qualified_type` is deprecated, use `stable_type_id` instead", 
+                 :qualified_type)
+end
 
+"""
+    stable_typename_id(::Type)
+
+Returns a 128bit hash that is the same for a given type so long as the name and module of
+the type doesn't change. E.g. `stable_typename_id(Vector) == stable_typename_id(Matrix)`
+
+NOTE: if the module of a type is `Core` it is renamed to `Base` before hashing because the
+location of some types changes between `Core` to `Base` across julia versions
+"""
 @generated function stable_typename_id(x)
     T = x <: Function ? x.instance : x
-    str = qualified_name(T)
+    str = qualified_name_(T)
     bytes = sha256(str)
     number = first(reinterpret(UInt128, bytes))
     :(return $number)
 end
 
+"""
+    stable_type_id(::Type)`
+
+Returns a 128bit hash that is the same for a given type so long as the module and string
+representation of a type is the same (invariant to comma spacing).
+
+NOTE: if the module of a type is `Core` it is renamed to `Base` before hashing because the
+location of some types changes between `Core` to `Base` across julia versions
+"""
 @generated function stable_type_id(x)
     T = x <: Function ? x.instance : x
-    str = qualified_type(T)
+    str = qualified_type_(T)
     bytes = sha256(str)
     number = first(reinterpret(UInt128, bytes))
     :(return $number)
@@ -492,13 +515,13 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     return (FnHash(typefn_for(c)), StructHash(:ByName, V > 1 ? :DropNames : :KeepNames))
 end
 # using stable_{typename|type}_id increases speed by ~x10-20
-namefn_for(::HashVersion{1}) = qualified_name
+namefn_for(::HashVersion{1}) = qualified_name_
 namefn_for(::HashVersion{2}) = stable_typename_id
-typefn_for(::HashVersion{1}) = qualified_type
+typefn_for(::HashVersion{1}) = qualified_type_
 typefn_for(::HashVersion{2}) = stable_type_id
 
 function hash_method(::NamedTuple, c::HashVersion{V}) where {V}
-    return (FnHash(V > 1 ? stable_type_id : qualified_name),
+    return (FnHash(V > 1 ? stable_type_id : qualified_name_),
             StructHash(:ByName, V > 1 ? :DropNames : :KeepNames))
 end
 function hash_method(::AbstractRange, c::HashVersion{V}) where {V}
