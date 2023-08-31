@@ -54,17 +54,17 @@ include("setup_tests.jl")
             # verifies that transform can be called recursively
             @test test_hash(GoodTransform(2)) == test_hash(GoodTransform("-0.2"))
             @test test_hash(GoodTransform(3)) != test_hash(GoodTransform("-0.2"))
-    
+
             # various (in)equalities
             @test_throws ArgumentError test_hash(BadTransform())
-    
+
             # dictionary like
             @test test_hash(Dict(:a => 1, :b => 2)) == test_hash(Dict(:b => 2, :a => 1))
             @test ((; kwargs...) -> test_hash(kwargs))(; a=1, b=2) ==
                   ((; kwargs...) -> test_hash(kwargs))(; b=2, a=1)
             @test test_hash((; a=1, b=2)) != test_hash((; b=2, a=1))
             @test test_hash((; a=1, b=2)) != test_hash((; a=2, b=1))
-    
+
             # table like
             @test test_hash((; x=collect(1:10), y=collect(1:10))) !=
                   test_hash([(; x=i, y=i) for i in 1:10])
@@ -78,13 +78,13 @@ include("setup_tests.jl")
                   test_hash(NonTableStruct(1:10, 1:10))
             @test test_hash(DataFrame(; x=1:10, y=1:10), TablesEq()) !=
                   test_hash(NonTableStruct(1:10, 1:10), TablesEq())
-    
+
             # test out UseAndReplaceContext
             @test test_hash(CustomHashObject(1:5, 1:10)) !=
                   test_hash(BasicHashObject(1:5, 1:10))
             @test test_hash(Set(1:20)) == test_hash(Set(reverse(1:20)))
             @test test_hash([]) != test_hash([(), (), ()])
-    
+
             @test test_hash([1 2; 3 4]) != test_hash(vec([1 2; 3 4]))
             @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4]')
             @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4])
@@ -93,17 +93,18 @@ include("setup_tests.jl")
             @test test_hash([1 2; 3 4], ViewsEq()) != test_hash([1 3; 2 4], ViewsEq())
             @test test_hash(reshape(1:10, 2, 5)) != test_hash(reshape(1:10, 5, 2))
             @test test_hash(view(collect(1:5), 1:2)) != test_hash([1, 2])
-            @test test_hash(view(collect(1:5), 1:2), ViewsEq()) == test_hash([1, 2], ViewsEq())
-    
+            @test test_hash(view(collect(1:5), 1:2), ViewsEq()) ==
+                  test_hash([1, 2], ViewsEq())
+
             @test test_hash([(), ()]) != test_hash([(), (), ()])
-    
+
             @test test_hash(1:10) != test_hash((; start=1, stop=10))
             @test test_hash(1:10) != test_hash(collect(1:10))
             @test test_hash([1, 2, 3]) != test_hash([3, 2, 1])
             @test test_hash((1, 2, 3)) != test_hash([1, 2, 3])
-    
+
             @test test_hash(v"0.1.0") != test_hash(v"0.1.2")
-    
+
             @test test_hash([:ab]) != test_hash([:a, :b])
             @test test_hash("foo") != test_hash("bar")
             @test test_hash(("a", "b")) != test_hash("ab")
@@ -113,18 +114,19 @@ include("setup_tests.jl")
             @test test_hash(view("bob", 1:2)) != test_hash("bo")
             @test test_hash(view("bob", 1:2), ViewsEq()) == test_hash("bo", ViewsEq())
             @test test_hash(S3Path("s3://foo/bar")) != test_hash(S3Path("s3://foo/baz"))
-    
+
             @test test_hash(sin) != test_hash(cos)
             @test test_hash(sin) != test_hash(:sin)
             @test test_hash(sin) != test_hash("sin")
             @test test_hash(sin) != test_hash("Base.sin")
             @test test_hash(Int) != test_hash("Base.Int")
             @test_throws ArgumentError test_hash(x -> x + 1)
-    
+
             @test test_hash(Float64) != test_hash("Base.Float64")
             @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
-    
-            @test test_hash(ExtraTypeParams{:A,Int}(2)) != test_hash(ExtraTypeParams{:B,Int}(2))
+
+            @test test_hash(ExtraTypeParams{:A,Int}(2)) !=
+                  test_hash(ExtraTypeParams{:B,Int}(2))
             @test test_hash(TestType(1, 2)) == test_hash(TestType(1, 2))
             @test test_hash(TestType(1, 2)) != test_hash((a=1, b=2))
             @test test_hash(TestType2(1, 2)) != test_hash((a=1, b=2))
@@ -132,11 +134,11 @@ include("setup_tests.jl")
             @test test_hash(TestType4(1, 2)) != test_hash(TestType3(1, 2))
             @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
             @test test_hash(TestType(1, 2)) != test_hash(TestType4(2, 1))
-    
+
             @test_throws ArgumentError test_hash(BadHashMethod())
             @test_throws ArgumentError test_hash("bob", BadRootContext())
             @test test_hash(1, BadRootContext()) isa Vector{UInt8}
-    
+
             @test (@test_deprecated(r"`parent_context`", test_hash([1, 2], MyOldContext()))) !=
                   test_hash([1, 2])
             @test (@test_deprecated(r"`parent_context`", test_hash("12", MyOldContext()))) ==
@@ -145,6 +147,8 @@ include("setup_tests.jl")
             @test_deprecated(UseQualifiedName())
             @test_deprecated(UseSize(UseIterate()))
             @test_deprecated(UseTable())
+
+            # TODO: code coveraged for buffered hash
         end
     end
 end

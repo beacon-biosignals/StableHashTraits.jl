@@ -37,6 +37,12 @@ data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
 suite["tuples"]["base"] = @benchmarkable stable_hash(data1, alg=$(fnv))
 suite["tuples"]["trait"] = @benchmarkable stable_hash(data2; alg=$(fnv))
 
+suite["sha_tuples"] = BenchmarkGroup(["sha_tuples"])
+data1 = rand(Int, 2, 10_000)
+data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
+suite["sha_tuples"]["base"] = @benchmarkable stable_hash(data1, alg=$(sha256))
+suite["sha_tuples"]["trait"] = @benchmarkable stable_hash(data2; alg=$(sha256))
+
 suite["sha_numbers"] = BenchmarkGroup(["sha_numbers"])
 suite["sha_numbers"]["base"] = @benchmarkable sha256(reinterpret(UInt8, data))
 suite["sha_numbers"]["trait"] = @benchmarkable stable_hash(data; alg=$(sha256))
@@ -51,18 +57,12 @@ struct BenchTest
     a::Int
     b::Int
 end
-structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:1_000_000]
+structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:10_000]
 struct_data = [x for st in structs for x in (st.a, st.b)]
 suite["structs"] = BenchmarkGroup(["structs"])
 suite["structs"]["base"] = @benchmarkable fnv($(reinterpret(UInt8, struct_data)))
 suite["structs"]["trait"] = @benchmarkable stable_hash(structs, alg=$(fnv))
 
-struct BenchTest
-    a::Int
-    b::Int
-end
-structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:10_000]
-struct_data = [x for st in structs for x in (st.a, st.b)]
 suite["sha_structs"] = BenchmarkGroup(["sha_structs"])
 suite["sha_structs"]["base"] = @benchmarkable sha256($(reinterpret(UInt8, struct_data)))
 suite["sha_structs"]["trait"] = @benchmarkable stable_hash(structs, alg=$(sha256))
@@ -85,7 +85,16 @@ suite["sha_structs"]["trait"] = @benchmarkable stable_hash(structs, alg=$(sha256
 # the data is composed of long arrays of objects (but I don't know if that's a good
 # assumption) why is this happening? is it that calls to `update!` with small amounts of
 # data are slower than large chunks of data? (if that were the case, why isn't sha_numbers
-# worse?)
+# worse?); 
+# THOUGHT: in looking at where the calls are dominating, this looks to be something about
+# bounds checking, and handling the block offsets (i.e. if the update is not
+# for a complete block)
+# ANSWER: nope, that doesn't seem to do the trick, even if we manually set 
+# we still see slow times, though it is no longer completley dominated by `copyto`
+# (its' still there but more of the time is in the actual guts of `update!`)
+# NOTE: it seems like, for SHA, it is better to write out a bunch of data
+# and then compute the sha, rather than make many small updates??? that seems plausible
+# if so, we should setup some buffer that stores data and writes it as needed
 
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
 # the benchmark parameters. Reusing cached parameters is faster and more reliable

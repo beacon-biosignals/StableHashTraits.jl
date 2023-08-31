@@ -97,29 +97,64 @@ end
 ##### Hash Function API 
 #####
 
-# TODO: redesign the API
-# 2 things to do:
-# 1. make it possible for GenericFunHash to be immutable
-# 2. make it possible to avoid recurising the SHA hashes by
-# allowing them to a depth value that gets incremented on each call result
-# `start_hash` (whatever it's new name is)
-# stop_hash!: we need two versions of the sha algorithms; those that do and do not recurse
-# FINALLY: we want the equivalent of `setup_hash_state` to take the context
-# so that whether SHA recurses depends on `HashVersion{1}` vs. `HashVersion{2}`.
+struct BufferedHash{T}
+    hash::T
+    io::IOBuffer
+end
+const HASH_BUFFER_SIZE = 2^12
+function BufferedHash(hash)
+    BufferedHash(hash, IOBuffer(; maxsize=HASH_BUFFER_SIZE))
+end
+view_(x::AbstractArray, ix) = @view x[ix]
+view_(x::Tuple, ix) = x[ix]
+write_(io, x::AbstractArray) = write(io, x)
+function write_(io, x::Tuple)
+    for b in x
+        write(io, b)
+    end
+end
+function update_hash!(x::BufferedHash, bytes)
+    bytes_to_add = HASH_BUFFER_SIZE - position(x.io)
+    local new_hash
+    # only buffer bytes that are small enough
+    if length(bytes) - bytes_to_add < HASH_BUFFER_SIZE
+        write_(x.io, view_(bytes, firstindex(bytes):min(lastindex(bytes), bytes_to_add)))
+        new_hash = if bytesavailable(x.io) == HASH_BUFFER_SIZE
+            chunk = take!(x.io)
+            write_(x.io, view_(bytes, (bytes_to_add+1):lastindex(bytes)))
+            update_hash!(x.hash, chunk)
+        else
+            x.hash
+        end
+    else
+        new_hash = update_hash!(x.hash, bytes)
+    end
+    return BufferedHash(new_hash, x.io)
+end
+
+function compute_hash!(x::BufferedHash)
+    hash = if position(x.io) > 0
+        update_hash!(x.hash, take!(x.io))
+    else
+        x.hash
+    end
+    return compute_hash!(hash)
+end
+
+hash_type(x::BufferedHash) = hash_type(x.hash)
 
 # setup_hash_state: given a function that identifies the hash, setup up the state used for hashing
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
     if CTX in names(SHA)
         @eval function setup_hash_state(::typeof(SHA.$(fn)), ::HashVersion{V}) where {V} 
-            return V < 2 ? SHA.$(CTX)() : MarkerHash(SHA.$(CTX)())
+            return V < 2 ? SHA.$(CTX)() : MarkerHash(BufferedHash(SHA.$(CTX)()))
         end
         @eval function setup_hash_state(::typeof(SHA.$(fn)), c::Any)
             return setup_hash_state(SHA.$(fn), parent_context(c))
         end
     end
 end
-# start_hash: setup up a new hasher, given some existing state created by `setup_hash_state`
 
 start_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
 # update!: update the hash state with some new data to hash
