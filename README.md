@@ -39,9 +39,9 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 
 ## Details
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs. The context defaults to `HashVersion{1}()`, but it is highly recommended you use the most recent version `HashVersion{2}` as it is much faster. See the final section below for details on how to create your own custom contexts.
+You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs. The context defaults to `HashVersion{1}()`, but it is highly recommended you use the most recent version (`HashVersion{2}`) as it is much faster. See the final section below for details on how to create your own custom contexts that modify the behavior of these two fallbacks.
 
-There are sensible defaults for `stable_hash` that aim to ensure that if two values are
+The default contexts have sensible defaults that aim to ensure that if two values are
 different, the input to the hash algorithm will differ. 
 
 You can customize the hash behavior for particular types by implementing the trait

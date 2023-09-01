@@ -53,6 +53,12 @@ strdata = [c for str in strings for c in str]
 suite["strings"]["base"] = @benchmarkable fnv($(reinterpret(UInt8, strdata)))
 suite["strings"]["trait"] = @benchmarkable stable_hash(strings, HashVersion{2}(), alg=$(fnv))
 
+suite["symbols"] = BenchmarkGroup(["symbols"])
+symbols = [Symbol(String(rand('a':'z', 30))) for _ in 1:10_000]
+symdata = [c for sym in symbols for c in String(sym)]
+suite["symbols"]["base"] = @benchmarkable fnv($(reinterpret(UInt8, symdata)))
+suite["symbols"]["trait"] = @benchmarkable stable_hash(symbols, HashVersion{2}(), alg=$(fnv))
+
 struct BenchTest
     a::Int
     b::Int
@@ -66,6 +72,11 @@ suite["structs"]["trait"] = @benchmarkable stable_hash(structs, HashVersion{2}()
 suite["sha_structs"] = BenchmarkGroup(["sha_structs"])
 suite["sha_structs"]["base"] = @benchmarkable sha256($(reinterpret(UInt8, struct_data)))
 suite["sha_structs"]["trait"] = @benchmarkable stable_hash(structs, HashVersion{2}(), alg=$(sha256))
+
+df = DataFrame(x=1:10_000, y=1:10_000)
+suite["dataframes"] = BenchmarkGroup(["dataframes"])
+suite["dataframes"] = @benchmarkable fnv(data1)
+suite["dataframes"] = @benchmarkable stable_hash(df, HashVersion{2}(), alg=$(fnv))
 
 # TODO: create a benchmark for DataFrames
 

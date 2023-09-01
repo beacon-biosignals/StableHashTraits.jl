@@ -147,44 +147,44 @@ function hash_type end
 ##### BufferedHash: wrapper that buffers bytes before passing them to the hash algorithm 
 #####
 
-struct BufferedHash{T}
+# NOTE: buffered hash never needs to implement `start/stop_hash!` since that
+# is handled by `MarkerHash`
+
+mutable struct BufferedHash{T}
     hash::T
+    bytes::Vector{UInt8}
     io::IOBuffer
 end
 const HASH_BUFFER_SIZE = 2^12
-function BufferedHash(hash)
-    BufferedHash(hash, IOBuffer(; maxsize=HASH_BUFFER_SIZE))
+function BufferedHash(hash, size=HASH_BUFFER_SIZE)
+    bytes = Vector{UInt8}(undef, size)
+    io = IOBuffer(bytes; write=true, read=false, maxsize=size)
+    BufferedHash(hash, bytes, io)
 end
 view_(x::AbstractArray, ix) = @view x[ix]
 view_(x::Tuple, ix) = x[ix]
-write_(io, x::AbstractArray) = write(io, x)
-function write_(io, x::Tuple)
-    for b in x
-        write(io, b)
+write_(io::IO, x::AbstractArray) = write(io, x)
+write_(io::IO, bytes::Tuple) = sum(b -> write(io, b), bytes)
+
+function update_hash!(x::BufferedHash, 
+                      bytes::Union{NTuple{<:Any, UInt8}, AbstractArray{UInt8}})
+    written = write_(x.io, bytes)
+    if position(x.io) > length(x.bytes)
+        x.hash = update_hash!(x.hash, x.bytes)
+        seek(x.io, 0)
     end
-end
-function update_hash!(x::BufferedHash, bytes)
-    bytes_to_add = HASH_BUFFER_SIZE - position(x.io)
-    local new_hash
-    # only buffer bytes that are small enough
-    if length(bytes) - bytes_to_add < HASH_BUFFER_SIZE
-        write_(x.io, view_(bytes, firstindex(bytes):min(lastindex(bytes), bytes_to_add)))
-        new_hash = if bytesavailable(x.io) == HASH_BUFFER_SIZE
-            chunk = take!(x.io)
-            write_(x.io, view_(bytes, (bytes_to_add+1):lastindex(bytes)))
-            update_hash!(x.hash, chunk)
-        else
-            x.hash
-        end
-    else
-        new_hash = update_hash!(x.hash, bytes)
+    if length(bytes) - written > length(x.bytes)
+        x.hash = update_hash!(x.hash, view_(bytes, (written+1):lastindex(bytes)))
+    elseif length(bytes) > written
+        write_(x.io, view_(bytes, (written+1):lastindex(bytes)))
     end
-    return BufferedHash(new_hash, x.io)
+    
+    return x
 end
 
 function compute_hash!(x::BufferedHash)
     hash = if position(x.io) > 0
-        update_hash!(x.hash, take!(x.io))
+        update_hash!(x.hash, @view x.bytes[1:position(x.io)])
     else
         x.hash
     end
@@ -300,7 +300,7 @@ write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
 # TODO: we could reduce memory usage for all types if we could interpret
 # any calls to `write` as calls to `update!`; this would require making
-# a new special `HashStream` which would be annoying 
+# a new special `HashIOStream` which could be annoying 
 # see:
 # https://discourse.julialang.org/t/making-a-simple-wrapper-for-an-io-stream/52587/9
 function stable_hash_helper(x, hash_state, context, ::WriteHash)
@@ -324,15 +324,16 @@ end
     end
 end
 
-# TODO: make a more generic version of `bytesof` for all primitive types
+# NOTE: this specialized method speeds up hashing by ~x45 when using 
+# a simple hashing function like crc
 function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
-    # NOTE: `bytesof` increases speed by ~3x
+    # NOTE: `bytesof` increases speed by ~3x over reinterpret(UInt8, [x])
     return update_hash!(hash_state, bytesof(x))
 end
 
-function stable_hash_helper(x::String, hash_state, context, ::WriteHash)
-    return update_hash!(hash_state, codeunits(x))
-end
+# function stable_hash_helper(x::AbstractString, hash_state, context, ::WriteHash)
+#     return update_hash!(hash_state, codeunits(x))
+# end
 
 #####
 ##### IterateHash 
@@ -397,6 +398,21 @@ end
 function qualified_type(x)
     Base.depwarn("`qualified_type` is deprecated, use `stable_type_id` instead", 
                  :qualified_type)
+end
+
+function hash_type_str(str, T)
+    sha = SHA.SHA2_256_CTX()
+    SHA.update!(sha, codeunits(str))
+    for f in sort_(fieldnames(T))
+        if f isa Symbol
+            SHA.update!(sha, codeunits(String(f)))
+        else # isa Number
+            SHA.update!(sha, reinterpret(UInt8, [f]))
+        end
+    end
+    bytes = SHA.digest!(sha)
+
+    return first(reinterpret(UInt128, bytes))
 end
 
 # NOTE: using stable_{typename|type}_id increases speed by ~x10-20 vs. `qualified_name`
