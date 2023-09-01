@@ -404,36 +404,31 @@ end
 """
     stable_typename_id(::Type)
 
-Returns a 128bit hash that is the same for a given type so long as the name and module of
-the type doesn't change. E.g. `stable_typename_id(Vector) == stable_typename_id(Matrix)`
+Returns a 128bit hash that is the same for a given type so long as the name, the set of
+fields, and the module of the type doesn't change. E.g. `stable_typename_id(Vector) ==
+stable_typename_id(Matrix)`
 
 NOTE: if the module of a type is `Core` it is renamed to `Base` before hashing because the
 location of some types changes between `Core` to `Base` across julia versions
 """
-@generated function stable_typename_id(x)
+stable_typename_id(x) = stable_id_helper(x, Val(:name))
+@generated function stable_id_helper(x, name)
     T = x <: Function ? x.instance : x
-    str = qualified_name_(T)
-    bytes = sha256(str)
-    number = first(reinterpret(UInt128, bytes))
+    str = name <: Val{:name} ? qualified_name_(T) : qualified_type_(T)
+    number = hash_type_str(str, T)
     :(return $number)
 end
 
 """
     stable_type_id(::Type)`
 
-Returns a 128bit hash that is the same for a given type so long as the module and string
-representation of a type is the same (invariant to comma spacing).
+Returns a 128bit hash that is the same for a given type so long as the module, set of fields
+and string representation of a type is the same (invariant to comma spacing).
 
 NOTE: if the module of a type is `Core` it is renamed to `Base` before hashing because the
 location of some types changes between `Core` to `Base` across julia versions
 """
-@generated function stable_type_id(x)
-    T = x <: Function ? x.instance : x
-    str = qualified_type_(T)
-    bytes = sha256(str)
-    number = first(reinterpret(UInt128, bytes))
-    :(return $number)
-end
+stable_type_id(x) = stable_id_helper(x, Val(:type))
 
 function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
