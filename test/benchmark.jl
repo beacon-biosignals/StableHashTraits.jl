@@ -75,8 +75,8 @@ suite["sha_structs"]["trait"] = @benchmarkable stable_hash(structs, HashVersion{
 
 df = DataFrame(x=1:10_000, y=1:10_000)
 suite["dataframes"] = BenchmarkGroup(["dataframes"])
-suite["dataframes"] = @benchmarkable fnv(data1)
-suite["dataframes"] = @benchmarkable stable_hash(df, HashVersion{2}(), alg=$(fnv))
+suite["dataframes"]["base"] = @benchmarkable fnv(data1)
+suite["dataframes"]["trait"] = @benchmarkable stable_hash(df, HashVersion{2}(), alg=$(fnv))
 
 # TODO: create a benchmark for DataFrames
 

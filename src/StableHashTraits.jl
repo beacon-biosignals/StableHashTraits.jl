@@ -331,9 +331,9 @@ function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
     return update_hash!(hash_state, bytesof(x))
 end
 
-# function stable_hash_helper(x::AbstractString, hash_state, context, ::WriteHash)
-#     return update_hash!(hash_state, codeunits(x))
-# end
+function stable_hash_helper(x::AbstractString, hash_state, context, ::WriteHash)
+    return update_hash!(hash_state, codeunits(x))
+end
 
 #####
 ##### IterateHash 
