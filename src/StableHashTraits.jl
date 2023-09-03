@@ -201,10 +201,11 @@ hash_type(x::BufferedHash) = hash_type(x.hash)
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
     if CTX in names(SHA)
-        @eval function setup_hash_state(::typeof(SHA.$(fn)), ::HashVersion{V}) where {V} 
+        @eval function setup_hash_state(::typeof(SHA.$(fn)), ::context)
             # NOTE: BufferedHash speeds things up by about 1.8x
             # NOTE: MarkerHash speeds things up by about 4.5x
-            return V < 2 ? SHA.$(CTX)() : MarkerHash(BufferedHash(SHA.$(CTX)()))
+            root_version(context) < 2 && SHA.$(CTX)()
+            return MarkerHash(BufferedHash(SHA.$(CTX)()))
         end
         @eval function setup_hash_state(::typeof(SHA.$(fn)), c::Any)
             return setup_hash_state(SHA.$(fn), parent_context(c))
@@ -358,26 +359,30 @@ end
 struct StructHash{P,S,D}
     fnpair::P
 end
-function StructHash(sort::Symbol, drop::Symbol=:KeepNames)
-    return StructHash((fieldnames ∘ typeof) => getfield, sort, drop)
+function StructHash(sort::Symbol)
+    return StructHash((fieldnames ∘ typeof) => getfield, sort)
 end
-function StructHash(fnpair::Pair=(fieldnames ∘ typeof) => getfield, by::Symbol=:ByOrder, drop::Symbol=:KeepNames)
+fieldnames_(::T) where T = fieldnames(T)
+function StructHash(fnpair::Pair=fieldnames_ => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
-    drop ∈ (:DropNames, :KeepNames) || error("Expected a valid drop flag of :DropNames or :KeepNames")
-    return StructHash{typeof(fnpair),by,drop}(fnpair)
+    return StructHash{typeof(fnpair),by}(fnpair)
 end
 orderfields(::StructHash{<:Any,:ByOrder}, props) = props
 orderfields(::StructHash{<:Any,:ByName}, props) = sort_(props)
 sort_(x::Tuple) = TupleTools.sort(x; by=string)
 sort_(x::AbstractSet) = sort!(collect(x); by=string)
 sort_(x) = sort(x; by=string)
-function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,<:Any,D}) where {D}
+function stable_hash_helper(x, hash_state, context, use::StructHash)
     fieldsfn, getfieldfn = use.fnpair
-    return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
-        if D == :KeepNames
+    if root_version(context) > 1 && getfieldsfn isa typeof(fieldnames_)
+        # NOTE: hashes the field names at compile time if possible (~x10 speed up)
+        hash_state = update_hash!(hash_state, bytesof(stable_typefields_id(x)))
+        hash_state = hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
+            getfields(x, k)
+        end
+    else
+        return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
             return k => getfieldfn(x, k)
-        else
-            return getfieldfn(x, k)
         end
     end
 end
@@ -561,9 +566,9 @@ define this method.
 
 This is normally all that you need to know to implement a new context. However, if your
 context is expected to be the root context—one that does not fallback to any parent (akin to
-`HashVersion{1}`)—then there may be a bit more work invovled. In this case, `parent_context`
+`HashVersion`)—then there may be a bit more work invovled. In this case, `parent_context`
 should return `nothing` so that the single argument fallback for `hash_method` can be
-called. 
+called. You will also need to define [`StableHashTraits.root_version`](@ref).
 
 Furthermore, if you implement a root context and want to implement `hash_method` over `Any`
 you will instead have to manually manage the fallback mechanism as follows:
@@ -591,11 +596,26 @@ function parent_context(x::Any)
     return HashVersion{1}()
 end
 
+"""
+    StableHashTraits.root_version(context)
+
+Return the verison of the root context: an integer in the range (1, 2). The default
+fallback method value returns 1. 
+
+In almost all causes, a root hash context should return 2. With the implementation of
+HashVersion{2} there are a number of changes to the hash-trait implementations that do not
+alter the documented behavior but do change the actual hash value returned because of how
+and when elements get hashed. 
+
+"""
+root_version(x) = 1
+
 #####
 ##### HashVersion{V} (root contexts)
 #####
 
 parent_context(::HashVersion) = nothing
+root_version(::HashVersion{V}) where V = V
 
 function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # we need to find `default_method` here because `hash_method(x::MyType, ::Any)` is less
