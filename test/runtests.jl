@@ -123,6 +123,7 @@ include("setup_tests.jl")
             @test_throws ArgumentError test_hash(x -> x + 1)
 
             @test test_hash(Float64) != test_hash("Base.Float64")
+            @test test_hash(Float64) != test_hash(Int)
             @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
 
             @test test_hash(ExtraTypeParams{:A,Int}(2)) !=
@@ -137,12 +138,12 @@ include("setup_tests.jl")
 
             @test_throws ArgumentError test_hash(BadHashMethod())
             @test_throws ArgumentError test_hash("bob", BadRootContext())
-            @test test_hash(1, BadRootContext()) isa Vector{UInt8}
+            @test test_hash(1, BadRootContext()) isa Union{UInt32, Vector{UInt8}}
 
             @test (@test_deprecated(r"`parent_context`", test_hash([1, 2], MyOldContext()))) !=
                   test_hash([1, 2])
             @test (@test_deprecated(r"`parent_context`", test_hash("12", MyOldContext()))) ==
-                  test_hash("12")
+                  test_hash("12", HashVersion{1}())
             @test_deprecated(UseProperties(:ByName))
             @test_deprecated(UseQualifiedName())
             @test_deprecated(UseSize(UseIterate()))

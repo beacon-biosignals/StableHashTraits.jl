@@ -201,14 +201,11 @@ hash_type(x::BufferedHash) = hash_type(x.hash)
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
     if CTX in names(SHA)
-        @eval function setup_hash_state(::typeof(SHA.$(fn)), ::context)
+        @eval function setup_hash_state(::typeof(SHA.$(fn)), context)
             # NOTE: BufferedHash speeds things up by about 1.8x
             # NOTE: MarkerHash speeds things up by about 4.5x
             root_version(context) < 2 && SHA.$(CTX)()
             return MarkerHash(BufferedHash(SHA.$(CTX)()))
-        end
-        @eval function setup_hash_state(::typeof(SHA.$(fn)), c::Any)
-            return setup_hash_state(SHA.$(fn), parent_context(c))
         end
     end
 end
@@ -356,7 +353,7 @@ function hash_foreach(fn, hash_state, context, xs)
     return hash_state
 end
 
-struct StructHash{P,S,D}
+struct StructHash{P,S}
     fnpair::P
 end
 function StructHash(sort::Symbol)
@@ -374,7 +371,7 @@ sort_(x::AbstractSet) = sort!(collect(x); by=string)
 sort_(x) = sort(x; by=string)
 function stable_hash_helper(x, hash_state, context, use::StructHash)
     fieldsfn, getfieldfn = use.fnpair
-    if root_version(context) > 1 && getfieldsfn isa typeof(fieldnames_)
+    if root_version(context) > 1 && getfieldfn isa typeof(fieldnames_)
         # NOTE: hashes the field names at compile time if possible (~x10 speed up)
         hash_state = update_hash!(hash_state, bytesof(stable_typefields_id(x)))
         hash_state = hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
@@ -406,8 +403,12 @@ function qualified_type(x)
 end
 
 function hash_type_str(str, T)
+    bytes = sha256(codeunits(str))
+    return first(reinterpret(UInt128, bytes))
+end
+
+function hash_field_str(T)
     sha = SHA.SHA2_256_CTX()
-    SHA.update!(sha, codeunits(str))
     for f in sort_(fieldnames(T))
         if f isa Symbol
             SHA.update!(sha, codeunits(String(f)))
@@ -423,16 +424,17 @@ end
 # NOTE: using stable_{typename|type}_id increases speed by ~x10-20 vs. `qualified_name`
 
 """
-    stable_typename_id(::Type)
+    stable_typename_id(x)
 
-Returns a 128bit hash that is the same for a given type so long as the name, the set of
-fields, and the module of the type doesn't change. E.g. `stable_typename_id(Vector) ==
-stable_typename_id(Matrix)`
+Returns a 128bit hash that is the same for a given type so long as the name and the module
+of the type doesn't change. E.g. `stable_typename_id(Vector) == stable_typename_id(Matrix)`
 
 NOTE: if the module of a type is `Core` it is renamed to `Base` before hashing because the
 location of some types changes between `Core` to `Base` across julia versions
 """
 stable_typename_id(x) = stable_id_helper(x, Val(:name))
+stable_id_helper(::Type{T}, ::Val{:name}) where {T} = hash_type_str(qualified_name_(T), T)
+stable_id_helper(::Type{T}, ::Val{:type}) where {T} = hash_type_str(qualified_type_(T), T)
 @generated function stable_id_helper(x, name)
     T = x <: Function ? x.instance : x
     str = name <: Val{:name} ? qualified_name_(T) : qualified_type_(T)
@@ -441,15 +443,27 @@ stable_typename_id(x) = stable_id_helper(x, Val(:name))
 end
 
 """
-    stable_type_id(::Type)`
+    stable_type_id(x)`
 
-Returns a 128bit hash that is the same for a given type so long as the module, set of fields
-and string representation of a type is the same (invariant to comma spacing).
+Returns a 128bit hash that is the same for a given type so long as the module, and string
+representation of a type is the same (invariant to comma spacing).
 
 NOTE: if the module of a type is `Core` it is renamed to `Base` before hashing because the
 location of some types changes between `Core` to `Base` across julia versions
 """
 stable_type_id(x) = stable_id_helper(x, Val(:type))
+
+"""
+    stable_typefields_id(x)
+
+Returns a 128bit hash that is the same for a given type so long as the set of field names
+remains unchanged.
+"""
+stable_typefields_id(::Type{T}) where {T} = hash_field_str(T)
+@generated function stable_typefields_id(x)
+    number = hash_field_str(x)
+    :(return $number)
+end
 
 function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
@@ -631,41 +645,37 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     Base.isprimitivetype(T) && return WriteHash()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
-    # NOTE: :DropNames increases speed by ~10x
-    return (FnHash(typefn_for(c)), StructHash(:ByName, V > 1 ? :DropNames : :KeepNames))
+    return (FnHash(typefn_for(c)), StructHash(:ByName))
 end
-namefn_for(::HashVersion{1}) = qualified_name_
-namefn_for(::HashVersion{2}) = stable_typename_id
+typenamefn_for(::HashVersion{1}) = qualified_name_
+typenamefn_for(::HashVersion{2}) = stable_typename_id
 typefn_for(::HashVersion{1}) = qualified_type_
 typefn_for(::HashVersion{2}) = stable_type_id
 
-function hash_method(::NamedTuple, c::HashVersion{V}) where {V}
-    return (FnHash(V > 1 ? stable_type_id : qualified_name_),
-            StructHash(:ByName, V > 1 ? :DropNames : :KeepNames))
-end
-function hash_method(::AbstractRange, c::HashVersion{V}) where {V}
-    return (FnHash(namefn_for(c)), StructHash(:ByName, V > 1 ? :DropNames : :KeepNames))
+hash_method(::NamedTuple, c::HashVersion) = (FnHash(typenamefn_for(c)), StructHash())
+function hash_method(::AbstractRange, c::HashVersion)
+    return (FnHash(typenamefn_for(c)), StructHash(:ByName))
 end
 function hash_method(::AbstractArray, c::HashVersion)
-    return (FnHash(namefn_for(c)), FnHash(size), IterateHash())
+    return (FnHash(typenamefn_for(c)), FnHash(size), IterateHash())
 end
 function hash_method(::AbstractString, c::HashVersion)
-    return (FnHash(namefn_for(c), WriteHash()), WriteHash())
+    return (FnHash(typenamefn_for(c), WriteHash()), WriteHash())
 end
 hash_method(::Symbol, ::HashVersion) = (ConstantHash(":"), WriteHash())
 function hash_method(::AbstractDict, c::HashVersion)
-    return (FnHash(namefn_for(c)), StructHash(keys => getindex, :ByName))
+    return (FnHash(typenamefn_for(c)), StructHash(keys => getindex, :ByName))
 end
-hash_method(::Tuple, c::HashVersion) = (FnHash(namefn_for(c)), IterateHash())
-hash_method(::Pair, c::HashVersion) = (FnHash(namefn_for(c)), IterateHash())
+hash_method(::Tuple, c::HashVersion) = (FnHash(typenamefn_for(c)), IterateHash())
+hash_method(::Pair, c::HashVersion) = (FnHash(typenamefn_for(c)), IterateHash())
 function hash_method(::Type, c::HashVersion)
     return (ConstantHash("Base.DataType"), FnHash(typefn_for(c)))
 end
 function hash_method(::Function, c::HashVersion)
-    return (ConstantHash("Base.Function"), FnHash(namefn_for(c)))
+    return (ConstantHash("Base.Function"), FnHash(typenamefn_for(c)))
 end
 function hash_method(::AbstractSet, c::HashVersion)
-    return (FnHash(namefn_for(c)), FnHash(sort! ∘ collect))
+    return (FnHash(typenamefn_for(c)), FnHash(sort! ∘ collect))
 end
 
 #####
