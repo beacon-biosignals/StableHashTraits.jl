@@ -109,6 +109,15 @@ under **TODO**.
   the default. 
 - `qualified_name` and `qualified_type` have been deprected, favor `stable_typename_id` and
   `stable_type_id` which are much faster.
+- `fnv` (and `fnv32`, `fnv64`, and `fnv128`) implement the
+[Fowler-Noll-Vo](https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function)
+hash algorithm; this was implemented as part of benchmarking to test low-overhad hash uses
+cases. It is lower overhead that `crc32`, as it does not require copying upon each call.
+- `root_version`: indicates what version of the trait implementations to use (1 or 2). It
+defaults to 1 to avoid changing the hash values of exisitng root contexts, but should be
+defined to return 2 to make use of the more optimizied implementationsa. Most users will not
+have to worry about this, you only need to define `root_version` if your context defines
+`parent_context(x::MyContext) = nothing` (see `parent_context` details on root contexts).
 
 ### In 1.0:
 
@@ -122,7 +131,7 @@ However, far fewer manual defintions of `hash_method` become necessary. The fall
   tuple instead); it now accepts a single object to hash, and the second positional argument
   is the context (see below for details on contexts). 
 - **Breaking**: The default `alg` for `stable_hash` is `sha256`; to use the old default
-  (crc32c) you can pass `alg=(x,s=UInt32(0)) -> crc32c(copy(x),s)`.
+  (crc32c) you can pass `alg=(x,s=UInt32(0)) -> crc32c(collect(x),s)`.
 - **Deprecation**: The traits to return from `hash_method` have changed quite a bit. You
   will need to replace the old names as follows to avoid deprecation warnings during your
   tests:

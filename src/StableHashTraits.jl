@@ -2,7 +2,7 @@ module StableHashTraits
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, 
-       stable_type_id, stable_typename_id, TablesEq, ViewsEq
+       stable_type_id, stable_typename_id, TablesEq, ViewsEq, fnv, fnv32, fnv64, fnv128
 using TupleTools, Tables, Compat
 using SHA: SHA, sha256
 
@@ -163,12 +163,18 @@ function BufferedHash(hash, size=HASH_BUFFER_SIZE)
 end
 view_(x::AbstractArray, ix) = @view x[ix]
 view_(x::Tuple, ix) = x[ix]
-write_(io::IO, x::AbstractArray) = write(io, x)
-write_(io::IO, bytes::Tuple) = sum(b -> write(io, b), bytes)
+write_(io::IO, x::AbstractArray, ixs) = write(io, view(x, ixs))
+function write_(io::IO, bytes::Tuple, ixs) 
+    total = 0
+    @inbounds for i in ixs
+        total += write(io, bytes[i])
+    end
+    return total
+end
 
 function update_hash!(x::BufferedHash, 
                       bytes::Union{NTuple{<:Any, UInt8}, AbstractArray{UInt8}})
-    written = write_(x.io, bytes)
+    written = write_(x.io, bytes, 1:lastindex(bytes))
     if position(x.io) > length(x.bytes)
         x.hash = update_hash!(x.hash, x.bytes)
         seek(x.io, 0)
@@ -176,7 +182,7 @@ function update_hash!(x::BufferedHash,
     if length(bytes) - written > length(x.bytes)
         x.hash = update_hash!(x.hash, view_(bytes, (written+1):lastindex(bytes)))
     elseif length(bytes) > written
-        write_(x.io, view_(bytes, (written+1):lastindex(bytes)))
+        write_(x.io, bytes, (written+1):lastindex(bytes))
     end
     
     return x
@@ -258,6 +264,36 @@ function stop_hash!(fn::RecursiveHash, nested::RecursiveHash)
 end
 compute_hash!(x::RecursiveHash) = x.val
 hash_type(::RecursiveHash{<:Any, T}) where {T} = T
+
+#####
+##### FNV: https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
+#####
+
+const FNV_PRIME_32=0x01000193
+const FNV_BASIS_32=0x811c9dc5
+const FNV_PRIME_64=0x00000100000001B3
+const FNV_BASIS_64=0xcbf29ce484222325
+const FNV_PRIME_128=0x0000000001000000000000000000013B
+const FNV_BASIS_128=0x6c62272e07bb014262b821756295c58d
+function fnvdoc(len, namelen=len)
+    return """
+        fnv$(namelen)(bytes, seed::UInt$len)::UInt$(len)
+
+    Compute Fowler-Noll-Vo hash function (variant 1a) of size $len bytes.
+    See https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function for details.
+    """
+end
+for len in [32, 64, 128]
+    str = fnvdoc(len)
+    @eval @doc $str function $(Symbol(:fnv, len))(bytes, hash::$(Symbol(:UInt,len))=$(Symbol(:FNV_BASIS_,len)))
+        @inbounds for b in bytes
+            hash *= $(Symbol(:FNV_PRIME_,len))
+            hash ⊻= b
+        end
+        return hash
+    end
+end
+@eval @doc fnvdoc(Sys.WORD_SIZE, "") const fnv = $(Symbol(:fnv, Sys.WORD_SIZE))
 
 #####
 ##### ================ Hash Traits ================
@@ -353,13 +389,17 @@ function hash_foreach(fn, hash_state, context, xs)
     return hash_state
 end
 
+#####
+##### StructHash 
+#####
+
 struct StructHash{P,S}
     fnpair::P
 end
-function StructHash(sort::Symbol)
-    return StructHash((fieldnames ∘ typeof) => getfield, sort)
-end
 fieldnames_(::T) where T = fieldnames(T)
+function StructHash(sort::Symbol)
+    return StructHash(fieldnames_ => getfield, sort)
+end
 function StructHash(fnpair::Pair=fieldnames_ => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return StructHash{typeof(fnpair),by}(fnpair)
@@ -371,11 +411,11 @@ sort_(x::AbstractSet) = sort!(collect(x); by=string)
 sort_(x) = sort(x; by=string)
 function stable_hash_helper(x, hash_state, context, use::StructHash)
     fieldsfn, getfieldfn = use.fnpair
-    if root_version(context) > 1 && getfieldfn isa typeof(fieldnames_)
+    if root_version(context) > 1 && fieldsfn isa typeof(fieldnames_)
         # NOTE: hashes the field names at compile time if possible (~x10 speed up)
         hash_state = update_hash!(hash_state, bytesof(stable_typefields_id(x)))
         hash_state = hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
-            getfields(x, k)
+            getfieldfn(x, k)
         end
     else
         return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
