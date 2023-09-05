@@ -13,59 +13,47 @@ const suite = BenchmarkGroup()
 # numbers vsthat tuples of numbers are as fast as fast
 # as structs of those numbers
 
-# NOTE: this result is supiciously fast, not clear why it would be
-# better than `fnv` alone
-suite["numbers"] = BenchmarkGroup(["numbers"])
-data = rand(Int, 10_000)
-suite["numbers"]["base"] = @benchmarkable $(fnv)(data)
-suite["numbers"]["trait"] = @benchmarkable $(stable_hash)(data, HashVersion{2}(); alg=$(fnv))
-
-suite["tuples"] = BenchmarkGroup(["tuples"])
-data1 = rand(Int, 2, 10_000)
-data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
-suite["tuples"]["base"] = @benchmarkable $(stable_hash)(data1, HashVersion{2}(), alg=$(fnv))
-suite["tuples"]["trait"] = @benchmarkable $(stable_hash)(data2, HashVersion{2}(); alg=$(fnv))
-
-suite["sha_tuples"] = BenchmarkGroup(["sha_tuples"])
-data1 = rand(Int, 2, 10_000)
-data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
-suite["sha_tuples"]["base"] = @benchmarkable $(stable_hash)(data1, HashVersion{2}(), alg=$(sha256))
-suite["sha_tuples"]["trait"] = @benchmarkable $(stable_hash)(data2, HashVersion{2}(); alg=$(sha256))
-
-suite["sha_numbers"] = BenchmarkGroup(["sha_numbers"])
-suite["sha_numbers"]["base"] = @benchmarkable $(sha256)(reinterpret(UInt8, data))
-suite["sha_numbers"]["trait"] = @benchmarkable $(stable_hash)(data, HashVersion{2}(); alg=$(sha256))
-
-suite["strings"] = BenchmarkGroup(["strings"])
-strings = [String(rand('a':'z', 30)) for _ in 1:10_000]
-strdata = [c for str in strings for c in str]
-suite["strings"]["base"] = @benchmarkable $(fnv)($(reinterpret(UInt8, strdata)))
-suite["strings"]["trait"] = @benchmarkable $(stable_hash)(strings, HashVersion{2}(), alg=$(fnv))
-
-suite["symbols"] = BenchmarkGroup(["symbols"])
-symbols = [Symbol(String(rand('a':'z', 30))) for _ in 1:10_000]
-symdata = [c for sym in symbols for c in String(sym)]
-suite["symbols"]["base"] = @benchmarkable $(fnv)($(reinterpret(UInt8, symdata)))
-suite["symbols"]["trait"] = @benchmarkable $(stable_hash)(symbols, HashVersion{2}(), alg=$(fnv))
-
 struct BenchTest
     a::Int
     b::Int
 end
+
+data = rand(Int, 10_000)
+data1 = vec(rand(Int, 2, 10_000))
+data2 = tuple.(rand(Int, 10_000), rand(Int, 10_000))
+strings = [String(rand('a':'z', 30)) for _ in 1:10_000]
+strdata = [c for str in strings for c in str]
+symbols = [Symbol(String(rand('a':'z', 30))) for _ in 1:10_000]
+symdata = [c for sym in symbols for c in String(sym)]
 structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:10_000]
 struct_data = [x for st in structs for x in (st.a, st.b)]
-suite["structs"] = BenchmarkGroup(["structs"])
-suite["structs"]["base"] = @benchmarkable $(fnv)($(reinterpret(UInt8, struct_data)))
-suite["structs"]["trait"] = @benchmarkable $(stable_hash)(structs, HashVersion{2}(), alg=$(fnv))
-
-suite["sha_structs"] = BenchmarkGroup(["sha_structs"])
-suite["sha_structs"]["base"] = @benchmarkable $(sha256)($(reinterpret(UInt8, struct_data)))
-suite["sha_structs"]["trait"] = @benchmarkable $(stable_hash)(structs, HashVersion{2}(), alg=$(sha256))
-
 df = DataFrame(x=1:10_000, y=1:10_000)
-suite["dataframes"] = BenchmarkGroup(["dataframes"])
-suite["dataframes"]["base"] = @benchmarkable $(fnv)(data1)
-suite["dataframes"]["trait"] = @benchmarkable $(stable_hash)(df, HashVersion{2}(), alg=$(fnv))
+
+for hashfn in (fnv, sha256)
+    suite["numbers_$(nameof(hashfn))"] = BenchmarkGroup(["numbers"])
+    suite["numbers_$(nameof(hashfn))"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, data)))
+    suite["numbers_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(data, HashVersion{2}(); alg=$(hashfn))
+
+    suite["tuples_$(nameof(hashfn))"] = BenchmarkGroup(["tuples"])
+    suite["tuples_$(nameof(hashfn))"]["base"] = @benchmarkable $(stable_hash)(data1, HashVersion{2}(), alg=$(hashfn))
+    suite["tuples_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(data2, HashVersion{2}(); alg=$(hashfn))
+
+    suite["strings_$(nameof(hashfn))"] = BenchmarkGroup(["strings"])
+    suite["strings_$(nameof(hashfn))"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, strdata)))
+    suite["strings_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(strings, HashVersion{2}(), alg=$(hashfn))
+
+    suite["symbols_$(nameof(hashfn))"] = BenchmarkGroup(["symbols"])
+    suite["symbols_$(nameof(hashfn))"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, symdata)))
+    suite["symbols_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(symbols, HashVersion{2}(), alg=$(hashfn))
+
+    suite["structs_$(nameof(hashfn))"] = BenchmarkGroup(["structs"])
+    suite["structs_$(nameof(hashfn))"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, struct_data)))
+    suite["structs_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(structs, HashVersion{2}(), alg=$(hashfn))
+
+    suite["dataframes_$(nameof(hashfn))"] = BenchmarkGroup(["dataframes"])
+    suite["dataframes_$(nameof(hashfn))"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, data1)))
+    suite["dataframes_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(df, HashVersion{2}(), alg=$(hashfn))
+end
 
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
 # the benchmark parameters. Reusing cached parameters is faster and more reliable
@@ -81,13 +69,14 @@ end
 
 result = run(suite)
 
-for case in keys(result)
+timestr(x) = replace(sprint(show, x), r"TrialEstimate\((.*)\)" => s"\1")
+rows = map(collect(keys(result))) do case
     m2 = median(result[case]["base"])
     m1 = median(result[case]["trait"])
-    println("")
-    println("$case: ratio to baseline")
-    println("----------------------------------------")
-    display(ratio(m1,m2))
+    r1 = ratio(m1,m2)
+    benchmark, hash = split(case, "_")
+    (;benchmark, hash, base=timestr(m2), trait=timestr(m1), ratio=r1.time)
 end
+display(sort(DataFrame(rows), [:hash, order(:ratio, rev=true)]))
 
 # TODO: create a markdown table with absolute results and ratios
