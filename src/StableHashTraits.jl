@@ -17,7 +17,15 @@ by existing code.
 By explicitly passing this hash version in `stable_hash` you ensure that hash values for 
 these fallback methods will not change even if new fallbacks are defined. 
 """
-struct HashVersion{V} end
+struct HashVersion{V}
+    function HashVersion{V}() where V
+        V == 1 && 
+            Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in "*
+                         "all cases where backwards compatible hash values are not "*
+                         "required.", HashVersion)
+        return new{V}()
+    end
+end
 
 """
     stable_hash(x, context=HashVersion{1}(); alg=sha256)
@@ -332,9 +340,8 @@ See also: [`StableHashTraits.hash_method`](@ref).
 """
 write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
-# TODO: we could reduce memory usage for all types if we could interpret
-# any calls to `write` as calls to `update!`; this would require making
-# a new special `HashIOStream` which could be annoying 
+# TODO: we could reduce memory usage for all types if we had the hash
+# state implement `IO`, but this would take some work
 # see:
 # https://discourse.julialang.org/t/making-a-simple-wrapper-for-an-io-stream/52587/9
 function stable_hash_helper(x, hash_state, context, ::WriteHash)
