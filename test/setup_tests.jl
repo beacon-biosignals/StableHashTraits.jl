@@ -40,9 +40,7 @@ end
 
 StableHashTraits.hash_method(::TestType) = StructHash()
 StableHashTraits.hash_method(::TestType2) = FnHash(qualified_name), StructHash()
-function StableHashTraits.hash_method(::TestType3)
-    return StructHash(propertynames => getproperty, :ByName)
-end
+StableHashTraits.hash_method(::TestType3) = StructHash(:ByName)
 StableHashTraits.hash_method(::TestType4) = StructHash(propertynames => getproperty)
 StableHashTraits.hash_method(::TypeType) = StructHash()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
