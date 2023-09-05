@@ -99,25 +99,26 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 
 ### In 1.1
 
-This release includes substantial speed improvements. Refer to the benchmark results
-under **TODO**.
+This release includes substantial speed improvements.
 
 - `HashVersion{1}` benefits from some limited speed improvements.
-- `HashVersion{2}` is a new hash context that is much faster (~1000x in some cases) than
-  `HashVersion{1}`, favor it over `HashVersion{1}` in all cases. Since this version changes
-  the hash values of some objects, to avoid breaking existing code `HashVersion{1}` is still
-  the default. 
+- `HashVersion{2}` is a new hash context that can be much faster (~1000x in some cases) than
+  `HashVersion{1}`; favor it over `HashVersion{1}` in all cases. Since this version changes
+  the hash values of some objects, `HashVersion{1}` is still the default to avoid breaking
+  existing code. 
 - `qualified_name` and `qualified_type` have been deprected, favor `stable_typename_id` and
-  `stable_type_id` which are much faster.
+  `stable_type_id` as they are much faster.
 - `fnv` (and `fnv32`, `fnv64`, and `fnv128`) implement the
 [Fowler-Noll-Vo](https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function)
 hash algorithm; this was implemented as part of benchmarking to test low-overhad hash uses
-cases. It is lower overhead that `crc32`, as it does not require copying upon each call.
-- `root_version`: indicates what version of the trait implementations to use (1 or 2). It
-defaults to 1 to avoid changing the hash values of exisitng root contexts, but should be
-defined to return 2 to make use of the more optimizied implementationsa. Most users will not
-have to worry about this, you only need to define `root_version` if your context defines
-`parent_context(x::MyContext) = nothing` (see `parent_context` details on root contexts).
+cases. It is lower overhead that `crc32`, as it does not require copying values on each
+call.
+- `root_version`: Most users can safely ignore this function. You only need to define
+`root_version` if you are implementing a context that defines 
+`parent_context(x::MyContext) = nothing` (see `parent_context` details on root contexts). It
+indicates what version of the trait implementations to use (1 or 2). It defaults to 1 to
+avoid changing the hash values of exisitng root contexts, but should be defined to return 2
+to make use of the more optimizied implementationsa. 
 
 ### In 1.0:
 

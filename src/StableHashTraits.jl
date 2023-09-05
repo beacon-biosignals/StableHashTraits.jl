@@ -22,7 +22,7 @@ struct HashVersion{V}
         V == 1 && 
             Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in "*
                          "all cases where backwards compatible hash values are not "*
-                         "required.", HashVersion)
+                         "required.", :HashVersion)
         return new{V}()
     end
 end
@@ -211,7 +211,6 @@ hash_type(x::BufferedHash) = hash_type(x.hash)
 ##### SHA Hashing: support use of `sha256` and related hash functions
 #####
 
-# setup_hash_state: given a function that identifies the hash, setup up the state used for hashing
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
     if CTX in names(SHA)
@@ -224,10 +223,10 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
     end
 end
 
+# NOTE: while MarkerHash is a faster implementation of `start/stop_hash!`
+# we still need a recursive hash implementation to implement `HashVersion{1}()`
 start_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
-# update!: update the hash state with some new data to hash
 update_hash!(sha::SHA.SHA_CTX, bytes) = (SHA.update!(sha, bytes); sha)
-# digest!: convert the hash state to the final hashed value
 function stop_hash!(hash_state, nested_hash_state)
     return update_hash!(hash_state, SHA.digest!(nested_hash_state))
 end
@@ -274,7 +273,7 @@ compute_hash!(x::RecursiveHash) = x.val
 hash_type(::RecursiveHash{<:Any, T}) where {T} = T
 
 #####
-##### FNV: https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
+##### Hash function fnv: https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
 #####
 
 const FNV_PRIME_32=0x01000193
@@ -306,18 +305,6 @@ end
 #####
 ##### ================ Hash Traits ================
 #####
-
-# deprecations
-@deprecate UseWrite() WriteHash()
-@deprecate UseIterate() IterateHash()
-@deprecate UseProperties(order) StructHash(propertynames => getproperty, order)
-@deprecate UseProperties() StructHash(propertynames => getproperty)
-@deprecate UseQualifiedName(method) (FnHash(qualified_name, WriteHash()), method)
-@deprecate UseQualifiedName() FnHash(qualified_name, WriteHash())
-@deprecate UseSize(method) (FnHash(size), method)
-@deprecate UseTable() FnHash(Tables.columns,
-                             StructHash(Tables.columnnames => Tables.getcolumn))
-# These are the various methods to compute a hash from an object
 
 #####
 ##### WriteHash 
@@ -441,11 +428,13 @@ qualified_type_(fn::Function) = qname_(fn, string)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
 qualified_type_(x::T) where {T} = qname_(T <: DataType ? x : T, string)
 function qualified_name(x)
-    Base.depwarn("`qualified_name` is deprecated, use `stable_typename_id` instead", 
+    Base.depwarn("`qualified_name` is deprecated, favor `stable_typename_id` in all cases "*
+                 "where backwards compatible hash values are not required.", 
                  :qualified_name)
 end
 function qualified_type(x)
-    Base.depwarn("`qualified_type` is deprecated, use `stable_type_id` instead", 
+    Base.depwarn("`qualified_type` is deprecated, favor `stable_type_id` in all cases "*
+                 "where backwards compatible hash values are not required.", 
                  :qualified_type)
 end
 
@@ -612,6 +601,21 @@ end
 function stable_hash_helper(x, hash_state, context, method::HashAndContext)
     return stable_hash_helper(x, hash_state, method.contextfn(context), method.parent)
 end
+
+#####
+##### Deprecations 
+#####
+
+# deprecations
+@deprecate UseWrite() WriteHash()
+@deprecate UseIterate() IterateHash()
+@deprecate UseProperties(order) StructHash(propertynames => getproperty, order)
+@deprecate UseProperties() StructHash(propertynames => getproperty)
+@deprecate UseQualifiedName(method) (FnHash(qualified_name, WriteHash()), method)
+@deprecate UseQualifiedName() FnHash(qualified_name, WriteHash())
+@deprecate UseSize(method) (FnHash(size), method)
+@deprecate UseTable() FnHash(Tables.columns,
+                             StructHash(Tables.columnnames => Tables.getcolumn))
 
 #####
 ##### ================ Hash Contexts ================
