@@ -1,6 +1,10 @@
 using BenchmarkTools
 using StableHashTraits
+using DataFrames
 using SHA
+using CRC32c
+
+crc(x, s=0x000000) = crc32c(collect(x), s)
 
 # Define a parent BenchmarkGroup to contain our suite
 const suite = BenchmarkGroup()
@@ -29,30 +33,30 @@ structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:10_000]
 struct_data = [x for st in structs for x in (st.a, st.b)]
 df = DataFrame(x=1:10_000, y=1:10_000)
 
-for hashfn in (fnv, sha256)
+for hashfn in (crc, sha256)
     suite["numbers_$(nameof(hashfn))"] = BenchmarkGroup(["numbers"])
     suite["numbers_$(nameof(hashfn))"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, data)))
-    suite["numbers_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(data, HashVersion{2}(); alg=$(hashfn))
+    suite["numbers_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(data, HashVersion{1}(); alg=$(hashfn))
 
     suite["tuples_$(nameof(hashfn))"] = BenchmarkGroup(["tuples"])
-    suite["tuples_$(nameof(hashfn))"]["base"] = @benchmarkable $(stable_hash)(data1, HashVersion{2}(), alg=$(hashfn))
-    suite["tuples_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(data2, HashVersion{2}(); alg=$(hashfn))
+    suite["tuples_$(nameof(hashfn))"]["base"] = @benchmarkable $(stable_hash)(data1, HashVersion{1}(), alg=$(hashfn))
+    suite["tuples_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(data2, HashVersion{1}(); alg=$(hashfn))
 
     suite["strings_$(nameof(hashfn))"] = BenchmarkGroup(["strings"])
     suite["strings_$(nameof(hashfn))"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, strdata)))
-    suite["strings_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(strings, HashVersion{2}(), alg=$(hashfn))
+    suite["strings_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(strings, HashVersion{1}(), alg=$(hashfn))
 
     suite["symbols_$(nameof(hashfn))"] = BenchmarkGroup(["symbols"])
     suite["symbols_$(nameof(hashfn))"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, symdata)))
-    suite["symbols_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(symbols, HashVersion{2}(), alg=$(hashfn))
+    suite["symbols_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(symbols, HashVersion{1}(), alg=$(hashfn))
 
     suite["structs_$(nameof(hashfn))"] = BenchmarkGroup(["structs"])
     suite["structs_$(nameof(hashfn))"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, struct_data)))
-    suite["structs_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(structs, HashVersion{2}(), alg=$(hashfn))
+    suite["structs_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(structs, HashVersion{1}(), alg=$(hashfn))
 
     suite["dataframes_$(nameof(hashfn))"] = BenchmarkGroup(["dataframes"])
     suite["dataframes_$(nameof(hashfn))"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, data1)))
-    suite["dataframes_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(df, HashVersion{2}(), alg=$(hashfn))
+    suite["dataframes_$(nameof(hashfn))"]["trait"] = @benchmarkable $(stable_hash)(df, HashVersion{1}(), alg=$(hashfn))
 end
 
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
