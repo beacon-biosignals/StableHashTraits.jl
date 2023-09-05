@@ -29,35 +29,20 @@ df = DataFrame(; x=1:N, y=1:N)
 # Define a parent BenchmarkGroup to contain our suite
 const suite = BenchmarkGroup()
 
+benchmarks = [ (; name = "dataframes", a=data1, b=df) 
+               (; name = "structs", a=struct_data, b=structs) 
+               (; name = "symbols", a=symdata, b=symbols) 
+               (; name = "strings", a=strdata, b=strings) 
+               (; name = "tuples", a=data1, b=data2) 
+               (; name = "numbers", a=data, b=data) ]
+
 for hashfn in (crc, sha256)
     hstr = nameof(hashfn)
-    suite["numbers_$hstr"] = BenchmarkGroup(["numbers"])
-    suite["numbers_$hstr"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, data)))
-    suite["numbers_$hstr"]["trait"] = @benchmarkable $(stable_hash)(data; alg=$(hashfn))
-
-    suite["tuples_$hstr"] = BenchmarkGroup(["tuples"])
-    suite["tuples_$hstr"]["base"] = @benchmarkable $(stable_hash)(data1; alg=$(hashfn))
-    suite["tuples_$hstr"]["trait"] = @benchmarkable $(stable_hash)(data2; alg=$(hashfn))
-
-    suite["strings_$hstr"] = BenchmarkGroup(["strings"])
-    suite["strings_$hstr"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, strdata)))
-    suite["strings_$hstr"]["trait"] = @benchmarkable $(stable_hash)(strings; alg=$(hashfn))
-
-    suite["symbols_$hstr"] = BenchmarkGroup(["symbols"])
-    suite["symbols_$hstr"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8, symdata)))
-    suite["symbols_$hstr"]["trait"] = @benchmarkable $(stable_hash)(symbols,
-                                                                    HashVersion{1}();
-                                                                    alg=$(hashfn))
-
-    suite["structs_$hstr"] = BenchmarkGroup(["structs"])
-    suite["structs_$hstr"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8,
-                                                                            struct_data)))
-    suite["structs_$hstr"]["trait"] = @benchmarkable $(stable_hash)(structs; alg=$(hashfn))
-
-    suite["dataframes_$hstr"] = BenchmarkGroup(["dataframes"])
-    suite["dataframes_$hstr"]["base"] = @benchmarkable $(hashfn)($(reinterpret(UInt8,
-                                                                               data1)))
-    suite["dataframes_$hstr"]["trait"] = @benchmarkable $(stable_hash)(df; alg=$(hashfn))
+    for (; name, a, b) in benchmarks
+        suite["$(name)_$hstr"] = BenchmarkGroup([name])
+        suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
+        suite["$(name)_$hstr"]["trait"] = @benchmarkable $(stable_hash)($b; alg=$(hashfn))
+    end
 end
 
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
