@@ -174,7 +174,7 @@ end
 start_hash!(x::RecursiveHash) = RecursiveHash(x.fn, x.init, x.init)
 update_hash!(x::RecursiveHash, bytes) = RecursiveHash(x.fn, x.fn(bytes, x.val), x.init)
 function stop_hash!(fn::RecursiveHash, nested::RecursiveHash)
-    return update_hash!(fn, bytesof(nested.val))
+    return update_hash!(fn, reinterpret(UInt8, [nested.val]))
 end
 compute_hash!(x::RecursiveHash) = x.val
 hash_type(::RecursiveHash{<:Any, T}) where {T} = T
@@ -212,22 +212,6 @@ function stable_hash_helper(x, hash_state, context, ::WriteHash)
     io = IOBuffer()
     write(io, x, context)
     return update_hash!(hash_state, take!(io))
-end
-
-bytesof(x) = reinterpret(UInt8, [x])
-# NOTE: this specialized method speeds up hashing by ~x45 when using 
-# a simple hashing function like crc
-function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
-    # NOTE: `bytesof` increases speed by ~3x over reinterpret(UInt8, [x])
-    return update_hash!(hash_state, bytesof(x))
-end
-
-function stable_hash_helper(x::AbstractString, hash_state, context, ::WriteHash)
-    return update_hash!(hash_state, codeunits(x))
-end
-
-function stable_hash_helper(x::Symbol, hash_state, context, ::WriteHash)
-    return update_hash!(hash_state, codeunits(String(x)))
 end
 
 #####
