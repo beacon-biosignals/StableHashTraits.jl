@@ -87,4 +87,3 @@ rows = map(collect(keys(result))) do case
 end
 display(sort(DataFrame(rows), [:hash, order(:ratio; rev=true)]))
 
-# TODO: create a markdown table with absolute results and ratios
