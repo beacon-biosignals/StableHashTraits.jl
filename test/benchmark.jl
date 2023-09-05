@@ -86,4 +86,3 @@ rows = map(collect(keys(result))) do case
     return (; benchmark, hash, base=timestr(m2), trait=timestr(m1), ratio=r1.time)
 end
 display(sort(DataFrame(rows), [:hash, order(:ratio; rev=true)]))
-
