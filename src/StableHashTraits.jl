@@ -217,7 +217,7 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
         @eval function setup_hash_state(::typeof(SHA.$(fn)), context)
             # NOTE: BufferedHash speeds things up by about 1.8x
             # NOTE: MarkerHash speeds things up by about 4.5x
-            root_version(context) < 2 && SHA.$(CTX)()
+            root_version(context) < 2 && return SHA.$(CTX)()
             return MarkerHash(BufferedHash(SHA.$(CTX)()))
         end
     end
@@ -431,11 +431,13 @@ function qualified_name(x)
     Base.depwarn("`qualified_name` is deprecated, favor `stable_typename_id` in all cases "*
                  "where backwards compatible hash values are not required.", 
                  :qualified_name)
+    return qualified_name_(x)
 end
 function qualified_type(x)
     Base.depwarn("`qualified_type` is deprecated, favor `stable_type_id` in all cases "*
                  "where backwards compatible hash values are not required.", 
                  :qualified_type)
+    return qualified_type_(x)
 end
 
 function hash_type_str(str, T)
