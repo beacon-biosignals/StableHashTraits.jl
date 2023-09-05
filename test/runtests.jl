@@ -2,6 +2,9 @@ include("setup_tests.jl")
 
 @testset "StableHashTraits.jl" begin
     crc(x, s=0x000000) = crc32c(collect(x), s)
+    bytes2hex_(x::Number) = x
+    bytes2hex_(x) = bytes2hex(x)
+    
     @testset "Older Reference Tests" begin
         @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=crc)
         @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=crc)
@@ -25,52 +28,52 @@ include("setup_tests.jl")
     for V in (1, 2), hashfn = (sha256, sha1, crc)
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
+            test_hash(x, c=ctx) = stable_hash(x, c; alg=hashfn)
+
             # reference tests to ensure hashfn consistency
             @testset "Reference Tests" begin
                 @test_reference("references/ref00_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash((), ctx)))
+                                bytes2hex_(test_hash(())))
                 @test_reference("references/ref01_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash([1, 2, 3], ctx)))
+                                bytes2hex_(test_hash([1, 2, 3])))
                 @test_reference("references/ref02_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash([1 2; 3 4], ctx)))
+                                bytes2hex_(test_hash([1 2; 3 4])))
                 @test_reference("references/ref03_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash((a=1, b=2), ctx)))
+                                bytes2hex_(test_hash((a=1, b=2))))
                 @test_reference("references/ref04_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(Set(1:3), ctx)))
+                                bytes2hex_(test_hash(Set(1:3))))
                 @test_reference("references/ref05_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(sin, ctx)))
+                                bytes2hex_(test_hash(sin)))
                 @test_reference("references/ref06_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(TestType2(1, 2), ctx)))
+                                bytes2hex_(test_hash(TestType2(1, 2))))
                 @test_reference("references/ref07_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(TypeType(Array), ctx)))
+                                bytes2hex_(test_hash(TypeType(Array))))
                 @test_reference("references/ref08_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(TestType5("bobo"), ctx)))
+                                bytes2hex_(test_hash(TestType5("bobo"))))
                 @test_reference("references/ref09_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(Nothing, ctx)))
+                                bytes2hex_(test_hash(Nothing)))
                 @test_reference("references/ref10_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(Missing, ctx)))
+                                bytes2hex_(test_hash(Missing)))
                 @test_reference("references/ref11_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(v"0.1.0", ctx)))
+                                bytes2hex_(test_hash(v"0.1.0")))
                 @test_reference("references/ref12_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(UUID("8d70055f-1864-48ff-8a94-2c16d4e1d1cd"), ctx)))
+                                bytes2hex_(test_hash(UUID("8d70055f-1864-48ff-8a94-2c16d4e1d1cd"))))
                 @test_reference("references/ref13_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(Date("2002-01-01"), ctx)))
+                                bytes2hex_(test_hash(Date("2002-01-01"))))
                 @test_reference("references/ref14_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(Time("12:00"), ctx)))
+                                bytes2hex_(test_hash(Time("12:00"))))
                 @test_reference("references/ref15_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(TimePeriod(Nanosecond(0)), ctx)))
+                                bytes2hex_(test_hash(TimePeriod(Nanosecond(0)))))
                 @test_reference("references/ref16_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(Hour(1) + Minute(2), ctx)))
+                                bytes2hex_(test_hash(Hour(1) + Minute(2))))
                 @test_reference("references/ref17_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(DataFrame(; x=1:10, y=1:10), ctx)))
+                                bytes2hex_(test_hash(DataFrame(; x=1:10, y=1:10))))
                 @test_reference("references/ref18_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(Dict(:a => "1", :b => "2"), ctx)))
+                                bytes2hex_(test_hash(Dict(:a => "1", :b => "2"))))
                 @test_reference("references/ref19_$(V)_$(nameof(hashfn)).txt", 
-                                bytes2hex(stable_hash(ExtraTypeParams{:A,Int}(2), ctx)))
+                                bytes2hex_(test_hash(ExtraTypeParams{:A,Int}(2))))
             end
     
-            test_hash(x, c=ctx) = stable_hash(x, c; alg=hashfn)
-
             # verifies that transform can be called recursively
             @testset "FnHash" begin
                   @test test_hash(GoodTransform(2)) == test_hash(GoodTransform("-0.2"))
