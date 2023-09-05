@@ -29,12 +29,12 @@ df = DataFrame(; x=1:N, y=1:N)
 # Define a parent BenchmarkGroup to contain our suite
 const suite = BenchmarkGroup()
 
-benchmarks = [ (; name = "dataframes", a=data1, b=df) 
-               (; name = "structs", a=struct_data, b=structs) 
-               (; name = "symbols", a=symdata, b=symbols) 
-               (; name = "strings", a=strdata, b=strings) 
-               (; name = "tuples", a=data1, b=data2) 
-               (; name = "numbers", a=data, b=data) ]
+benchmarks = [(; name="dataframes", a=data1, b=df);
+              (; name="structs", a=struct_data, b=structs);
+              (; name="symbols", a=symdata, b=symbols);
+              (; name="strings", a=strdata, b=strings);
+              (; name="tuples", a=data1, b=data2);
+              (; name="numbers", a=data, b=data)]
 
 for hashfn in (crc, sha256)
     hstr = nameof(hashfn)
