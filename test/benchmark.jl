@@ -6,17 +6,6 @@ using CRC32c
 
 crc(x, s=0x000000) = crc32c(collect(x), s)
 
-# Define a parent BenchmarkGroup to contain our suite
-const suite = BenchmarkGroup()
-
-# TODO: benchmark to verify various similar timings:
-# numbers vs. Base.hash of those numbers
-# array of numbers vs. Base.hash of those numbers
-# matrix to array of tuples
-# 
-# numbers vsthat tuples of numbers are as fast as fast
-# as structs of those numbers
-
 struct BenchTest
     a::Int
     b::Int
@@ -32,6 +21,9 @@ symdata = [c for sym in symbols for c in String(sym)]
 structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:10_000]
 struct_data = [x for st in structs for x in (st.a, st.b)]
 df = DataFrame(; x=1:10_000, y=1:10_000)
+
+# Define a parent BenchmarkGroup to contain our suite
+const suite = BenchmarkGroup()
 
 for hashfn in (crc, sha256)
     suite["numbers_$(nameof(hashfn))"] = BenchmarkGroup(["numbers"])
