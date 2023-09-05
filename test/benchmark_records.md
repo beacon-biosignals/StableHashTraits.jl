@@ -30,19 +30,19 @@ is mainly to pave the way for larger performance imporvements in future PRs.
 
 ```
 12×5 DataFrame
- Row │ benchmark   hash       base        trait       ratio     
-     │ SubStrin…   SubStrin…  String      String      Float64   
-─────┼──────────────────────────────────────────────────────────
-   1 │ structs     crc        78.833 μs   75.692 ms   960.161
-   2 │ dataframes  crc        79.000 μs   2.688 ms     34.0287
-   3 │ numbers     crc        39.667 μs   1.316 ms     33.1836
-   4 │ symbols     crc        593.770 μs  11.563 ms    19.4739
-   5 │ strings     crc        597.250 μs  8.225 ms     13.7708
-   6 │ tuples      crc        2.653 ms    19.625 ms     7.39684
-   7 │ structs     sha256     545.916 μs  172.651 ms  316.259
-   8 │ dataframes  sha256     546.542 μs  9.768 ms     17.8729
-   9 │ numbers     sha256     271.875 μs  4.810 ms     17.6921
-  10 │ symbols     sha256     4.081 ms    27.740 ms     6.7982
-  11 │ strings     sha256     4.090 ms    19.599 ms     4.79158
-  12 │ tuples      sha256     9.652 ms    42.305 ms     4.38311
+ Row │ benchmark   hash       base        trait       ratio      
+     │ SubStrin…   SubStrin…  String      String      Float64    
+─────┼───────────────────────────────────────────────────────────
+   1 │ structs     crc        78.541 μs   91.125 ms   1160.23
+   2 │ tuples      crc        79.542 μs   22.047 ms    277.18
+   3 │ dataframes  crc        79.375 μs   3.996 ms      50.3462
+   4 │ numbers     crc        39.750 μs   1.957 ms      49.2254
+   5 │ symbols     crc        598.334 μs  12.765 ms     21.3347
+   6 │ strings     crc        601.458 μs  9.549 ms      15.8757
+   7 │ structs     sha256     545.167 μs  181.623 ms   333.152
+   8 │ tuples      sha256     545.042 μs  45.179 ms     82.8901
+   9 │ dataframes  sha256     544.750 μs  10.383 ms     19.0596
+  10 │ numbers     sha256     271.667 μs  5.130 ms      18.8846
+  11 │ symbols     sha256     4.033 ms    30.873 ms      7.65412
+  12 │ strings     sha256     4.086 ms    19.308 ms      4.72488
 ```
