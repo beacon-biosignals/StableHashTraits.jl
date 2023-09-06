@@ -347,13 +347,14 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-function stable_hash_helper(x, hash_state, context, use::StructHash)
+function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any, S}) where {S}
     fieldsfn, getfieldfn = use.fnpair
     if root_version(context) > 1 && fieldsfn isa typeof(fieldnames_)
         # NOTE: hashes the field names at compile time if possible (~x10 speed up)
         hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context, WriteHash())
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
-        hash_state = hash_foreach(hash_state, context, sorted_field_names(x)) do k
+        fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
+        hash_state = hash_foreach(hash_state, context, fields) do k
             getfieldfn(x, k)
         end
     else
