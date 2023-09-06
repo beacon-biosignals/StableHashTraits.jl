@@ -25,21 +25,27 @@ A record of benchmarks from various versions of `stable_hash`
 
 # With Buffering
 
+In `dfl/hash-buffer` hash computations are delayed and data is stored in an intermediate
+buffer and only hashed when enough data has been written to the buffer. This addresses
+many of the issues when hashing low-level objects like numbers and strings. Anything
+where the type of the objects is represented as a string for each value in an array
+remains quite slow.
+
 ```
 12×5 DataFrame
  Row │ benchmark   hash       base        trait       ratio     
      │ SubStrin…   SubStrin…  String      String      Float64   
 ─────┼──────────────────────────────────────────────────────────
-   1 │ structs     crc        70.334 μs   67.829 ms   964.379
-   2 │ tuples      crc        71.625 μs   11.620 ms   162.229
-   3 │ symbols     crc        536.875 μs  6.492 ms     12.0917
-   4 │ strings     crc        536.750 μs  5.389 ms     10.04
-   5 │ dataframes  crc        71.625 μs   716.292 μs   10.0006
-   6 │ numbers     crc        35.208 μs   331.875 μs    9.42612
-   7 │ structs     sha256     575.125 μs  73.509 ms   127.813
-   8 │ tuples      sha256     575.334 μs  13.197 ms    22.9381
-   9 │ dataframes  sha256     570.375 μs  1.514 ms      2.65374
-  10 │ numbers     sha256     286.208 μs  735.959 μs    2.57141
-  11 │ symbols     sha256     3.999 ms    8.176 ms      2.04456
-  12 │ strings     sha256     4.077 ms    6.947 ms      1.70391
+   1 │ structs     crc        71.000 μs   69.913 ms   984.69
+   2 │ tuples      crc        71.625 μs   11.715 ms   163.561
+   3 │ symbols     crc        536.708 μs  6.356 ms     11.8418
+   4 │ dataframes  crc        71.750 μs   816.500 μs   11.3798
+   5 │ numbers     crc        35.833 μs   379.458 μs   10.5896
+   6 │ strings     crc        536.584 μs  5.414 ms     10.0896
+   7 │ structs     sha256     576.125 μs  73.729 ms   127.973
+   8 │ tuples      sha256     575.875 μs  13.202 ms    22.9253
+   9 │ dataframes  sha256     575.750 μs  1.533 ms      2.6629
+  10 │ numbers     sha256     286.416 μs  739.833 μs    2.58307
+  11 │ symbols     sha256     4.015 ms    8.191 ms      2.03984
+  12 │ strings     sha256     4.076 ms    6.872 ms      1.68624
 ```
