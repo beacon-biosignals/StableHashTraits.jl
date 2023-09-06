@@ -239,7 +239,6 @@ function compute_hash!(x::BufferedHash)
     return compute_hash!(hash)
 end
 
-
 #####
 ##### MarkerHash: wrapper that uses delimiters to handle `start/stop_hash!` 
 #####
