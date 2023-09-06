@@ -49,3 +49,30 @@ remains quite slow.
   11 │ symbols     sha256     4.000 ms    6.611 ms      1.65291
   12 │ strings     sha256     4.000 ms    6.321 ms      1.58011
 ```
+
+# Version 1.1:
+
+With the addition of `dfl/compiled-type-labels` we compute more quantities at compile time:
+
+There are a number of hash quantities that are, strictly speaking,
+a function of the type of objects, not their content. These hashes can be optimized
+using `@generated` functions to guarantee that their hashes are computed at compile time.
+
+```
+12×5 DataFrame
+ Row │ benchmark   hash       base        trait       ratio     
+     │ SubStrin…   SubStrin…  String      String      Float64   
+─────┼──────────────────────────────────────────────────────────
+   1 │ structs     crc        70.250 μs   1.123 ms    15.9905
+   2 │ tuples      crc        71.583 μs   897.750 μs  12.5414
+   3 │ numbers     crc        35.250 μs   178.542 μs   5.06502
+   4 │ dataframes  crc        71.458 μs   359.333 μs   5.02859
+   5 │ symbols     crc        537.583 μs  1.115 ms     2.07487
+   6 │ strings     crc        535.542 μs  649.208 μs   1.21224
+   7 │ structs     sha256     549.208 μs  3.194 ms     5.81527
+   8 │ tuples      sha256     543.500 μs  2.462 ms     4.53082
+   9 │ dataframes  sha256     543.459 μs  1.108 ms     2.03841
+  10 │ numbers     sha256     271.167 μs  551.250 μs   2.03288
+  11 │ symbols     sha256     4.002 ms    4.686 ms     1.17094
+  12 │ strings     sha256     4.078 ms    2.343 ms     0.574516
+```

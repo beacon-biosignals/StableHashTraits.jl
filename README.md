@@ -24,7 +24,7 @@ end
 StableHashTraits.stable_hash(::MyType) = FnHash(x -> x.data) 
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
-stable_hash(a) == stable_hash(b) # true
+stable_hash(a, HashVersion{2}()) == stable_hash(b, HashVersion{2}()) # true
 ```
 
 ## Why use `stable_hash` instead of `Base.hash`?
@@ -71,9 +71,9 @@ following values, typically based only on the *type* of its input.
    use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result to
    determine how to hash it. There are two built-in functions commonly used with
    `FnHash`
-    - `qualified_name`: Get the qualified name of an objects type, e.g. `Base.String`
-    - `qualified_type`: Get the qualified name and type parameters of a type, e.g.
-       `Base.Vector{Int}`. 
+    - `stable_typename_id`: Get the qualified name of an objects type, e.g. `Base.String` and return 128 bit hash of this string
+    - `stable_type_id`: Get the qualified name and type parameters of a type, e.g.
+       `Base.Vector{Int}`, and return a 128 bit hash of this string
     Favor these functions over e.g. `string ∘ typeof` as they have been tested to provide
     more stable values across julia verisons and sessions than the naive
     string-ification of types.
@@ -103,6 +103,8 @@ This release includes speed improvements.
   `HashVersion{1}`; favor it over `HashVersion{1}` in all cases. Since this version changes
   the hash values of some objects, `HashVersion{1}` is still the default to avoid breaking
   existing code. 
+- `qualified_name` and `qualified_type` have been deprected, favor `stable_typename_id` and
+  `stable_type_id` as they are much faster.
 - The requirements for `HashVersion{2}` on the passed hash function have been relaxed, such
 that `alg=crc32` should again work (no need to call `alg=(x,s=UInt32(0)) ->
 crc32c(copy(x),s)`).
@@ -111,7 +113,7 @@ crc32c(copy(x),s)`).
 `parent_context(x::MyContext) = nothing` (see `parent_context` details on root contexts). It
 indicates what version of the trait implementations to use (1 or 2). It defaults to 1 to
 avoid changing the hash values of exisitng root contexts, but should be defined to return 2
-to make use of the more optimizied implementationsa. 
+to make use of the more optimizied implementations.
 
 ### In 1.0:
 
