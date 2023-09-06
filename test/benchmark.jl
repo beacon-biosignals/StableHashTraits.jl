@@ -61,8 +61,8 @@ result = run(suite)
 
 timestr(x) = replace(sprint(show, x), r"TrialEstimate\((.*)\)" => s"\1")
 rows = map(collect(keys(result))) do case
-    m2 = median(result[case]["base"])
-    m1 = median(result[case]["trait"])
+    m2 = minimum(result[case]["base"])
+    m1 = minimum(result[case]["trait"])
     r1 = ratio(m1, m2)
     benchmark, hash = split(case, "_")
     return (; benchmark, hash, base=timestr(m2), trait=timestr(m1), ratio=r1.time)
