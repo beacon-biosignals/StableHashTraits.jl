@@ -170,7 +170,7 @@ end
 # we still need a recursive hash implementation to implement `HashVersion{1}()`
 start_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
 update_hash!(sha::SHA.SHA_CTX, bytes) = (SHA.update!(sha, bytes); sha)
-function stop_hash!(hash_state, nested_hash_state)
+function stop_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
     return update_hash!(hash_state, SHA.digest!(nested_hash_state))
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
@@ -192,38 +192,33 @@ hash_type(::SHA.SHA_CTX) = Vector{UInt8}
 mutable struct BufferedHash{T}
     hash::T
     bytes::Vector{UInt8}
+    limit::Int
     io::IOBuffer
 end
-const HASH_BUFFER_SIZE = 2^12
+const HASH_BUFFER_SIZE = 2^14
 function BufferedHash(hash, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
-    io = IOBuffer(bytes; write=true, read=false, maxsize=size)
-    BufferedHash(hash, bytes, io)
+    io = IOBuffer(bytes; write=true, read=false)
+    BufferedHash(hash, bytes, size, io)
 end
-view_(x::AbstractArray, ix) = @view x[ix]
-view_(x::Tuple, ix) = x[ix]
-write_(io::IO, x::AbstractArray, ixs) = write(io, view(x, ixs))
-function write_(io::IO, bytes::Tuple, ixs) 
-    total = 0
-    @inbounds for i in ixs
-        total += write(io, bytes[i])
+write_(io::IO, x) = Base.write(io, x)
+function write_(io::IO, bytes::Tuple) 
+    @inbounds for b in bytes
+        Base.write(io, b)
     end
-    return total
+end
+
+function flush_bytes!(x::BufferedHash)
+    if position(x.io) ≥ x.limit
+        x.hash = update_hash!(x.hash, @view x.bytes[1:position(x.io)])
+        seek(x.io, 0)
+    end
 end
 
 function update_hash!(x::BufferedHash, 
                       bytes::Union{NTuple{<:Any, UInt8}, AbstractArray{UInt8}})
-    written = write_(x.io, bytes, 1:lastindex(bytes))
-    if position(x.io) > length(x.bytes)
-        x.hash = update_hash!(x.hash, x.bytes)
-        seek(x.io, 0)
-    end
-    if length(bytes) - written > length(x.bytes)
-        x.hash = update_hash!(x.hash, view_(bytes, (written+1):lastindex(bytes)))
-    elseif length(bytes) > written
-        write_(x.io, bytes, (written+1):lastindex(bytes))
-    end
-    
+    write_(x.io, bytes)
+    flush_bytes!(x)
     return x
 end
 
@@ -248,6 +243,7 @@ end
 function start_hash!(x::MarkerHash)
     return MarkerHash(update_hash!(x.hash, (0x01,)))
 end
+write_hash!(x::MarkerHash, obj, c) = MarkerHash(write_hash!(x.hash, obj, c))
 update_hash!(x::MarkerHash, bytes) = MarkerHash(update_hash!(x.hash, bytes))
 function stop_hash!(::MarkerHash, nested::MarkerHash) 
     return MarkerHash(update_hash!(nested.hash, (0x02,)))
@@ -259,7 +255,14 @@ hash_type(x::MarkerHash) = hash_type(x.hash)
 ##### RecursiveHash: handles a function of the form hash(bytes, [old_hash]) 
 #####
 
-setup_hash_state(fn::Function, ::Any) = RecursiveHash(fn)
+function setup_hash_state(fn::Function, context) 
+    if root_version(context) > 1 
+        return MarkerHash(BufferedHash(RecursiveHash(fn), HASH_BUFFER_SIZE))
+    else
+        return RecursiveHash(fn)
+    end
+end
+
 struct RecursiveHash{F,T}
    fn::F 
    val::T
@@ -330,15 +333,11 @@ their types to customize the behavior of `stable_hash`.
 
 See also: [`StableHashTraits.hash_method`](@ref).
 """
-write(io, x, context) = write(io, x)
-write(io, x) = Base.write(io, x)
-# TODO: we could reduce memory usage for all types if we had the hash
-# state implement `IO`, but this would take some work
-# see:
-# https://discourse.julialang.org/t/making-a-simple-wrapper-for-an-io-stream/52587/9
+write(io, x, context) = NotImplemented()
+write(io, x) = NotImplemented()
 function stable_hash_helper(x, hash_state, context, ::WriteHash)
     io = IOBuffer()
-    write(io, x, context)
+    is_implemented(write(io, x, context)) || Base.write(io, x)
     return update_hash!(hash_state, take!(io))
 end
 
@@ -357,17 +356,40 @@ end
     end
 end
 
-# NOTE: this specialized method speeds up hashing by ~x45 when using 
-# fnv
-# TODO: we need to verify that write is not implemented
-function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
-    # NOTE: `bytesof` increases speed by ~3x over reinterpret(UInt8, [x])
-    return update_hash!(hash_state, bytesof(x))
+function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
+    write(hash_state.io, obj, context)
+    flush_bytes!(hash_state)
+    return hash_state
 end
 
-function stable_hash_helper(x::AbstractString, hash_state, context, ::WriteHash)
-    return update_hash!(hash_state, codeunits(x))
+function stable_hash_helper(obj::Number, hash_state::BufferedHash, context, ::WriteHash)
+    if !is_implemented(write(hash_state.io, obj, context))
+        # NOTE: this avoids allocating a `Ref` by using `bytesof`
+        # `Base.write` uses `Ref` for primitive types
+        # TODO use inbounds once we trust this
+        for b in bytesof(obj)
+            write(hash_state.io, b)
+        end
+    end
+    flush_bytes!(hash_state)
+    return hash_state
 end
+
+function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context, c::WriteHash)
+    MarkerHash(stable_hash_helper(obj, hash_state.hash, context, c))
+end
+
+# # NOTE: this specialized method speeds up hashing by ~x45 when using 
+# # fnv
+# # TODO: we need to verify that write is not implemented
+# function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
+#     # NOTE: `bytesof` increases speed by ~3x over reinterpret(UInt8, [x])
+#     return update_hash!(hash_state, bytesof(x))
+# end
+
+# function stable_hash_helper(x::AbstractString, hash_state, context, ::WriteHash)
+#     return update_hash!(hash_state, codeunits(x))
+# end
 
 #####
 ##### IterateHash 

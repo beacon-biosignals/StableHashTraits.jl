@@ -46,3 +46,63 @@ is mainly to pave the way for larger performance imporvements in future PRs.
   11 │ symbols     sha256     4.033 ms    30.873 ms      7.65412
   12 │ strings     sha256     4.086 ms    19.308 ms      4.72488
 ```
+
+# Hash Buffering
+
+(before making more hashes buffered)
+
+```
+18×5 DataFrame
+ Row │ benchmark   hash       base        trait       ratio      
+     │ SubStrin…   SubStrin…  String      String      Float64    
+─────┼───────────────────────────────────────────────────────────
+   1 │ structs     crc        70.333 μs   70.529 ms   1002.79
+   2 │ tuples      crc        71.542 μs   13.918 ms    194.54
+   3 │ dataframes  crc        71.541 μs   1.411 ms      19.7166
+   4 │ numbers     crc        35.250 μs   686.167 μs    19.4657
+   5 │ symbols     crc        536.750 μs  9.583 ms      17.8537
+   6 │ strings     crc        530.417 μs  6.955 ms      13.1124
+   7 │ structs     fnv64      199.833 μs  55.307 ms    276.765
+   8 │ tuples      fnv64      203.625 μs  10.016 ms     49.1872
+   9 │ symbols     fnv64      1.499 ms    6.434 ms       4.2915
+  10 │ strings     fnv64      1.499 ms    4.633 ms       3.09061
+  11 │ dataframes  fnv64      199.791 μs  242.417 μs     1.21335
+  12 │ numbers     fnv64      99.875 μs   105.750 μs     1.05882
+  13 │ structs     sha256     533.083 μs  84.956 ms    159.368
+  14 │ tuples      sha256     533.208 μs  14.725 ms     27.6152
+  15 │ dataframes  sha256     533.083 μs  1.397 ms       2.62029
+  16 │ numbers     sha256     271.000 μs  689.542 μs     2.54444
+  17 │ symbols     sha256     3.999 ms    9.211 ms       2.30324
+  18 │ strings     sha256     4.008 ms    7.505 ms       1.87284
+```
+
+(after making all hases buffered)
+NOTE: while this slows thigns down for fnv in some cases, the older implementation
+using `bytesof` was flowed and could lead to API bugs
+
+```
+ Row │ benchmark   hash       base        trait       ratio      
+     │ SubStrin…   SubStrin…  String      String      Float64    
+─────┼───────────────────────────────────────────────────────────
+   1 │ structs     crc        70.250 μs   64.947 ms   924.512
+   2 │ tuples      crc        71.583 μs   10.660 ms   148.915
+   3 │ symbols     crc        536.875 μs  5.684 ms     10.5879
+   4 │ strings     crc        531.959 μs  4.933 ms      9.27257
+   5 │ dataframes  crc        71.542 μs   248.083 μs    3.46766
+   6 │ numbers     crc        35.166 μs   102.916 μs    2.92658
+   7 │ structs     fnv64      203.625 μs  63.412 ms   311.417
+   8 │ tuples      fnv64      203.625 μs  11.275 ms    55.3734
+   9 │ symbols     fnv64      1.499 ms    6.126 ms      4.08624
+  10 │ strings     fnv64      1.528 ms    5.290 ms      3.46205
+  11 │ dataframes  fnv64      199.875 μs  491.542 μs    2.45925
+  12 │ numbers     fnv64      99.916 μs   213.708 μs    2.13888
+  13 │ structs     sha256     576.000 μs  88.085 ms   152.926
+  14 │ tuples      sha256     573.666 μs  17.557 ms    30.6048
+  15 │ symbols     sha256     4.000 ms    11.740 ms     2.93488
+  16 │ strings     sha256     4.075 ms    8.720 ms      2.13965
+  17 │ dataframes  sha256     571.292 μs  367.917 μs    0.644009
+  18 │ numbers     sha256     286.250 μs  158.375 μs    0.553275
+```
+
+conclusion, we don't really need fnv when we buffer; it's not really any faster 
+than `crc`, so, lady da

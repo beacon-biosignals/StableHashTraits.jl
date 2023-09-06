@@ -41,7 +41,7 @@ for hashfn in (fnv, crc, sha256)
     for (; name, a, b) in benchmarks
         suite["$(name)_$hstr"] = BenchmarkGroup([name])
         suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
-        suite["$(name)_$hstr"]["trait"] = @benchmarkable $(stable_hash)($b; alg=$(hashfn))
+        suite["$(name)_$hstr"]["trait"] = @benchmarkable $(stable_hash)($b, HashVersion{2}(); alg=$(hashfn))
     end
 end
 
