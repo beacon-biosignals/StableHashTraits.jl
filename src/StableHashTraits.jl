@@ -20,8 +20,8 @@ these fallback methods will not change even if new fallbacks are defined.
 struct HashVersion{V}
     function HashVersion{V}() where {V}
         V == 1 && Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in " *
-                     "all cases where backwards compatible hash values are not " *
-                     "required.", :HashVersion)
+                               "all cases where backwards compatible hash values are not " *
+                               "required.", :HashVersion)
         return new{V}()
     end
 end
@@ -330,7 +330,7 @@ end
 struct StructHash{P,S}
     fnpair::P
 end
-fieldnames_(::T) where T = fieldnames(T)
+fieldnames_(::T) where {T} = fieldnames(T)
 function StructHash(sort::Symbol)
     return StructHash(fieldnames_ => getfield, sort)
 end
@@ -347,15 +347,16 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any, S}) where {S}
+function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,S}) where {S}
     fieldsfn, getfieldfn = use.fnpair
     if root_version(context) > 1 && fieldsfn isa typeof(fieldnames_)
         # NOTE: hashes the field names at compile time if possible (~x10 speed up)
-        hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context, WriteHash())
+        hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
+                                        WriteHash())
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
         fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
         hash_state = hash_foreach(hash_state, context, fields) do k
-            getfieldfn(x, k)
+            return getfieldfn(x, k)
         end
     else
         return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
@@ -374,14 +375,14 @@ qualified_type_(fn::Function) = qname_(fn, string)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
 qualified_type_(x::T) where {T} = qname_(T <: DataType ? x : T, string)
 function qualified_name(x)
-    Base.depwarn("`qualified_name` is deprecated, favor `stable_typename_id` in all cases "*
-                 "where backwards compatible hash values are not required.", 
+    Base.depwarn("`qualified_name` is deprecated, favor `stable_typename_id` in all cases " *
+                 "where backwards compatible hash values are not required.",
                  :qualified_name)
     return qualified_name_(x)
 end
 function qualified_type(x)
-    Base.depwarn("`qualified_type` is deprecated, favor `stable_type_id` in all cases "*
-                 "where backwards compatible hash values are not required.", 
+    Base.depwarn("`qualified_type` is deprecated, favor `stable_type_id` in all cases " *
+                 "where backwards compatible hash values are not required.",
                  :qualified_type)
     return qualified_type_(x)
 end
@@ -629,7 +630,7 @@ root_version(x) = root_version(parent_context(x))
 #####
 
 parent_context(::HashVersion) = nothing
-root_version(::HashVersion{V}) where V = V
+root_version(::HashVersion{V}) where {V} = V
 
 function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # we need to find `default_method` here because `hash_method(x::MyType, ::Any)` is less
