@@ -143,13 +143,6 @@ Return an updated state that delimints the end of a nested structure.
 """
 function stop_hash! end
 
-"""
-    hash_type(state)
-
-The return type of `compute_hash!`
-"""
-function hash_type end
-
 #####
 ##### SHA Hashing: support use of `sha256` and related hash functions
 #####
@@ -172,7 +165,6 @@ function stop_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
     return update_hash!(hash_state, SHA.digest!(nested_hash_state))
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
-hash_type(::SHA.SHA_CTX) = Vector{UInt8}
 
 #####
 ##### RecursiveHash: handles a function of the form hash(bytes, [old_hash]) 
@@ -198,7 +190,6 @@ function stop_hash!(fn::RecursiveHash, nested::RecursiveHash)
     return update_hash!(fn, reinterpret(UInt8, [nested.val]))
 end
 compute_hash!(x::RecursiveHash) = x.val
-hash_type(::RecursiveHash{<:Any,T}) where {T} = T
 
 #####
 ##### BufferedHash: wrapper that buffers bytes before passing them to the hash algorithm 
@@ -248,7 +239,6 @@ function compute_hash!(x::BufferedHash)
     return compute_hash!(hash)
 end
 
-hash_type(x::BufferedHash) = hash_type(x.hash)
 
 #####
 ##### MarkerHash: wrapper that uses delimiters to handle `start/stop_hash!` 
@@ -260,13 +250,11 @@ end
 function start_hash!(x::MarkerHash)
     return MarkerHash(update_hash!(x.hash, (0x01,)))
 end
-write_hash!(x::MarkerHash, obj, c) = MarkerHash(write_hash!(x.hash, obj, c))
 update_hash!(x::MarkerHash, bytes) = MarkerHash(update_hash!(x.hash, bytes))
 function stop_hash!(::MarkerHash, nested::MarkerHash)
     return MarkerHash(update_hash!(nested.hash, (0x02,)))
 end
 compute_hash!(x::MarkerHash) = compute_hash!(x.hash)
-hash_type(x::MarkerHash) = hash_type(x.hash)
 
 #####
 ##### ================ Hash Traits ================
