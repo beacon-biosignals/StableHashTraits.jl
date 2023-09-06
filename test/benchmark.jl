@@ -9,7 +9,7 @@ using CRC32c
 
 # only `collect` when we have to
 crc(x, s=0x000000) = crc32c(collect(x), s)
-crc(x::Union{SubArray{UInt8}, Vector{UInt8}}, s=0x000000) = crc32c(x, s)
+crc(x::Union{SubArray{UInt8},Vector{UInt8}}, s=0x000000) = crc32c(x, s)
 
 struct BenchTest
     a::Int
@@ -43,7 +43,9 @@ for hashfn in (crc, sha256)
     for (; name, a, b) in benchmarks
         suite["$(name)_$hstr"] = BenchmarkGroup([name])
         suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
-        suite["$(name)_$hstr"]["trait"] = @benchmarkable $(stable_hash)($b, HashVersion{2}(); alg=$(hashfn))
+        suite["$(name)_$hstr"]["trait"] = @benchmarkable $(stable_hash)($b,
+                                                                        HashVersion{2}();
+                                                                        alg=$(hashfn))
     end
 end
 

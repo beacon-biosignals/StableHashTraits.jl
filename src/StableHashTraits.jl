@@ -17,10 +17,10 @@ By explicitly passing this hash version in `stable_hash` you ensure that hash va
 these fallback methods will not change even if new fallbacks are defined. 
 """
 struct HashVersion{V}
-    function HashVersion{V}() where V
+    function HashVersion{V}() where {V}
         V == 1 &&
-            Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in "*
-                         "all cases where backwards compatible hash values are not "*
+            Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in " *
+                         "all cases where backwards compatible hash values are not " *
                          "required.", :HashVersion)
         return new{V}()
     end
@@ -179,15 +179,15 @@ hash_type(::SHA.SHA_CTX) = Vector{UInt8}
 ##### RecursiveHash: handles a function of the form hash(bytes, [old_hash]) 
 #####
 
-function setup_hash_state(fn::Function, context) 
+function setup_hash_state(fn::Function, context)
     root_version(context) > 2 && return RecursiveHash(fn)
     return MarkerHash(BufferedHash(RecursiveHash(fn)))
 end
 
 struct RecursiveHash{F,T}
-   fn::F 
-   val::T
-   init::T
+    fn::F
+    val::T
+    init::T
 end
 function RecursiveHash(fn)
     hash = fn(UInt8[])
@@ -199,7 +199,7 @@ function stop_hash!(fn::RecursiveHash, nested::RecursiveHash)
     return update_hash!(fn, reinterpret(UInt8, [nested.val]))
 end
 compute_hash!(x::RecursiveHash) = x.val
-hash_type(::RecursiveHash{<:Any, T}) where {T} = T
+hash_type(::RecursiveHash{<:Any,T}) where {T} = T
 
 #####
 ##### BufferedHash: wrapper that buffers bytes before passing them to the hash algorithm 
@@ -218,10 +218,10 @@ const HASH_BUFFER_SIZE = 2^14
 function BufferedHash(hash, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
     io = IOBuffer(bytes; write=true, read=false)
-    BufferedHash(hash, bytes, size, io)
+    return BufferedHash(hash, bytes, size, io)
 end
 write_(io::IO, x) = Base.write(io, x)
-function write_(io::IO, bytes::Tuple) 
+function write_(io::IO, bytes::Tuple)
     @inbounds for b in bytes
         Base.write(io, b)
     end
@@ -263,7 +263,7 @@ function start_hash!(x::MarkerHash)
 end
 write_hash!(x::MarkerHash, obj, c) = MarkerHash(write_hash!(x.hash, obj, c))
 update_hash!(x::MarkerHash, bytes) = MarkerHash(update_hash!(x.hash, bytes))
-function stop_hash!(::MarkerHash, nested::MarkerHash) 
+function stop_hash!(::MarkerHash, nested::MarkerHash)
     return MarkerHash(update_hash!(nested.hash, (0x02,)))
 end
 compute_hash!(x::MarkerHash) = compute_hash!(x.hash)
@@ -304,8 +304,9 @@ end
 
 # with a buffered hash, we don't need to create a new IOBuffer
 # just use the one we've already allocated
-function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context, c::WriteHash)
-    MarkerHash(stable_hash_helper(obj, hash_state.hash, context, c))
+function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context,
+                            c::WriteHash)
+    return MarkerHash(stable_hash_helper(obj, hash_state.hash, context, c))
 end
 
 function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
@@ -328,7 +329,7 @@ function hash_foreach(fn, hash_state, context, xs)
         f_x = fn(x)
         inner_state = start_hash!(hash_state)
         inner_state = stable_hash_helper(f_x, inner_state, context,
-                           hash_method(f_x, context))
+                                         hash_method(f_x, context))
         hash_state = stop_hash!(hash_state, inner_state)
     end
     return hash_state
@@ -548,9 +549,9 @@ root_version(x) = root_version(parent_context(x))
 #####
 
 parent_context(::HashVersion) = nothing
-root_version(::HashVersion{V}) where V = V
+root_version(::HashVersion{V}) where {V} = V
 
-function hash_method(x::T, c::HashVersion{V}) where {T, V}
+function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # we need to find `default_method` here because `hash_method(x::MyType, ::Any)` is less
     # specific than the current method, but if we have something defined for a specific type
     # as the first argument, we want that to be used, rather than this fallback (as if it
@@ -567,7 +568,9 @@ function hash_method(x::T, c::HashVersion{V}) where {T, V}
     return (FnHash(qualified_type), StructHash(:ByName))
 end
 
-hash_method(::NamedTuple, ::HashVersion{V}) where {V} = (FnHash(qualified_name), StructHash())
+function hash_method(::NamedTuple, ::HashVersion{V}) where {V}
+    return (FnHash(qualified_name), StructHash())
+end
 function hash_method(::AbstractRange, ::HashVersion{V}) where {V}
     return (FnHash(qualified_name), StructHash(:ByName))
 end
