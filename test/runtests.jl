@@ -25,7 +25,7 @@ include("setup_tests.jl")
         @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
     end
 
-    for V in (1,), hashfn = (sha256, sha1, crc)
+    for V in (1, 2), hashfn = (sha256, sha1, crc, fnv)
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
             test_hash(x, c=ctx) = stable_hash(x, c; alg=hashfn)
@@ -115,7 +115,7 @@ include("setup_tests.jl")
                   @test test_hash(Set(1:20)) == test_hash(Set(reverse(1:20)))
                   @test test_hash([]) != test_hash([(), (), ()])
                   @test_throws ArgumentError test_hash("bob", BadRootContext())
-                  @test test_hash(1, BadRootContext()) isa Union{UInt32, Vector{UInt8}}
+                  @test test_hash(1, BadRootContext()) isa Union{Unsigned, Vector{UInt8}}
             end
 
             @testset "Sequences" begin

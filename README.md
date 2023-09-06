@@ -94,6 +94,25 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 
 ## Breaking changes
 
+### In 1.1
+
+This release includes speed improvements.
+
+- `HashVersion{1}` benefits from some limited speed improvements.
+- `HashVersion{2}` is a new hash context that can be faster (~x100) than
+  `HashVersion{1}`; favor it over `HashVersion{1}` in all cases. Since this version changes
+  the hash values of some objects, `HashVersion{1}` is still the default to avoid breaking
+  existing code. 
+- `fnv` (and `fnv32`, `fnv64`, and `fnv128`) implement the
+[Fowler-Noll-Vo](https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function)
+hash algorithm; it serves as a faster alternative to `crc32c`.
+- `root_version`: Most users can safely ignore this function. You only need to define
+`root_version` if you are implementing a context that defines 
+`parent_context(x::MyContext) = nothing` (see `parent_context` details on root contexts). It
+indicates what version of the trait implementations to use (1 or 2). It defaults to 1 to
+avoid changing the hash values of exisitng root contexts, but should be defined to return 2
+to make use of the more optimizied implementationsa. 
+
 ### In 1.0:
 
 This is a very breaking release, almost all values hash differently and the API has changed.

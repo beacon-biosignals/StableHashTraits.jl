@@ -36,7 +36,7 @@ benchmarks = [(; name="dataframes", a=data1, b=df);
               (; name="tuples", a=data1, b=data2);
               (; name="numbers", a=data, b=data)]
 
-for hashfn in (crc, sha256)
+for hashfn in (fnv, crc, sha256)
     hstr = nameof(hashfn)
     for (; name, a, b) in benchmarks
         suite["$(name)_$hstr"] = BenchmarkGroup([name])

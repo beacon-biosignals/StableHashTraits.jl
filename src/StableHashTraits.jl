@@ -1,19 +1,31 @@
 module StableHashTraits
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash,
-       HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq
+       HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq, fnv,
+       fnv32, fnv64, fnv128
 using TupleTools, Tables, Compat
 using SHA: SHA, sha256
 
 """
-    HashVersion{1}()
+    HashVersion{V}()
 
-The default `hash_context` used by `stable_hash`. There is currently only one version (`1`)
-and it is the default context. By explicitly passing this context to `stable_hash` you
-ensure that hash values for these fallback methods will not change even if new fallbacks are
-defined. This is a "root" context, meaning that `parent_context(::HashVersion) = nothing`.
+The default `hash_context` used by `stable_hash`. There are currently two versions
+(1 and 2). Version 2 is far more optimized than 1 and should generally be used in newly 
+written code. Version 1 is the default version, so as to changing the hash computed
+by existing code.
+
+By explicitly passing this hash version in `stable_hash` you ensure that hash values for 
+these fallback methods will not change even if new fallbacks are defined. 
 """
-struct HashVersion{V} end
+struct HashVersion{V}
+    function HashVersion{V}() where V
+        V == 1 &&
+            Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in "*
+                         "all cases where backwards compatible hash values are not "*
+                         "required.", :HashVersion)
+        return new{V}()
+    end
+end
 
 """
     stable_hash(x, context=HashVersion{1}(); alg=sha256)
@@ -22,10 +34,11 @@ Create a stable hash of the given objects. As long as the context remains the sa
 intended to remain unchanged across julia verisons. How each object is hashed is determined
 by [`hash_method`](@ref), which aims to have sensible fallbacks.
 
-To ensure the greattest stability, explicitly pass the context object. Even if the fallback
-methods change in a future release, the hash you get by passing an explicit `HashVersin{N}`
-should *not* change. (Note that the number in `HashVersion` may not necessarily match the
-package verison of `StableHashTraits`).
+To ensure the greattest stability, you should explicitly pass the context object. It is also
+best to pass an explicit version, since `HashVersion{2}` is generally faster than
+`HashVerison{1}`. If the fallback methods change in a future release, the hash you get
+by passing an explicit `HashVersin{N}` should *not* change. (Note that the number in
+`HashVersion` may not necessarily match the package verison of `StableHashTraits`).
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
@@ -36,7 +49,7 @@ third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(x, context=HashVersion{1}(); alg=sha256)
-    return compute_hash!(stable_hash_helper(x, setup_hash_state(alg), context,
+    return compute_hash!(stable_hash_helper(x, setup_hash_state(alg, context), context,
                                             hash_method(x, context)))
 end
 
@@ -101,12 +114,13 @@ values).
 function update_hash! end
 
 """
-    setup_hash_state(alg)
+    setup_hash_state(alg, context)
 
-Given a function that specifies the hash algorithm to use, setup the necessary
-state to track updates to hashing as we traverse an object's structure and return it.
+Given a function that specifies the hash algorithm to use and the current hash context,
+setup the necessary state to track updates to hashing as we traverse an object's structure
+and return it.
 """
-function setup_hash_state! end
+function setup_hash_state end
 
 """
     compute_hash!(state)
@@ -145,10 +159,15 @@ function hash_type end
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
     if CTX in names(SHA)
-        @eval setup_hash_state(::typeof(SHA.$(fn))) = SHA.$(CTX)()
+        @eval function setup_hash_state(::typeof(SHA.$(fn)), context)
+            root_version(context) < 2 && return SHA.$(CTX)()
+            return MarkerHash(BufferedHash(SHA.$(CTX)()))
+        end
     end
 end
 
+# NOTE: while MarkerHash is a faster implementation of `start/stop_hash!`
+# we still need a recursive hash implementation to implement `HashVersion{1}()`
 start_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
 update_hash!(sha::SHA.SHA_CTX, bytes) = (SHA.update!(sha, bytes); sha)
 function stop_hash!(hash_state, nested_hash_state)
@@ -158,10 +177,89 @@ compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 hash_type(::SHA.SHA_CTX) = Vector{UInt8}
 
 #####
+##### BufferedHash: wrapper that buffers bytes before passing them to the hash algorithm 
+#####
+
+# NOTE: buffered hash never needs to implement `start/stop_hash!` since that
+# is handled by `MarkerHash`
+
+# TODO: buffer crc hash (make a trait to handle difference in fnv vs. crc that defaults to buffering)
+# TODO: stop limiting buffer size, just don't write more once the "size" is exceeded
+# TODO: do we need the `bytesof` at all, or can we just buffer all hashes? if we can't
+# we need some way to check that `write` uses `Base.write` because otherwise
+# we bypass user customization of `write`.
+
+mutable struct BufferedHash{T}
+    hash::T
+    bytes::Vector{UInt8}
+    io::IOBuffer
+end
+const HASH_BUFFER_SIZE = 2^12
+function BufferedHash(hash, size=HASH_BUFFER_SIZE)
+    bytes = Vector{UInt8}(undef, size)
+    io = IOBuffer(bytes; write=true, read=false, maxsize=size)
+    BufferedHash(hash, bytes, io)
+end
+view_(x::AbstractArray, ix) = @view x[ix]
+view_(x::Tuple, ix) = x[ix]
+write_(io::IO, x::AbstractArray, ixs) = write(io, view(x, ixs))
+function write_(io::IO, bytes::Tuple, ixs) 
+    total = 0
+    @inbounds for i in ixs
+        total += write(io, bytes[i])
+    end
+    return total
+end
+
+function update_hash!(x::BufferedHash, 
+                      bytes::Union{NTuple{<:Any, UInt8}, AbstractArray{UInt8}})
+    written = write_(x.io, bytes, 1:lastindex(bytes))
+    if position(x.io) > length(x.bytes)
+        x.hash = update_hash!(x.hash, x.bytes)
+        seek(x.io, 0)
+    end
+    if length(bytes) - written > length(x.bytes)
+        x.hash = update_hash!(x.hash, view_(bytes, (written+1):lastindex(bytes)))
+    elseif length(bytes) > written
+        write_(x.io, bytes, (written+1):lastindex(bytes))
+    end
+    
+    return x
+end
+
+function compute_hash!(x::BufferedHash)
+    hash = if position(x.io) > 0
+        update_hash!(x.hash, @view x.bytes[1:position(x.io)])
+    else
+        x.hash
+    end
+    return compute_hash!(hash)
+end
+
+hash_type(x::BufferedHash) = hash_type(x.hash)
+
+#####
+##### MarkerHash: wrapper that uses delimiters to handle `start/stop_hash!` 
+#####
+
+struct MarkerHash{T}
+    hash::T
+end
+function start_hash!(x::MarkerHash)
+    return MarkerHash(update_hash!(x.hash, (0x01,)))
+end
+update_hash!(x::MarkerHash, bytes) = MarkerHash(update_hash!(x.hash, bytes))
+function stop_hash!(::MarkerHash, nested::MarkerHash) 
+    return MarkerHash(update_hash!(nested.hash, (0x02,)))
+end
+compute_hash!(x::MarkerHash) = compute_hash!(x.hash)
+hash_type(x::MarkerHash) = hash_type(x.hash)
+
+#####
 ##### RecursiveHash: handles a function of the form hash(bytes, [old_hash]) 
 #####
 
-setup_hash_state(fn::Function) = RecursiveHash(fn)
+setup_hash_state(fn::Function, ::Any) = RecursiveHash(fn)
 struct RecursiveHash{F,T}
    fn::F 
    val::T
@@ -174,10 +272,40 @@ end
 start_hash!(x::RecursiveHash) = RecursiveHash(x.fn, x.init, x.init)
 update_hash!(x::RecursiveHash, bytes) = RecursiveHash(x.fn, x.fn(bytes, x.val), x.init)
 function stop_hash!(fn::RecursiveHash, nested::RecursiveHash)
-    return update_hash!(fn, reinterpret(UInt8, [nested.val]))
+    return update_hash!(fn, bytesof(nested.val))
 end
 compute_hash!(x::RecursiveHash) = x.val
 hash_type(::RecursiveHash{<:Any, T}) where {T} = T
+
+#####
+##### Hash function fnv: https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
+#####
+
+const FNV_PRIME_32=0x01000193
+const FNV_BASIS_32=0x811c9dc5
+const FNV_PRIME_64=0x00000100000001B3
+const FNV_BASIS_64=0xcbf29ce484222325
+const FNV_PRIME_128=0x0000000001000000000000000000013B
+const FNV_BASIS_128=0x6c62272e07bb014262b821756295c58d
+function fnvdoc(len, namelen=len)
+    return """
+        fnv$(namelen)(bytes, seed::UInt$len)::UInt$(len)
+
+    Compute Fowler-Noll-Vo hash function (variant 1a) of size $len bytes.
+    See https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function for details.
+    """
+end
+for len in [32, 64, 128]
+    str = fnvdoc(len)
+    @eval @doc $str function $(Symbol(:fnv, len))(bytes, hash::$(Symbol(:UInt,len))=$(Symbol(:FNV_BASIS_,len)))
+        @inbounds for b in bytes
+            hash *= $(Symbol(:FNV_PRIME_,len))
+            hash ⊻= b
+        end
+        return hash
+    end
+end
+@eval @doc fnvdoc(Sys.WORD_SIZE, "") const fnv = $(Symbol(:fnv, Sys.WORD_SIZE))
 
 #####
 ##### ================ Hash Traits ================
@@ -212,6 +340,33 @@ function stable_hash_helper(x, hash_state, context, ::WriteHash)
     io = IOBuffer()
     write(io, x, context)
     return update_hash!(hash_state, take!(io))
+end
+
+# convert a primitive type to a tuple of its bytes
+@generated function bytesof(x::Number)
+    nbytes = sizeof(x)
+    UIntX = Symbol(:UInt, nbytes << 3)
+    bytes = gensym("bytes")
+    tuple_args = map(1:nbytes) do i
+        :(unsafe_trunc(UInt8, ($bytes >> $((i-1) << 3)) & 0xff))
+    end
+    tuple_result = Expr(:tuple, tuple_args...)
+    return quote
+        $bytes = reinterpret($UIntX, x)
+        return $tuple_result
+    end
+end
+
+# NOTE: this specialized method speeds up hashing by ~x45 when using 
+# fnv
+# TODO: we need to verify that write is not implemented
+function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
+    # NOTE: `bytesof` increases speed by ~3x over reinterpret(UInt8, [x])
+    return update_hash!(hash_state, bytesof(x))
+end
+
+function stable_hash_helper(x::AbstractString, hash_state, context, ::WriteHash)
+    return update_hash!(hash_state, codeunits(x))
 end
 
 #####
@@ -428,19 +583,35 @@ function parent_context(x::Any)
     return HashVersion{1}()
 end
 
+"""
+    StableHashTraits.root_version(context)
+
+Return the verison of the root context: an integer in the range (1, 2). The default
+fallback method value returns 1. 
+
+In almost all cases, a root hash context should return 2. The optimizations used in
+HashVersion{2} include a number of changes to the hash-trait implementations that do not
+alter the documented behavior but do change the actual hash value returned because of how
+and when elements get hashed. 
+
+"""
+root_version(x::Nothing) = 1
+root_version(x) = root_version(parent_context(x))
+
 #####
 ##### HashVersion{V} (root contexts)
 #####
 
 parent_context(::HashVersion) = nothing
+root_version(::HashVersion{V}) where V = V
 
-function hash_method(x::T, c::HashVersion{1}) where {T}
+function hash_method(x::T, c::HashVersion{V}) where {T, V}
     # we need to find `default_method` here because `hash_method(x::MyType, ::Any)` is less
     # specific than the current method, but if we have something defined for a specific type
     # as the first argument, we want that to be used, rather than this fallback (as if it
     # were defined as `hash_method(::Any)`). Note that changing this method to be x::Any,
     # and using T = typeof(x) would just lead to method ambiguities when trying to decide
-    # between `hash_method(::Any, ::HashVersion{1})` vs. `hash_method(::MyType, ::Any)`.
+    # between `hash_method(::Any, ::HashVersion{V})` vs. `hash_method(::MyType, ::Any)`.
     # Furthermore, this would would require the user to define `hash_method` with two
     # arguments.
     default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
@@ -451,29 +622,29 @@ function hash_method(x::T, c::HashVersion{1}) where {T}
     return (FnHash(qualified_type), StructHash(:ByName))
 end
 
-hash_method(::NamedTuple, ::HashVersion{1}) = (FnHash(qualified_name), StructHash())
-function hash_method(::AbstractRange, ::HashVersion{1})
+hash_method(::NamedTuple, ::HashVersion{V}) where {V} = (FnHash(qualified_name), StructHash())
+function hash_method(::AbstractRange, ::HashVersion{V}) where {V}
     return (FnHash(qualified_name), StructHash(:ByName))
 end
-function hash_method(::AbstractArray, ::HashVersion{1})
+function hash_method(::AbstractArray, ::HashVersion{V}) where {V}
     return (FnHash(qualified_name), FnHash(size), IterateHash())
 end
-function hash_method(::AbstractString, ::HashVersion{1})
+function hash_method(::AbstractString, ::HashVersion{V}) where {V}
     return (FnHash(qualified_name, WriteHash()), WriteHash())
 end
-hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
-function hash_method(::AbstractDict, ::HashVersion{1})
+hash_method(::Symbol, ::HashVersion{V}) where {V} = (ConstantHash(":"), WriteHash())
+function hash_method(::AbstractDict, ::HashVersion{V}) where {V}
     return (FnHash(qualified_name), StructHash(keys => getindex, :ByName))
 end
-hash_method(::Tuple, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
-hash_method(::Pair, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
-function hash_method(::Type, ::HashVersion{1})
+hash_method(::Tuple, ::HashVersion{V}) where {V} = (FnHash(qualified_name), IterateHash())
+hash_method(::Pair, ::HashVersion{V}) where {V} = (FnHash(qualified_name), IterateHash())
+function hash_method(::Type, ::HashVersion{V}) where {V}
     return (ConstantHash("Base.DataType"), FnHash(qualified_type))
 end
-function hash_method(::Function, ::HashVersion{1})
+function hash_method(::Function, ::HashVersion{V}) where {V}
     return (ConstantHash("Base.Function"), FnHash(qualified_name))
 end
-function hash_method(::AbstractSet, ::HashVersion{1})
+function hash_method(::AbstractSet, ::HashVersion{V}) where {V}
     return (FnHash(qualified_name), FnHash(sort! ∘ collect))
 end
 
@@ -492,13 +663,13 @@ struct TablesEq{T}
     parent::T
 end
 TablesEq() = TablesEq(HashVersion{1}())
-StableHashTraits.parent_context(x::TablesEq) = x.parent
-function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
+parent_context(x::TablesEq) = x.parent
+function hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
         return (ConstantHash("Tables.istable"),
                 FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn)))
     end
-    return StableHashTraits.hash_method(x, parent_context(m))
+    return hash_method(x, parent_context(m))
 end
 
 #####
@@ -516,11 +687,11 @@ struct ViewsEq{T}
     parent::T
 end
 ViewsEq() = ViewsEq(HashVersion{1}())
-StableHashTraits.parent_context(x::ViewsEq) = x.parent
-function StableHashTraits.hash_method(::AbstractArray, ::ViewsEq)
+parent_context(x::ViewsEq) = x.parent
+function hash_method(::AbstractArray, ::ViewsEq)
     return (ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
 end
-function StableHashTraits.hash_method(::AbstractString, ::ViewsEq)
+function hash_method(::AbstractString, ::ViewsEq)
     return (ConstantHash("Base.AbstractString", WriteHash()), WriteHash())
 end
 
