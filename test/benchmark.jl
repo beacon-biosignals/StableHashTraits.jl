@@ -7,7 +7,9 @@ using DataFrames
 using SHA
 using CRC32c
 
+# only `collect` when we have to
 crc(x, s=0x000000) = crc32c(collect(x), s)
+crc(x::Union{SubArray{UInt8}, Vector{UInt8}}, s=0x000000) = crc32c(x, s)
 
 struct BenchTest
     a::Int
@@ -36,7 +38,7 @@ benchmarks = [(; name="dataframes", a=data1, b=df);
               (; name="tuples", a=data1, b=data2);
               (; name="numbers", a=data, b=data)]
 
-for hashfn in (fnv, crc, sha256)
+for hashfn in (crc, sha256)
     hstr = nameof(hashfn)
     for (; name, a, b) in benchmarks
         suite["$(name)_$hstr"] = BenchmarkGroup([name])

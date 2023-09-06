@@ -1,8 +1,7 @@
 module StableHashTraits
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash,
-       HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq, fnv,
-       fnv32, fnv64, fnv128
+       HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq
 using TupleTools, Tables, Compat
 using SHA: SHA, sha256
 
@@ -34,15 +33,15 @@ Create a stable hash of the given objects. As long as the context remains the sa
 intended to remain unchanged across julia verisons. How each object is hashed is determined
 by [`hash_method`](@ref), which aims to have sensible fallbacks.
 
-To ensure the greattest stability, you should explicitly pass the context object. It is also
+To ensure the greatest stability, you should explicitly pass the context object. It is also
 best to pass an explicit version, since `HashVersion{2}` is generally faster than
 `HashVerison{1}`. If the fallback methods change in a future release, the hash you get
 by passing an explicit `HashVersin{N}` should *not* change. (Note that the number in
-`HashVersion` may not necessarily match the package verison of `StableHashTraits`).
+`HashVersion` does not necessarily match the package verison of `StableHashTraits`).
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
-[old_hash])`.
+[old_hash])`. 
 
 The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
 third argument to [`StableHashTraits.write`](@ref)
@@ -183,12 +182,6 @@ hash_type(::SHA.SHA_CTX) = Vector{UInt8}
 # NOTE: buffered hash never needs to implement `start/stop_hash!` since that
 # is handled by `MarkerHash`
 
-# TODO: buffer crc hash (make a trait to handle difference in fnv vs. crc that defaults to buffering)
-# TODO: stop limiting buffer size, just don't write more once the "size" is exceeded
-# TODO: do we need the `bytesof` at all, or can we just buffer all hashes? if we can't
-# we need some way to check that `write` uses `Base.write` because otherwise
-# we bypass user customization of `write`.
-
 mutable struct BufferedHash{T}
     hash::T
     bytes::Vector{UInt8}
@@ -215,8 +208,7 @@ function flush_bytes!(x::BufferedHash)
     end
 end
 
-function update_hash!(x::BufferedHash, 
-                      bytes::Union{NTuple{<:Any, UInt8}, AbstractArray{UInt8}})
+function update_hash!(x::BufferedHash, bytes)
     write_(x.io, bytes)
     flush_bytes!(x)
     return x
@@ -275,40 +267,10 @@ end
 start_hash!(x::RecursiveHash) = RecursiveHash(x.fn, x.init, x.init)
 update_hash!(x::RecursiveHash, bytes) = RecursiveHash(x.fn, x.fn(bytes, x.val), x.init)
 function stop_hash!(fn::RecursiveHash, nested::RecursiveHash)
-    return update_hash!(fn, bytesof(nested.val))
+    return update_hash!(fn, reinterpret(UInt8, [nested.val]))
 end
 compute_hash!(x::RecursiveHash) = x.val
 hash_type(::RecursiveHash{<:Any, T}) where {T} = T
-
-#####
-##### Hash function fnv: https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
-#####
-
-const FNV_PRIME_32=0x01000193
-const FNV_BASIS_32=0x811c9dc5
-const FNV_PRIME_64=0x00000100000001B3
-const FNV_BASIS_64=0xcbf29ce484222325
-const FNV_PRIME_128=0x0000000001000000000000000000013B
-const FNV_BASIS_128=0x6c62272e07bb014262b821756295c58d
-function fnvdoc(len, namelen=len)
-    return """
-        fnv$(namelen)(bytes, seed::UInt$len)::UInt$(len)
-
-    Compute Fowler-Noll-Vo hash function (variant 1a) of size $len bytes.
-    See https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function for details.
-    """
-end
-for len in [32, 64, 128]
-    str = fnvdoc(len)
-    @eval @doc $str function $(Symbol(:fnv, len))(bytes, hash::$(Symbol(:UInt,len))=$(Symbol(:FNV_BASIS_,len)))
-        @inbounds for b in bytes
-            hash *= $(Symbol(:FNV_PRIME_,len))
-            hash ⊻= b
-        end
-        return hash
-    end
-end
-@eval @doc fnvdoc(Sys.WORD_SIZE, "") const fnv = $(Symbol(:fnv, Sys.WORD_SIZE))
 
 #####
 ##### ================ Hash Traits ================
@@ -319,6 +281,7 @@ end
 #####
 
 struct WriteHash end
+
 """
     StableHashTraits.write(io, x, [context])
 
@@ -333,27 +296,19 @@ their types to customize the behavior of `stable_hash`.
 
 See also: [`StableHashTraits.hash_method`](@ref).
 """
-write(io, x, context) = NotImplemented()
-write(io, x) = NotImplemented()
+write(io, x, context) = write(io, x)
+write(io, x) = Base.write(io, x)
+
 function stable_hash_helper(x, hash_state, context, ::WriteHash)
     io = IOBuffer()
-    is_implemented(write(io, x, context)) || Base.write(io, x)
+    write(io, x, context)
     return update_hash!(hash_state, take!(io))
 end
 
-# convert a primitive type to a tuple of its bytes
-@generated function bytesof(x::Number)
-    nbytes = sizeof(x)
-    UIntX = Symbol(:UInt, nbytes << 3)
-    bytes = gensym("bytes")
-    tuple_args = map(1:nbytes) do i
-        :(unsafe_trunc(UInt8, ($bytes >> $((i-1) << 3)) & 0xff))
-    end
-    tuple_result = Expr(:tuple, tuple_args...)
-    return quote
-        $bytes = reinterpret($UIntX, x)
-        return $tuple_result
-    end
+# with a buffered hash, we don't need to create a new IOBuffer
+# just use the one we've already allocated
+function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context, c::WriteHash)
+    MarkerHash(stable_hash_helper(obj, hash_state.hash, context, c))
 end
 
 function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
@@ -361,35 +316,6 @@ function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
     flush_bytes!(hash_state)
     return hash_state
 end
-
-function stable_hash_helper(obj::Number, hash_state::BufferedHash, context, ::WriteHash)
-    if !is_implemented(write(hash_state.io, obj, context))
-        # NOTE: this avoids allocating a `Ref` by using `bytesof`
-        # `Base.write` uses `Ref` for primitive types
-        # TODO use inbounds once we trust this
-        for b in bytesof(obj)
-            write(hash_state.io, b)
-        end
-    end
-    flush_bytes!(hash_state)
-    return hash_state
-end
-
-function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context, c::WriteHash)
-    MarkerHash(stable_hash_helper(obj, hash_state.hash, context, c))
-end
-
-# # NOTE: this specialized method speeds up hashing by ~x45 when using 
-# # fnv
-# # TODO: we need to verify that write is not implemented
-# function stable_hash_helper(x::Number, hash_state, context, ::WriteHash)
-#     # NOTE: `bytesof` increases speed by ~3x over reinterpret(UInt8, [x])
-#     return update_hash!(hash_state, bytesof(x))
-# end
-
-# function stable_hash_helper(x::AbstractString, hash_state, context, ::WriteHash)
-#     return update_hash!(hash_state, codeunits(x))
-# end
 
 #####
 ##### IterateHash 

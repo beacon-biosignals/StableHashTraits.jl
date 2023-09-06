@@ -103,9 +103,9 @@ This release includes speed improvements.
   `HashVersion{1}`; favor it over `HashVersion{1}` in all cases. Since this version changes
   the hash values of some objects, `HashVersion{1}` is still the default to avoid breaking
   existing code. 
-- `fnv` (and `fnv32`, `fnv64`, and `fnv128`) implement the
-[Fowler-Noll-Vo](https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function)
-hash algorithm; it serves as a faster alternative to `crc32c`.
+- The requirements for `HashVersion{2}` on the passed hash function have been relaxed, such
+that `alg=crc32` should again work (no need to call `alg=(x,s=UInt32(0)) ->
+crc32c(copy(x),s)`).
 - `root_version`: Most users can safely ignore this function. You only need to define
 `root_version` if you are implementing a context that defines 
 `parent_context(x::MyContext) = nothing` (see `parent_context` details on root contexts). It

@@ -1,18 +1,17 @@
 include("setup_tests.jl")
 
 @testset "StableHashTraits.jl" begin
-    crc(x, s=0x000000) = crc32c(collect(x), s)
     bytes2hex_(x::Number) = x
     bytes2hex_(x) = bytes2hex(x)
     
     @testset "Older Reference Tests" begin
-        @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=crc)
-        @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=crc)
-        @test_reference "references/ref22.txt" stable_hash(sin; alg=crc)
-        @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=crc)
+        @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=crc32c)
+        @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=crc32c)
+        @test_reference "references/ref22.txt" stable_hash(sin; alg=crc32c)
+        @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=crc32c)
         @test_reference "references/ref24.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
-                                                           TablesEq(); alg=crc)
-        @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=crc)
+                                                           TablesEq(); alg=crc32c)
+        @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=crc32c)
 
         # get some code coverage (and reference tests) for sha1
         @test_reference "references/ref26.txt" bytes2hex(stable_hash([1, 2, 3]; alg=sha1))
@@ -25,7 +24,7 @@ include("setup_tests.jl")
         @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
     end
 
-    for V in (1, 2), hashfn = (sha256, sha1, crc, fnv)
+    for V in (1, 2), hashfn = (sha256, sha1, crc32c)
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
             test_hash(x, c=ctx) = stable_hash(x, c; alg=hashfn)
