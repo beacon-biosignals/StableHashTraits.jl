@@ -180,7 +180,7 @@ hash_type(::SHA.SHA_CTX) = Vector{UInt8}
 #####
 
 function setup_hash_state(fn::Function, context)
-    root_version(context) > 2 && return RecursiveHash(fn)
+    root_version(context) < 2 && return RecursiveHash(fn)
     return MarkerHash(BufferedHash(RecursiveHash(fn)))
 end
 
