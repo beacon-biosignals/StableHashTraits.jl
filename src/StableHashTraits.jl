@@ -176,6 +176,35 @@ compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 hash_type(::SHA.SHA_CTX) = Vector{UInt8}
 
 #####
+##### RecursiveHash: handles a function of the form hash(bytes, [old_hash]) 
+#####
+
+function setup_hash_state(fn::Function, context) 
+    if root_version(context) > 1 
+        return MarkerHash(BufferedHash(RecursiveHash(fn), HASH_BUFFER_SIZE))
+    else
+        return RecursiveHash(fn)
+    end
+end
+
+struct RecursiveHash{F,T}
+   fn::F 
+   val::T
+   init::T
+end
+function RecursiveHash(fn)
+    hash = fn(UInt8[])
+    return RecursiveHash(fn, hash, hash)
+end
+start_hash!(x::RecursiveHash) = RecursiveHash(x.fn, x.init, x.init)
+update_hash!(x::RecursiveHash, bytes) = RecursiveHash(x.fn, x.fn(bytes, x.val), x.init)
+function stop_hash!(fn::RecursiveHash, nested::RecursiveHash)
+    return update_hash!(fn, reinterpret(UInt8, [nested.val]))
+end
+compute_hash!(x::RecursiveHash) = x.val
+hash_type(::RecursiveHash{<:Any, T}) where {T} = T
+
+#####
 ##### BufferedHash: wrapper that buffers bytes before passing them to the hash algorithm 
 #####
 
@@ -242,35 +271,6 @@ function stop_hash!(::MarkerHash, nested::MarkerHash)
 end
 compute_hash!(x::MarkerHash) = compute_hash!(x.hash)
 hash_type(x::MarkerHash) = hash_type(x.hash)
-
-#####
-##### RecursiveHash: handles a function of the form hash(bytes, [old_hash]) 
-#####
-
-function setup_hash_state(fn::Function, context) 
-    if root_version(context) > 1 
-        return MarkerHash(BufferedHash(RecursiveHash(fn), HASH_BUFFER_SIZE))
-    else
-        return RecursiveHash(fn)
-    end
-end
-
-struct RecursiveHash{F,T}
-   fn::F 
-   val::T
-   init::T
-end
-function RecursiveHash(fn)
-    hash = fn(UInt8[])
-    return RecursiveHash(fn, hash, hash)
-end
-start_hash!(x::RecursiveHash) = RecursiveHash(x.fn, x.init, x.init)
-update_hash!(x::RecursiveHash, bytes) = RecursiveHash(x.fn, x.fn(bytes, x.val), x.init)
-function stop_hash!(fn::RecursiveHash, nested::RecursiveHash)
-    return update_hash!(fn, reinterpret(UInt8, [nested.val]))
-end
-compute_hash!(x::RecursiveHash) = x.val
-hash_type(::RecursiveHash{<:Any, T}) where {T} = T
 
 #####
 ##### ================ Hash Traits ================
