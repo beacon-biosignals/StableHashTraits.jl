@@ -20,8 +20,8 @@ these fallback methods will not change even if new fallbacks are defined.
 struct HashVersion{V}
     function HashVersion{V}() where {V}
         V == 1 && Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in " *
-                               "all cases where backwards compatible hash values are not " *
-                               "required.", :HashVersion)
+                     "all cases where backwards compatible hash values are not " *
+                     "required.", :HashVersion)
         return new{V}()
     end
 end
