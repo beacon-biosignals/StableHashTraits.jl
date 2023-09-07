@@ -109,7 +109,7 @@ include("setup_tests.jl")
                       test_hash(NonTableStruct(1:10, 1:10), TablesEq())
             end
 
-            # test out UseAndReplaceContext
+            # test out HashAndContext
             @testset "Contexts" begin
                 @test test_hash(CustomHashObject(1:5, 1:10)) !=
                       test_hash(BasicHashObject(1:5, 1:10))

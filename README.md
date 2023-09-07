@@ -39,7 +39,7 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 
 ## Details
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section below for more details.
+You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section below for more details. It is generally recommended that you explicitly set the context to the latest verison (`HashVersion{2}()`) as it includes substantial speed improvements.
 
 There are sensible defaults for `stable_hash` that aim to ensure that if two values are
 different, the input to the hash algorithm will differ. 
@@ -70,17 +70,14 @@ following values, typically based only on the *type* of its input.
 4. `FnHash(fn, [method])`: hash the result of applying `fn` to the given object. Optionally,
    use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result to
    determine how to hash it. There are two built-in functions commonly used with
-   `FnHash`
-    - `stable_typename_id`: Get the qualified name of an objects type, e.g. `Base.String` and return 128 bit hash of this string
+   `FnHash`.
+    - `stable_typename_id`: Get the qualified name of an object's type, e.g. `Base.String` and return 128 bit hash of this string
     - `stable_type_id`: Get the qualified name and type parameters of a type, e.g.
-       `Base.Vector{Int}`, and return a 128 bit hash of this string
-    Favor these functions over e.g. `string ∘ typeof` as they have been tested to provide
-    more stable values across julia verisons and sessions than the naive
-    string-ification of types.
+       `Base.Vector{Int}`, and return a 128 bit hash of this string.
 5. `ConstantHash(value, [method])`: hash the constant `value`. Optionally, use `method` to
     hash the `value`, otherwise call `hash_method` on `value` to determine how to hash it.
 6. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
-    results. For example: (ConstantHash("header"), StructHash()) would compute a hash for
+    results. For example: `(ConstantHash("header"), StructHash())` would compute a hash for
     both the string `"header"` and the fields of the object, and the recursively hash
     these two hashes.
 
@@ -96,24 +93,21 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 
 ### In 1.1
 
-This release includes speed improvements.
+This release includes speed improvements of about 100 fold.
 
-- `HashVersion{1}` benefits from some limited speed improvements.
-- `HashVersion{2}` is a new hash context that can be faster (~x100) than
-  `HashVersion{1}`; favor it over `HashVersion{1}` in all cases. Since this version changes
-  the hash values of some objects, `HashVersion{1}` is still the default to avoid breaking
-  existing code. 
+- `HashVersion{2}` is a new hash context that can be faster (~x100) than `HashVersion{1}`;
+  favor it over `HashVersion{1}` in all cases. Since this version changes the hash values of
+  some objects, `HashVersion{1}` is still the default to avoid breaking existing code. 
 - `qualified_name` and `qualified_type` have been deprected, favor `stable_typename_id` and
   `stable_type_id` as they are much faster.
 - The requirements for `HashVersion{2}` on the passed hash function have been relaxed, such
 that `alg=crc32` should again work (no need to call `alg=(x,s=UInt32(0)) ->
 crc32c(copy(x),s)`).
-- `root_version`: Most users can safely ignore this function. You only need to define
-`root_version` if you are implementing a context that defines 
-`parent_context(x::MyContext) = nothing` (see `parent_context` details on root contexts). It
-indicates what version of the trait implementations to use (1 or 2). It defaults to 1 to
-avoid changing the hash values of exisitng root contexts, but should be defined to return 2
-to make use of the more optimizied implementations.
+- `root_version`: Most users can safely ignore this function. If you are implementing a
+root context (one that returns `parent_context(::MyContext) = nothing`) you will need to
+define this function. It indicates what version of the hashing implementations to use (1 or
+2). It defaults to 1 to avoid changing the hash values of exisitng root contexts, but should
+be defined to return 2 to make use of the more optimizied implementations used by `HashVersion{2}`.
 
 ### In 1.0:
 
@@ -138,10 +132,10 @@ However, far fewer manual defintions of `hash_method` become necessary. The fall
     - Replace `UseSize(method)` with `(FnHash(size), method)`
     - Replace `UseTable` with `FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn))`
 - **Deprecation**: The fallback methods for hashing are defined within a specific
-  context (`HashContext{1}`). Any contexts you make should define a `parent_context`
-  method that returns e.g. `HashContext{1}` so that the fallback implementation for any
+  context (`HashVersion{1}`). Any contexts you make should define a `parent_context`
+  method that returns e.g. `HashVersion{1}` so that the fallback implementation for any
   methods of `hash_method` you don't implement work properly. (A default version of
-  `parent_context` raises a deprecation warning and returns `HashContext{1}`). Refer to the
+  `parent_context` raises a deprecation warning and returns `HashVersion{1}`). Refer to the
   discussion below about contexts.
 
 ### In 0.3:
@@ -197,7 +191,7 @@ StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
     return FnHash(qualified_name), UseStruct(:ByName)
 end
-c = NamedTuplesEq(HashVersion{1}())
+c = NamedTuplesEq(HashVersion{2}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
 ```
 
