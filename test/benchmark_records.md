@@ -63,16 +63,16 @@ using `@generated` functions to guarantee that their hashes are computed at comp
  Row │ benchmark   hash       base        trait       ratio     
      │ SubStrin…   SubStrin…  String      String      Float64   
 ─────┼──────────────────────────────────────────────────────────
-   1 │ structs     crc        70.250 μs   1.123 ms    15.9905
-   2 │ tuples      crc        71.583 μs   897.750 μs  12.5414
-   3 │ numbers     crc        35.250 μs   178.542 μs   5.06502
-   4 │ dataframes  crc        71.458 μs   359.333 μs   5.02859
-   5 │ symbols     crc        537.583 μs  1.115 ms     2.07487
-   6 │ strings     crc        535.542 μs  649.208 μs   1.21224
-   7 │ structs     sha256     549.208 μs  3.194 ms     5.81527
-   8 │ tuples      sha256     543.500 μs  2.462 ms     4.53082
-   9 │ dataframes  sha256     543.459 μs  1.108 ms     2.03841
-  10 │ numbers     sha256     271.167 μs  551.250 μs   2.03288
-  11 │ symbols     sha256     4.002 ms    4.686 ms     1.17094
-  12 │ strings     sha256     4.078 ms    2.343 ms     0.574516
+   1 │ structs     crc        75.625 μs   1.207 ms    15.957
+   2 │ tuples      crc        75.958 μs   948.500 μs  12.4872
+   3 │ symbols     crc        566.125 μs  3.008 ms     5.3128
+   4 │ dataframes  crc        75.667 μs   382.333 μs   5.05284
+   5 │ numbers     crc        38.125 μs   190.375 μs   4.99344
+   6 │ strings     crc        565.833 μs  686.083 μs   1.21252
+   7 │ structs     sha256     571.459 μs  3.157 ms     5.52482
+   8 │ tuples      sha256     570.875 μs  2.374 ms     4.15867
+   9 │ dataframes  sha256     571.458 μs  1.043 ms     1.82501
+  10 │ numbers     sha256     285.208 μs  518.917 μs   1.81943
+  11 │ symbols     sha256     4.288 ms    4.945 ms     1.1532
+  12 │ strings     sha256     4.289 ms    2.410 ms     0.561839
 ```
