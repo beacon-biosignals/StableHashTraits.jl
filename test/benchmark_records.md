@@ -36,16 +36,16 @@ remains quite slow.
  Row │ benchmark   hash       base        trait       ratio     
      │ SubStrin…   SubStrin…  String      String      Float64   
 ─────┼──────────────────────────────────────────────────────────
-   1 │ structs     crc        71.000 μs   69.913 ms   984.69
-   2 │ tuples      crc        71.625 μs   11.715 ms   163.561
-   3 │ symbols     crc        536.708 μs  6.356 ms     11.8418
-   4 │ dataframes  crc        71.750 μs   816.500 μs   11.3798
-   5 │ numbers     crc        35.833 μs   379.458 μs   10.5896
-   6 │ strings     crc        536.584 μs  5.414 ms     10.0896
-   7 │ structs     sha256     576.125 μs  73.729 ms   127.973
-   8 │ tuples      sha256     575.875 μs  13.202 ms    22.9253
-   9 │ dataframes  sha256     575.750 μs  1.533 ms      2.6629
-  10 │ numbers     sha256     286.416 μs  739.833 μs    2.58307
-  11 │ symbols     sha256     4.015 ms    8.191 ms      2.03984
-  12 │ strings     sha256     4.076 ms    6.872 ms      1.68624
+   1 │ structs     crc        70.167 μs   51.761 ms   737.68
+   2 │ tuples      crc        71.375 μs   9.623 ms    134.829
+   3 │ symbols     crc        530.667 μs  5.145 ms      9.69535
+   4 │ strings     crc        527.125 μs  4.413 ms      8.37159
+   5 │ dataframes  crc        70.167 μs   385.792 μs    5.4982
+   6 │ numbers     crc        35.208 μs   176.875 μs    5.02372
+   7 │ structs     sha256     533.041 μs  55.757 ms   104.601
+   8 │ tuples      sha256     532.958 μs  10.976 ms    20.5939
+   9 │ dataframes  sha256     533.000 μs  993.000 μs    1.86304
+  10 │ numbers     sha256     266.125 μs  487.792 μs    1.83294
+  11 │ symbols     sha256     4.000 ms    6.611 ms      1.65291
+  12 │ strings     sha256     4.000 ms    6.321 ms      1.58011
 ```

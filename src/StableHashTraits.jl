@@ -218,7 +218,8 @@ function write_(io::IO, bytes::Tuple)
 end
 
 function flush_bytes!(x::BufferedHash)
-    if position(x.io) ≥ x.limit
+    # try to avoid overflowing the allocated buffer
+    if position(x.io) ≥ x.limit - (x.limit >> 2)
         x.hash = update_hash!(x.hash, @view x.bytes[1:position(x.io)])
         seek(x.io, 0)
     end
