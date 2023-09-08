@@ -179,7 +179,7 @@ include("setup_tests.jl")
 
             @testset "Custom hash_method" begin
                 if V > 1
-                    @test test_hash(TestType(1, 2)) != TestType(UInt(1), Uint(2))
+                    @test test_hash(TestType(1, 2)) != TestType(UInt(1), UInt(2))
                 end
                 @test test_hash(ExtraTypeParams{:A,Int}(2)) !=
                       test_hash(ExtraTypeParams{:B,Int}(2))
