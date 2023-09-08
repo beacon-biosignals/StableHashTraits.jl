@@ -318,14 +318,17 @@ function strip_eltype(fn::typeof(identity), xs, ::Base.HasEltype, ::Type{T} = el
     return Val{false}()
 end
 strip_eltype(fn, xs, _) = Val{false}()
-strip_type(trait) = trait
-strip_type(trait::Tuple{}) = ()
-function strip_type(trait::Tuple)
+strip_singleton(x) = x
+strip_singleton(x::Tuple{<:Any}) = x[1]
+strip_type(x) = strip_singleton(strip_type_(x))
+strip_type_(trait) = trait
+strip_type_(trait::Tuple{}) = ()
+function strip_type_(trait::Tuple)
     header, rest... = trait
     if header isa FnHash && (header.fn isa typeof(stable_type_id) || header.fn isa typeof(stable_typename_id))
         return rest
     else
-        return header, strip_type(rest)
+        return (header, strip_type_(rest)...)
     end
 end
 function hash_foreach(fn, hash_state, context, xs, strip=strip_eltype(fn, xs))
