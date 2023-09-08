@@ -50,7 +50,7 @@ remains quite slow.
    12 │ strings     sha256     4.000 ms    6.321 ms      1.58011
 ```
 
-# Version 1.1:
+# With compile time hashing
 
 With the addition of `dfl/compiled-type-labels` we compute more quantities at compile time:
 
@@ -75,4 +75,28 @@ using `@generated` functions to guarantee that their hashes are computed at comp
    10 │ numbers     sha256     266.000 μs  476.500 μs   1.79135
    11 │ strings     sha256     3.999 ms    1.970 ms     0.49253
    12 │ symbols     sha256     3.999 ms    1.781 ms     0.445311
+```
+
+# Version 1.1
+
+With `dfl/reduce-hash-collisions-2` I've resolved some bugs identified in [#27](https://github.com/beacon-biosignals/StableHashTraits.jl/issues/27). This does invovle
+compute some extra values, so the benchmarks have slowed down a little.
+
+```
+ 12×5 DataFrame
+  Row │ benchmark   hash       base        trait       ratio     
+      │ SubStrin…   SubStrin…  String      String      Float64   
+─────┼──────────────────────────────────────────────────────────
+    1 │ structs     crc        70.709 μs   1.091 ms    15.4306
+    2 │ tuples      crc        71.375 μs   939.208 μs  13.1588
+    3 │ numbers     crc        35.250 μs   267.958 μs   7.60165
+    4 │ dataframes  crc        71.416 μs   540.375 μs   7.56658
+    5 │ symbols     crc        537.208 μs  964.667 μs   1.7957
+    6 │ strings     crc        530.667 μs  307.958 μs   0.580322
+    7 │ structs     sha256     533.042 μs  2.224 ms     4.17165
+    8 │ tuples      sha256     533.125 μs  1.634 ms     3.06549
+    9 │ dataframes  sha256     533.125 μs  1.288 ms     2.41524
+   10 │ numbers     sha256     271.041 μs  641.459 μs   2.36665
+   11 │ symbols     sha256     3.999 ms    2.185 ms     0.546389
+   12 │ strings     sha256     4.076 ms    1.356 ms     0.332625
 ```

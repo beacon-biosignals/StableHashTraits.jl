@@ -86,6 +86,9 @@ include("setup_tests.jl")
 
             # dictionary like
             @testset "Associative Data" begin
+                if V > 1
+                    @test test_hash(Dict(:a => 1)) != test_hash(Dict(:a => UInt(1)))
+                end
                 @test test_hash(Dict(:a => 1, :b => 2)) == test_hash(Dict(:b => 2, :a => 1))
                 @test ((; kwargs...) -> test_hash(kwargs))(; a=1, b=2) ==
                       ((; kwargs...) -> test_hash(kwargs))(; b=2, a=1)
@@ -175,6 +178,9 @@ include("setup_tests.jl")
             end
 
             @testset "Custom hash_method" begin
+                if V > 1
+                    @test test_hash(TestType(1, 2)) != TestType(UInt(1), Uint(2))
+                end
                 @test test_hash(ExtraTypeParams{:A,Int}(2)) !=
                       test_hash(ExtraTypeParams{:B,Int}(2))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType(1, 2))
