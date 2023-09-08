@@ -312,12 +312,32 @@ function stable_hash_helper(x, hash_state, context, ::IterateHash)
     return hash_foreach(identity, hash_state, context, x)
 end
 
-function hash_foreach(fn, hash_state, context, xs)
+strip_eltype(fn, xs) = strip_eltype(fn, xs, Base.IteratorEltype(xs))
+function strip_eltype(fn::typeof(identity), xs, ::Base.HasEltype, ::Type{T} = eltype(xs)) where T 
+    isdispatchtuple(Tuple{T}) && return Val{true}()
+    return Val{false}()
+end
+strip_eltype(fn, xs, _) = Val{false}()
+strip_type(trait) = trait
+strip_type(trait::Tuple{}) = ()
+function strip_type(trait::Tuple)
+    header, rest... = trait
+    if header isa FnHash && (header.fn isa typeof(stable_type_id) || header.fn isa typeof(stable_typename_id))
+        return rest
+    else
+        return header, strip_type(rest)
+    end
+end
+function hash_foreach(fn, hash_state, context, xs, strip=strip_eltype(fn, xs))
     for x in xs
         f_x = fn(x)
         inner_state = start_hash!(hash_state)
-        inner_state = stable_hash_helper(f_x, inner_state, context,
-                                         hash_method(f_x, context))
+        method = if strip isa Val{true}
+            strip_type(hash_method(f_x, context))
+        else
+            hash_method(f_x, context)
+        end
+        inner_state = stable_hash_helper(f_x, inner_state, context, method)
         hash_state = stop_hash!(hash_state, inner_state)
     end
     return hash_state
@@ -347,15 +367,20 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,S}) where {S}
+function stable_hash_helper(x::T, hash_state, context, use::StructHash{<:Any,S}) where {T, S}
     fieldsfn, getfieldfn = use.fnpair
     if root_version(context) > 1 && fieldsfn isa typeof(fieldnames_)
         # NOTE: hashes the field names at compile time if possible (~x10 speed up)
         hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
                                         WriteHash())
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
-        fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
-        hash_state = hash_foreach(hash_state, context, fields) do k
+        fields = S == :ByName ? sorted_field_names(x) : fieldnames(T)
+        strip = isdispatchtuple(Tuple{fieldtypes(T)...}) ? Val{true}() : Val{false}()
+        if strip isa Val{true}
+            hash_state = stable_hash_helper(stable_fieldtype_id(x), hash_state, context, 
+                                            WriteHash())
+        end
+        hash_state = hash_foreach(hash_state, context, fields, strip) do k
             return getfieldfn(x, k)
         end
     else
@@ -406,6 +431,16 @@ function hash_field_str(T)
     return first(reinterpret(UInt64, bytes))
 end
 
+function hash_fieldtype_str(T)
+    sha = SHA.SHA2_256_CTX()
+    for E in fieldtypes(T)
+        SHA.update!(sha, codeunits(qualified_type_(E)))
+    end
+    bytes = SHA.digest!(sha)
+
+    return first(reinterpret(UInt32, bytes))
+end
+
 # NOTE: using stable_{typename|type}_id increases speed by ~x10-20 vs. `qualified_name`
 
 """
@@ -447,6 +482,12 @@ remains unchanged.
 stable_typefields_id(::Type{T}) where {T} = hash_field_str(T)
 @generated function stable_typefields_id(x)
     number = hash_field_str(x)
+    :(return $number)
+end
+
+stable_fieldtype_id(::Type{T}) where {T} = hash_fieldtype_str(T)
+@generated function stable_fieldtype_id(T)
+    number = hash_fieldtype_str(T)
     :(return $number)
 end
 
@@ -643,13 +684,16 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # arguments.
     default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
     is_implemented(default_method) && return default_method
-    Base.isprimitivetype(T) && return WriteHash()
+    if Base.isprimitivetype(T) 
+        root_version(c) < 2 && return WriteHash()
+        return (FnHash(stable_type_id, WriteHash()), WriteHash())
+    end
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
     return (FnHash(typefn_for(c)), StructHash(:ByName))
 end
 typenamefn_for(::HashVersion{1}) = qualified_name_
-typenamefn_for(::HashVersion{2}) = stable_typename_id
+typenamefn_for(::HashVersion{2}) = stable_type_id
 typefn_for(::HashVersion{1}) = qualified_type_
 typefn_for(::HashVersion{2}) = stable_type_id
 
@@ -666,7 +710,8 @@ end
 hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
 hash_method(::Symbol, ::HashVersion) = (ConstantHash(":", WriteHash()), WriteHash())
 function hash_method(::AbstractDict, c::HashVersion)
-    return (FnHash(typenamefn_for(c)), StructHash(keys => getindex, :ByName))
+    return (FnHash(root_version(c) < 2 ? qualified_name_ : stable_typename_id), 
+            StructHash(keys => getindex, :ByName))
 end
 hash_method(::Tuple, c::HashVersion) = (FnHash(typenamefn_for(c)), IterateHash())
 hash_method(::Pair, c::HashVersion) = (FnHash(typenamefn_for(c)), IterateHash())

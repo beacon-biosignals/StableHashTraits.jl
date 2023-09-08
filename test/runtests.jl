@@ -120,6 +120,9 @@ include("setup_tests.jl")
             end
 
             @testset "Sequences" begin
+                if V > 1
+                    @test test_hash(Any[1, 2]) != test_hash(Any[UInt(1), UInt(2)])
+                end
                 @test test_hash([1 2; 3 4]) != test_hash(vec([1 2; 3 4]))
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4]')
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4])
