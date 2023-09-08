@@ -389,7 +389,7 @@ end
 
 function hash_type_str(str, T)
     bytes = sha256(codeunits(str))
-    return first(reinterpret(UInt128, bytes))
+    return first(reinterpret(UInt32, bytes))
 end
 
 function hash_field_str(T)
@@ -403,7 +403,7 @@ function hash_field_str(T)
     end
     bytes = SHA.digest!(sha)
 
-    return first(reinterpret(UInt128, bytes))
+    return first(reinterpret(UInt32, bytes))
 end
 
 # NOTE: using stable_{typename|type}_id increases speed by ~x10-20 vs. `qualified_name`
@@ -663,17 +663,24 @@ end
 function hash_method(::AbstractString, c::HashVersion)
     return (FnHash(typenamefn_for(c), WriteHash()), WriteHash())
 end
-hash_method(::Symbol, ::HashVersion) = (ConstantHash(":"), WriteHash())
+hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
+hash_method(::Symbol, ::HashVersion) = (ConstantHash(":", WriteHash()), WriteHash())
 function hash_method(::AbstractDict, c::HashVersion)
     return (FnHash(typenamefn_for(c)), StructHash(keys => getindex, :ByName))
 end
 hash_method(::Tuple, c::HashVersion) = (FnHash(typenamefn_for(c)), IterateHash())
 hash_method(::Pair, c::HashVersion) = (FnHash(typenamefn_for(c)), IterateHash())
+function hash_method(::Type, c::HashVersion{1})
+    return (ConstantHash("Base.DataType"), FnHash(qualified_type_))
+end
 function hash_method(::Type, c::HashVersion)
-    return (ConstantHash("Base.DataType"), FnHash(typefn_for(c)))
+    return (ConstantHash("Base.DataType", WriteHash()), FnHash(stable_type_id))
+end
+function hash_method(::Function, c::HashVersion{1})
+    return (ConstantHash("Base.Function"), FnHash(qualified_name_))
 end
 function hash_method(::Function, c::HashVersion)
-    return (ConstantHash("Base.Function"), FnHash(typenamefn_for(c)))
+    return (ConstantHash("Base.Function", WriteHash()), FnHash(stable_typename_id))
 end
 function hash_method(::AbstractSet, c::HashVersion)
     return (FnHash(typenamefn_for(c)), FnHash(sort! ∘ collect))
