@@ -98,6 +98,8 @@ This release includes speed improvements of about 100 fold.
 - `HashVersion{2}` is a new hash context that can be faster (~x100) than `HashVersion{1}`;
   favor it over `HashVersion{1}` in all cases. Since this version changes the hash values of
   some objects, `HashVersion{1}` is still the default to avoid breaking existing code. 
+- `HashVersion{2}` avoids more hash collisions, by encoding the type of
+  all objects.
 - `qualified_name` and `qualified_type` have been deprected, favor `stable_typename_id` and
   `stable_type_id` as they are much faster.
 - The requirements for `HashVersion{2}` on the passed hash function have been relaxed, such

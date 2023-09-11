@@ -307,40 +307,45 @@ end
 ##### IterateHash 
 #####
 
-struct IterateHash end
-function stable_hash_helper(x, hash_state, context, ::IterateHash)
-    return hash_foreach(identity, hash_state, context, x)
+struct IterateHash{S} 
+    function IterateHash{S}() where S
+        S ∈ (:NoStrip, :Strip) || error("Expected `:NoStrip` or `:Strip`")
+        return new{S}()
+    end
+end
+IterateHash() = IterateHash{:NoStrip}()
+function stable_hash_helper(x, hash_state, context, ::IterateHash{S}) where S
+    return hash_foreach(identity, hash_state, context, x,
+                        S == :NoStrip ? Val(false) : strip_eltype(x))
 end
 
-strip_eltype(fn, xs) = strip_eltype(fn, xs, Base.IteratorEltype(xs))
-function strip_eltype(fn::typeof(identity), xs, ::Base.HasEltype, ::Type{T} = eltype(xs)) where T 
+strip_eltype(xs, _) = Val{false}()
+strip_eltype(xs) = strip_eltype(xs, Base.IteratorEltype(xs))
+function strip_eltype(xs, ::Base.HasEltype, ::Type{T} = eltype(xs)) where T 
     isdispatchtuple(Tuple{T}) && return Val{true}()
     return Val{false}()
 end
-strip_eltype(fn, xs, _) = Val{false}()
+
 strip_singleton(x) = x
 strip_singleton(x::Tuple{<:Any}) = x[1]
 strip_type(x) = strip_singleton(strip_type_(x))
 strip_type_(trait) = trait
 strip_type_(trait::Tuple{}) = ()
+strip_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = rest
+strip_head_type(x::FnHash{<:typeof(stable_typename_id)}, rest) = rest
+strip_head_type(x, rest) = (x, strip_type_(rest)...)
 function strip_type_(trait::Tuple)
     header, rest... = trait
-    if header isa FnHash && (header.fn isa typeof(stable_type_id) || header.fn isa typeof(stable_typename_id))
-        return rest
-    else
-        return (header, strip_type_(rest)...)
-    end
+    return strip_heade_type(header, rest)
 end
-function hash_foreach(fn, hash_state, context, xs, strip=strip_eltype(fn, xs))
+hash_method(x, context, ::Val{true}) = strip_type(hash_method(x, context))
+hash_method(x, context, ::Val{false}) = hash_method(x, context)
+function hash_foreach(fn, hash_state, context, xs, strip=Val(false))
     for x in xs
         f_x = fn(x)
         inner_state = start_hash!(hash_state)
-        method = if strip isa Val{true}
-            strip_type(hash_method(f_x, context))
-        else
-            hash_method(f_x, context)
-        end
-        inner_state = stable_hash_helper(f_x, inner_state, context, method)
+        inner_state = stable_hash_helper(f_x, inner_state, context, 
+                                         hash_method(f_x, context, strip))
         hash_state = stop_hash!(hash_state, inner_state)
     end
     return hash_state
@@ -350,16 +355,17 @@ end
 ##### StructHash 
 #####
 
-struct StructHash{P,S}
+struct StructHash{P,S,R}
     fnpair::P
 end
 fieldnames_(::T) where {T} = fieldnames(T)
-function StructHash(sort::Symbol)
-    return StructHash(fieldnames_ => getfield, sort)
+function StructHash(sort::Symbol, strip::Symbol=:NoStrip)
+    return StructHash(fieldnames_ => getfield, sort, strip)
 end
-function StructHash(fnpair::Pair=fieldnames_ => getfield, by::Symbol=:ByOrder)
+function StructHash(fnpair::Pair=fieldnames_ => getfield, by::Symbol=:ByOrder, strip::Symbol=:NoStrip)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
-    return StructHash{typeof(fnpair),by}(fnpair)
+    strip ∈ (:NoStrip, :Strip) || error("Expected a valid strip option (:NoStrip, :Strip).")
+    return StructHash{typeof(fnpair),by,strip}(fnpair)
 end
 orderfields(::StructHash{<:Any,:ByOrder}, props) = props
 orderfields(::StructHash{<:Any,:ByName}, props) = sort_(props)
@@ -370,27 +376,38 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-function stable_hash_helper(x::T, hash_state, context, use::StructHash{<:Any,S}) where {T, S}
+function stable_hash_helper(x::T, hash_state, context, use::StructHash{<:Any, S, R}) where {T,S,R}
     fieldsfn, getfieldfn = use.fnpair
     if root_version(context) > 1 && fieldsfn isa typeof(fieldnames_)
         # NOTE: hashes the field names at compile time if possible (~x10 speed up)
-        hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
-                                        WriteHash())
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
         fields = S == :ByName ? sorted_field_names(x) : fieldnames(T)
-        strip = isdispatchtuple(Tuple{fieldtypes(T)...}) ? Val{true}() : Val{false}()
-        if strip isa Val{true}
+        hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
+                                        WriteHash())
+        if R == :NoStrip || !(getfieldfn isa typeof(getfield))
+            hash_state = hash_foreach(hash_state, context, fields, strip) do k
+                return getfieldfn(x, k)
+            end
+        else
             hash_state = stable_hash_helper(stable_fieldtype_id(x), hash_state, context, 
                                             WriteHash())
-        end
-        hash_state = hash_foreach(hash_state, context, fields, strip) do k
-            return getfieldfn(x, k)
+            hash_field(x, fields, hash_state, context)
         end
     else
         return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
             return k => getfieldfn(x, k)
         end
     end
+end
+
+hash_field(x, ::Tuple{}, hash_state, context) = hash_state
+function hash_field(x, fields, hash_state, context)
+    field, fields... = fields
+    val = getfield(x, field)
+    T = fieldtype(x, field)
+    strip = Val(isdispatchtuple(Tuple{T}))
+    hash_state = stable_hash_helper(val, hash_state, context, hash_method(x, context, strip))
+    return hash_field(x, fields, hash_state, context)
 end
 
 #####
@@ -436,6 +453,7 @@ end
 
 function hash_fieldtype_str(T)
     sha = SHA.SHA2_256_CTX()
+    SHA.update!(sha, codeunits(qualified_type_(T)))
     for E in fieldtypes(T)
         SHA.update!(sha, codeunits(qualified_type_(E)))
     end
