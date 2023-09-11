@@ -389,7 +389,7 @@ end
 
 function hash_type_str(str, T)
     bytes = sha256(codeunits(str))
-    return first(reinterpret(UInt32, bytes))
+    return first(reinterpret(UInt64, bytes))
 end
 
 function hash_field_str(T)
@@ -403,7 +403,7 @@ function hash_field_str(T)
     end
     bytes = SHA.digest!(sha)
 
-    return first(reinterpret(UInt32, bytes))
+    return first(reinterpret(UInt64, bytes))
 end
 
 # NOTE: using stable_{typename|type}_id increases speed by ~x10-20 vs. `qualified_name`
