@@ -39,7 +39,7 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 
 ## Details
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section below for more details. It is generally recommended that you explicitly set the context to the latest verison (`HashVersion{2}()`) as it includes substantial speed improvements.
+You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section below for more details. It is generally recommended that you explicitly set the context to the latest version (`HashVersion{2}()`) as it includes substantial speed improvements.
 
 There are sensible defaults for `stable_hash` that aim to ensure that if two values are
 different, the input to the hash algorithm will differ. 
@@ -58,7 +58,7 @@ following values, typically based only on the *type* of its input.
 2. `IterateHash()`: assumes the object is iterable and finds a hash of all elements
 3. `StructHash([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
     the object as defined by a sequence of pairs. How precisely this occurs is determined by
-    the two arugments: 
+    the two arguments: 
       - `pair` Defines how fields are extracted; the default is 
         `fieldnames ∘ typeof => getfield` 
         but this could be changed to e.g. `propertynames => getproperty` or
@@ -106,8 +106,8 @@ crc32c(copy(x),s)`).
 - `root_version`: Most users can safely ignore this function. If you are implementing a
 root context (one that returns `parent_context(::MyContext) = nothing`) you will need to
 define this function. It indicates what version of the hashing implementations to use (1 or
-2). It defaults to 1 to avoid changing the hash values of exisitng root contexts, but should
-be defined to return 2 to make use of the more optimizied implementations used by `HashVersion{2}`.
+2). It defaults to 1 to avoid changing the hash values of existing root contexts, but should
+be defined to return 2 to make use of the more optimized implementations used by `HashVersion{2}`.
 
 ### In 1.0:
 
@@ -117,7 +117,7 @@ However, far fewer manual defintions of `hash_method` become necessary. The fall
 
 - **Breaking**: `transform` has been removed, its features are covered by `FnHash` and
   `HashAndContext`.
-- **Breaking**: `stable_hash` no longer accepts mutliple objects to hash (wrap them in a
+- **Breaking**: `stable_hash` no longer accepts multiple objects to hash (wrap them in a
   tuple instead); it now accepts a single object to hash, and the second positional argument
   is the context (see below for details on contexts). 
 - **Breaking**: The default `alg` for `stable_hash` is `sha256`; to use the old default
@@ -149,11 +149,11 @@ changed.
 To support hasing of all tables (`Tables.istable(x) == true`), hashes have changed for such
 objects when:
    1. calling `stable_hash(x)` did not previously error
-   1. `x` is not a `DataFrame` (these previosuly errored)
+   1. `x` is not a `DataFrame` (these previously errored)
    2. `x` is not a `NamedTuple` of tables columns (these have the same hash as before)
    3. `x` is not an `AbstractArray` of `NamedTuple` rows (these have the same hash as before)
-   4. `x` can be succefully written to an IO buffer via `Base.write` or
-     `StableHashTraits.write` (otherwise it previosuly errored)
+   4. `x` can be successfully written to an IO buffer via `Base.write` or
+     `StableHashTraits.write` (otherwise it previously errored)
    5. `x` has no specialized `stable_hash` method defined for it (otherwise
    the hash will be the same)
 
@@ -180,7 +180,7 @@ are appropriate fallback methods.
 
 When you define a hash context it should normally accept a parent context that serves as a
 fallback, and return it in an implementation of the method
-`StableHashTratis.parent_context`. For example, here is how we could write a context that
+`StableHashTraits.parent_context`. For example, here is how we could write a context that
 treats all named tuples with the same keys as equivalent. 
 
 ```julia
