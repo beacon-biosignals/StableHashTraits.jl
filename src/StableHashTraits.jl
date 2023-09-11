@@ -460,7 +460,7 @@ function cleanup_name(str)
 end
 function validate_name(str)
     if occursin(r"\.#[^.]*$", str)
-        throw(ArgumentError("Annonymous types (those containing `#`) cannot be hashed to a reliable value"))
+        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value"))
     end
     return str
 end
@@ -613,7 +613,7 @@ end
 """
     StableHashTraits.root_version(context)
 
-Return the verison of the root context: an integer in the range (1, 2). The default
+Return the version of the root context: an integer in the range (1, 2). The default
 fallback method value returns 1. 
 
 In almost all cases, a root hash context should return 2. The optimizations used in
