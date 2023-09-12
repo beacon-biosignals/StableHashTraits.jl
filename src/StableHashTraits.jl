@@ -307,23 +307,10 @@ end
 ##### IterateHash 
 #####
 
-struct IterateHash{S} 
-    function IterateHash{S}() where S
-        S ∈ (:NoStrip, :Strip) || error("Expected `:NoStrip` or `:Strip`")
-        return new{S}()
-    end
-end
+struct IterateHash end
 IterateHash() = IterateHash{:NoStrip}()
-function stable_hash_helper(x, hash_state, context, ::IterateHash{S}) where S
-    return hash_foreach(identity, hash_state, context, x,
-                        S == :NoStrip ? Val(false) : strip_eltype(x))
-end
-
-strip_eltype(xs, _) = Val{false}()
-strip_eltype(xs) = strip_eltype(xs, Base.IteratorEltype(xs))
-function strip_eltype(xs, ::Base.HasEltype, ::Type{T} = eltype(xs)) where T 
-    isdispatchtuple(Tuple{T}) && return Val{true}()
-    return Val{false}()
+function stable_hash_helper(x, hash_state, context, ::IterateHash) where S
+    return hash_foreach(identity, hash_state, context, x)
 end
 
 strip_singleton(x) = x
@@ -338,14 +325,16 @@ function strip_type_(trait::Tuple)
     header, rest... = trait
     return strip_heade_type(header, rest)
 end
-hash_method(x, context, ::Val{true}) = strip_type(hash_method(x, context))
-hash_method(x, context, ::Val{false}) = hash_method(x, context)
-function hash_foreach(fn, hash_state, context, xs, strip=Val(false))
+struct EltypeHashed{P}
+    parent::P
+end
+parent_context(x::EltypeHashed) = x.parent
+hash_method(x, context::EltypeHashed) = strip_type(hash_method(x, parent_context(context)))
+function hash_foreach(fn, hash_state, context, xs)
     for x in xs
         f_x = fn(x)
         inner_state = start_hash!(hash_state)
-        inner_state = stable_hash_helper(f_x, inner_state, context, 
-                                         hash_method(f_x, context, strip))
+        inner_state = stable_hash_helper(f_x, inner_state, context, hash_method(f_x, context))
         hash_state = stop_hash!(hash_state, inner_state)
     end
     return hash_state
@@ -570,7 +559,33 @@ end
 ##### Tuples 
 #####
 
+strip_eltype(xs, _) = false
+strip_eltype(xs) = strip_eltype(xs, Base.IteratorEltype(xs))
+function strip_eltype(xs, ::Base.HasEltype, ::Type{T} = eltype(xs)) where T 
+    isdispatchtuple(Tuple{T}) && return true
+    return false
+end
+has_field_type(methods) = any(x -> x isa FnHash{<:typeof(stable_type_id)}, methods)
+has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
+has_struct_type(methods) = any(x -> x isa StructType{<:Pair{typeof(getfield_)}})
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
+    # optimize away the repeated eltype hash, if possible
+    context = if has_field_type(methods) && has_iterate_type(methods) && strip_eltype(x) &&
+        root_version(context) > 2
+        EltypeHashed(context)
+    else
+        context
+    end
+
+    # optimize away struct field types of a struct, if possible
+    context = if has_field_type(methods) && has_struct_type(methods) &&
+        root_version(context) > 2
+        # TODO: implement this context, and use it in `StructHash` implementation
+        StructypeHashed(context)
+    else
+        context
+    end
+
     for method in methods
         result = stable_hash_helper(x, start_hash!(hash_state), context, method)
         hash_state = stop_hash!(hash_state, result)
@@ -717,16 +732,16 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     end
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
-    return (FnHash(typefn_for(c)), StructHash(:ByName))
+    return (FnHash(typefn_for(c)), StructHash(:ByName, :Strip))
 end
 typenamefn_for(::HashVersion{1}) = qualified_name_
 typenamefn_for(::HashVersion{2}) = stable_type_id
 typefn_for(::HashVersion{1}) = qualified_type_
 typefn_for(::HashVersion{2}) = stable_type_id
 
-hash_method(::NamedTuple, c::HashVersion) = (FnHash(typenamefn_for(c)), StructHash())
+hash_method(::NamedTuple, c::HashVersion) = (FnHash(typenamefn_for(c)), StructHash)
 function hash_method(::AbstractRange, c::HashVersion)
-    return (FnHash(typenamefn_for(c)), StructHash(:ByName))
+    return (FnHash(typenamefn_for(c)), StructHash(:ByName, :Strip))
 end
 function hash_method(::AbstractArray, c::HashVersion)
     return (FnHash(typenamefn_for(c)), FnHash(size), IterateHash())
