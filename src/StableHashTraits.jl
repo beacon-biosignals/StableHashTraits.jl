@@ -313,11 +313,12 @@ function stable_hash_helper(x, hash_state, context, ::IterateHash) where S
     return hash_foreach(identity, hash_state, context, x)
 end
 
-function hash_foreach(fn, hash_state, context, xs)
+function hash_foreach(fn, hash_state, context, xs, hash_method_context=context)
     for x in xs
         f_x = fn(x)
         inner_state = start_hash!(hash_state)
-        inner_state = stable_hash_helper(f_x, inner_state, context, hash_method(f_x, context))
+        inner_state = stable_hash_helper(f_x, inner_state, context,
+                                         hash_method(f_x, hash_method_context))
         hash_state = stop_hash!(hash_state, inner_state)
     end
     return hash_state
@@ -327,7 +328,7 @@ end
 ##### StructHash 
 #####
 
-struct StructHash{P,R}
+struct StructHash{P,S}
     fnpair::P
 end
 fieldnames_(::T) where {T} = fieldnames(T)
@@ -347,8 +348,9 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
+const FieldStructHash{S} = StructHash{Pair{<:typeof(fieldnames_),S}}
 function stable_hash_helper(x::T, hash_state, context, ::Union{Val{2}, Val{3}},
-                            use::StructHash{Pair{<:typeof(fieldnames_)}, S, R}) where {T,S,R}
+                            use::FieldStructHash{S}) where {T,S}
     _, getfieldfn = use.fnpair
     # NOTE: sort fields at compile time if possible (~x1.33 speed up)
     fields = S == :ByName ? sorted_field_names(x) : fieldnames(T)
@@ -541,57 +543,73 @@ function hash_tuple_trait(x, hash_state, context, methods)
     return hash_state
 end
 
-# In HashVersion{3} we can elide FnHash(stable_type_id) when it occurs in a 
-# struct with a concrete type or an iterator with a concrete eltype
+# In HashVersion{3} we can drop some uses of `FnHash(stable_type_id)`, if the container of
+# that object uses `FnHash(stable_type_id)`.
 
-# struct type elision
-struct ElideType{H,P}
-    parent::P
-end
-# NOTE: the below isn't quite right, we need to create
-# a method for StructHash that calls `hash_field`
-parent_context(x::ElideType) = x.parent
-# we explicitly iterate here to avoid type ambiguities
-for T in [:WriteHash, :IterateHash, :StructHash, :FnHash, :ConstantHash, :Tuple]
-    @eval function stable_hash_helper(x, hash_state, context::ElideType, root::Val{3}, use::$T)
-        stable_hash_helper(x, hash_state, parent_context(context), root, elide_type(use))
-    end
-    @eval function stable_hash_helper(x, hash_state, context::ElideType{$T}, root::Val{3}, 
-                                      use::$T)
-        stable_hash_helper(x, hash_state, parent_context(context), root, elide_type(use))
-    end
-end
-
-hash_field(x, ::Tuple{}, hash_state, context) = hash_state
-function hash_field(x, fields, hash_state, context)
-    field, fields... = fields
-    val = getfield(x, field)
-    T = fieldtype(x, field)
-    strip = Val(isdispatchtuple(Tuple{T}))
-    hash_state = stable_hash_helper(val, hash_state, context, hash_method(x, context, strip))
-    return hash_field(x, fields, hash_state, context)
-end
-
-# type elision
+# type elision utilities
 
 strip_singleton(x) = x
 strip_singleton(x::Tuple{<:Any}) = x[1]
-elide_type(x) = strip_singleton(elide_type_(x))
+elide_type(trait) = strip_singleton(elide_type_(trait))
 elide_type_(trait) = trait
 elide_type_(trait::Tuple{}) = ()
-elide_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = rest
-elide_head_type(x::FnHash{<:typeof(stable_typename_id)}, rest) = rest
-elide_head_type(x, rest) = (x, elide_type_(rest)...)
 function elide_type_(trait::Tuple)
     header, rest... = trait
     return elide_head_type(header, rest)
 end
 
-# detecting when we can elide struct and element types
+elide_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = rest
+elide_head_type(x::FnHash{<:typeof(stable_typename_id)}, rest) = rest
+elide_head_type(x, rest) = (x, elide_type_(rest)...)
 
-has_field_type(methods) = any(x -> x isa FnHash{<:typeof(stable_type_id)}, methods)
+struct ElideType{H,P}
+    parent::P
+end
+parent_context(x::ElideType) = x.parent
+# we explicitly iterate over `T` to avoid type ambiguities
+# these fallback methods simply ignore the `ElideType` context; we want
+# to avoid `ElideType` propagating more than one level down in the call stack.
+for T in [:WriteHash, :StructHash, :IterateHash, :FnHash, :ConstantHash, :Tuple]
+    @eval function stable_hash_helper(x, hash_state, context::ElideType, root::Val{3}, use::$T)
+        stable_hash_helper(x, hash_state, parent_context(context), root, use)
+    end
+end
+
+# struct type elision
+
+function stable_has_helper(x::T, hash_state, context::ElideType{<:StructHash}, ::Val{3}, 
+                           use::FieldStructHash{S}) where {T,S}
+    fields = S == :ByName ? sorted_field_names(x) : fieldnames(T)
+    hash_field(x, fields, hash_state, parent_context(context))
+end
+
+@inline hash_field(x, ::Tuple{}, hash_state, context) = hash_state
+@inline function hash_field(x, fields, hash_state, context)
+    field, fields... = fields
+    val = getfield(x, field)
+    T = fieldtype(x, field)
+    method = hash_method(x, context)
+    method = isdispatchtuple(Tuple{T}) ? elide_type(method) : method
+
+    inner_state = start_hash!(inner_state)
+    inner_state = stable_hash_helper(val, inner_state, context, method)
+    hash_state = stop_hash!(hash_state, inner_state)
+    return hash_field(x, fields, hash_state, context)
+end
+
+# iterator type elision
+
+hash_method(x, context::ElideType{<:IterateHash}) = elide_type(hash_method(x, parent_context(context)))
+
+function stable_hash_helper(x, hash_state, context::ElideType{<:IterateHash}, ::Val{3},
+                            use::IterateHash)
+    hash_foreach(x, hash_state, parent_context(context), xs, context)
+end
+
+# detecting when we can elide struct and element types
+has_type_id(methods) = any(x -> x isa FnHash{<:typeof(stable_type_id)}, methods)
 has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
-has_struct_type(methods) = any(x -> x isa StructType{<:Pair{typeof(getfield_)}})
+has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
 
 has_leaf_eltype(xs, _) = false
 has_leaf_eltype(xs) = has_leaf_eltype(xs, Base.IteratorEltype(xs))
@@ -600,22 +618,19 @@ function has_leaf_eltype(xs, ::Base.HasEltype, ::Type{T} = eltype(xs)) where T
     return false
 end
 
-# NOTE: if the eltype is elided here, we need to allow for that as wello
-# (so handle the method ambiguities)
 function stable_hash_helper(x, hash_state, context, root::Val{3}, methods::Tuple)
-    # optimize away the repeated eltype hash, if possible
-    context = if has_field_type(methods) && has_iterate_type(methods) && has_leaf_eltype(x) &&
-        root_version(context) > 2
+    # mark if we can elide element type
+    context = if has_type_id(methods) && has_iterate_type(methods) && has_leaf_eltype(x) &&
+                 root_version(context) > 2
         ElideType{StructHash}(context)
     else
         context
     end
 
-    # optimize away struct field types of a struct, if possible
-    context = if has_field_type(methods) && has_struct_type(methods) &&
-        root_version(context) > 2
-        # TODO: implement this context, and use it in `StructHash` implementation
-        StructypeHashed(context)
+    # mark if we can elide individual field's types
+    context = if has_type_id(methods) && has_struct_type(methods) &&
+                 root_version(context) > 2
+        ElideType{IterateHash}(context)
     else
         context
     end
