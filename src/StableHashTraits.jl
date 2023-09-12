@@ -389,7 +389,7 @@ function stable_hash_helper(x::T, hash_state, context, use::StructHash{<:Any, S,
                 return getfieldfn(x, k)
             end
         else
-            hash_state = stable_hash_helper(stable_fieldtype_id(x), hash_state, context, 
+            hash_state = stable_hash_helper(stable_type_fieldtype_id(x), hash_state, context, 
                                             WriteHash())
             hash_field(x, fields, hash_state, context)
         end
@@ -437,14 +437,18 @@ function hash_type_str(str, T)
     return first(reinterpret(UInt64, bytes))
 end
 
+function sha_hash_field!(sha, f)
+    if f isa Symbol
+        SHA.update!(sha, codeunits(String(f)))
+    else # isa Number
+        SHA.update!(sha, reinterpret(UInt8, [f]))
+    end
+end
+
 function hash_field_str(T)
     sha = SHA.SHA2_256_CTX()
     for f in sort_(fieldnames(T))
-        if f isa Symbol
-            SHA.update!(sha, codeunits(String(f)))
-        else # isa Number
-            SHA.update!(sha, reinterpret(UInt8, [f]))
-        end
+        sha_hash_field!(sha, f)
     end
     bytes = SHA.digest!(sha)
 
@@ -453,12 +457,14 @@ end
 
 function hash_fieldtype_str(T)
     sha = SHA.SHA2_256_CTX()
-    SHA.update!(sha, codeunits(qualified_type_(T)))
     for E in fieldtypes(T)
         SHA.update!(sha, codeunits(qualified_type_(E)))
     end
+    for f in sort_(fieldnames_(T))
+        sha_hash_field!(sha, f)
+    end
+        
     bytes = SHA.digest!(sha)
-
     return first(reinterpret(UInt32, bytes))
 end
 
@@ -506,8 +512,8 @@ stable_typefields_id(::Type{T}) where {T} = hash_field_str(T)
     :(return $number)
 end
 
-stable_fieldtype_id(::Type{T}) where {T} = hash_fieldtype_str(T)
-@generated function stable_fieldtype_id(T)
+stable_type_fieldtype_id(::Type{T}) where {T} = hash_fieldtype_str(T)
+@generated function stable_type_fieldtype_id(T)
     number = hash_fieldtype_str(T)
     :(return $number)
 end
