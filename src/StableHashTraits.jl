@@ -30,14 +30,14 @@ end
     stable_hash(x, context=HashVersion{1}(); alg=sha256)
 
 Create a stable hash of the given objects. As long as the context remains the same, this is
-intended to remain unchanged across julia verisons. How each object is hashed is determined
+intended to remain unchanged across julia versions. How each object is hashed is determined
 by [`hash_method`](@ref), which aims to have sensible fallbacks.
 
 To ensure the greatest stability, you should explicitly pass the context object. It is also
 best to pass an explicit version, since `HashVersion{2}` is generally faster than
-`HashVerison{1}`. If the fallback methods change in a future release, the hash you get
-by passing an explicit `HashVersin{N}` should *not* change. (Note that the number in
-`HashVersion` does not necessarily match the package verison of `StableHashTraits`).
+`HashVersion{1}`. If the fallback methods change in a future release, the hash you get
+by passing an explicit `HashVersion{N}` should *not* change. (Note that the number in
+`HashVersion` does not necessarily match the package version of `StableHashTraits`).
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
@@ -131,7 +131,7 @@ function compute_hash! end
 """
     start_hash!(state)
 
-Return an updated state that delimits hashing of a nested struture; calls made to
+Return an updated state that delimits hashing of a nested structure; calls made to
 `update_hash!` after start_hash! will be handled as nested elements up until `stop_hash!` is
 called.
 """
