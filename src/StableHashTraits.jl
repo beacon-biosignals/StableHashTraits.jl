@@ -545,21 +545,23 @@ end
 # struct with a concrete type or an iterator with a concrete eltype
 
 # struct type elision
-struct StrcttypeHashed{P}
+struct ElideType{H,P}
     parent::P
 end
-parent_context(x::StructtypeHashed) = x.parent
-# TODO: need to eval and loop over all `use` options
-function stable_hash_helper(x, hash_state, context::StructtypeHashed, root, use)
-    stable_hash_helper(x, hash_state, parent_context(context), root, use)
-end
-stable_hash_helper(x, hash_state, context::StructtypeHashed, root::Val{3}, use::StructHash)
-    hash_state = stable_hash_helper(stable_type_fieldtype_id(x), hash_state, 
-                                    parent_context(context), WriteHash())
-    return hash_field(x, fields, hash_state, parent_context(context))
+# NOTE: the below isn't quite right, we need to create
+# a method for StructHash that calls `hash_field`
+parent_context(x::ElideType) = x.parent
+# we explicitly iterate here to avoid type ambiguities
+for T in [:WriteHash, :IterateHash, :StructHash, :FnHash, :ConstantHash, :Tuple]
+    @eval function stable_hash_helper(x, hash_state, context::ElideType, root::Val{3}, use::$T)
+        stable_hash_helper(x, hash_state, parent_context(context), root, elide_type(use))
+    end
+    @eval function stable_hash_helper(x, hash_state, context::ElideType{$T}, root::Val{3}, 
+                                      use::$T)
+        stable_hash_helper(x, hash_state, parent_context(context), root, elide_type(use))
+    end
 end
 
-# eltype elision
 hash_field(x, ::Tuple{}, hash_state, context) = hash_state
 function hash_field(x, fields, hash_state, context)
     field, fields... = fields
@@ -570,23 +572,20 @@ function hash_field(x, fields, hash_state, context)
     return hash_field(x, fields, hash_state, context)
 end
 
+# type elision
+
 strip_singleton(x) = x
 strip_singleton(x::Tuple{<:Any}) = x[1]
-strip_type(x) = strip_singleton(strip_type_(x))
-strip_type_(trait) = trait
-strip_type_(trait::Tuple{}) = ()
-strip_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = rest
-strip_head_type(x::FnHash{<:typeof(stable_typename_id)}, rest) = rest
-strip_head_type(x, rest) = (x, strip_type_(rest)...)
-function strip_type_(trait::Tuple)
+elide_type(x) = strip_singleton(elide_type_(x))
+elide_type_(trait) = trait
+elide_type_(trait::Tuple{}) = ()
+elide_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = rest
+elide_head_type(x::FnHash{<:typeof(stable_typename_id)}, rest) = rest
+elide_head_type(x, rest) = (x, elide_type_(rest)...)
+function elide_type_(trait::Tuple)
     header, rest... = trait
-    return strip_heade_type(header, rest)
+    return elide_head_type(header, rest)
 end
-struct EltypeHashed{P}
-    parent::P
-end
-parent_context(x::EltypeHashed) = x.parent
-hash_method(x, context::EltypeHashed) = strip_type(hash_method(x, parent_context(context)))
 
 # detecting when we can elide struct and element types
 
@@ -607,7 +606,7 @@ function stable_hash_helper(x, hash_state, context, root::Val{3}, methods::Tuple
     # optimize away the repeated eltype hash, if possible
     context = if has_field_type(methods) && has_iterate_type(methods) && has_leaf_eltype(x) &&
         root_version(context) > 2
-        EltypeHashed(context)
+        ElideType{StructHash}(context)
     else
         context
     end
