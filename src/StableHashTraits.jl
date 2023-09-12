@@ -49,7 +49,7 @@ third argument to [`StableHashTraits.write`](@ref)
 """
 function stable_hash(x, context=HashVersion{1}(); alg=sha256)
     return compute_hash!(stable_hash_helper(x, setup_hash_state(alg, context), context,
-                                            hash_method(x, context)))
+                                            Val(root_version(context)), hash_method(x, context)))
 end
 
 # extract contents of README so we can insert it into the some of the docstrings
@@ -88,13 +88,13 @@ hash_method(_) = NotImplemented()
 is_implemented(::NotImplemented) = false
 is_implemented(_) = true
 
-function stable_hash_helper(x, hash_state, context, method::NotImplemented)
+function stable_hash_helper(x, hash_state, context, root, method::NotImplemented)
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects" *
                         " of type `$(typeof(x))` in context of type `$(typeof(context))`."))
     return nothing
 end
 
-function stable_hash_helper(x, hash_state, context, method)
+function stable_hash_helper(x, hash_state, context, root, method)
     throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when " *
                         "hashing object $x. The implementation of `hash_method` for this " *
                         "object is invalid."))
@@ -313,23 +313,6 @@ function stable_hash_helper(x, hash_state, context, ::IterateHash) where S
     return hash_foreach(identity, hash_state, context, x)
 end
 
-strip_singleton(x) = x
-strip_singleton(x::Tuple{<:Any}) = x[1]
-strip_type(x) = strip_singleton(strip_type_(x))
-strip_type_(trait) = trait
-strip_type_(trait::Tuple{}) = ()
-strip_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = rest
-strip_head_type(x::FnHash{<:typeof(stable_typename_id)}, rest) = rest
-strip_head_type(x, rest) = (x, strip_type_(rest)...)
-function strip_type_(trait::Tuple)
-    header, rest... = trait
-    return strip_heade_type(header, rest)
-end
-struct EltypeHashed{P}
-    parent::P
-end
-parent_context(x::EltypeHashed) = x.parent
-hash_method(x, context::EltypeHashed) = strip_type(hash_method(x, parent_context(context)))
 function hash_foreach(fn, hash_state, context, xs)
     for x in xs
         f_x = fn(x)
@@ -344,17 +327,16 @@ end
 ##### StructHash 
 #####
 
-struct StructHash{P,S,R}
+struct StructHash{P,R}
     fnpair::P
 end
 fieldnames_(::T) where {T} = fieldnames(T)
-function StructHash(sort::Symbol, strip::Symbol=:NoStrip)
-    return StructHash(fieldnames_ => getfield, sort, strip)
+function StructHash(sort::Symbol)
+    return StructHash(fieldnames_ => getfield, sort)
 end
-function StructHash(fnpair::Pair=fieldnames_ => getfield, by::Symbol=:ByOrder, strip::Symbol=:NoStrip)
+function StructHash(fnpair::Pair=fieldnames_ => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
-    strip ∈ (:NoStrip, :Strip) || error("Expected a valid strip option (:NoStrip, :Strip).")
-    return StructHash{typeof(fnpair),by,strip}(fnpair)
+    return StructHash{typeof(fnpair),by}(fnpair)
 end
 orderfields(::StructHash{<:Any,:ByOrder}, props) = props
 orderfields(::StructHash{<:Any,:ByName}, props) = sort_(props)
@@ -365,38 +347,24 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-function stable_hash_helper(x::T, hash_state, context, use::StructHash{<:Any, S, R}) where {T,S,R}
-    fieldsfn, getfieldfn = use.fnpair
-    if root_version(context) > 1 && fieldsfn isa typeof(fieldnames_)
-        # NOTE: hashes the field names at compile time if possible (~x10 speed up)
-        # NOTE: sort fields at compile time if possible (~x1.33 speed up)
-        fields = S == :ByName ? sorted_field_names(x) : fieldnames(T)
-        hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
-                                        WriteHash())
-        if R == :NoStrip || !(getfieldfn isa typeof(getfield))
-            hash_state = hash_foreach(hash_state, context, fields, strip) do k
-                return getfieldfn(x, k)
-            end
-        else
-            hash_state = stable_hash_helper(stable_type_fieldtype_id(x), hash_state, context, 
-                                            WriteHash())
-            hash_field(x, fields, hash_state, context)
-        end
-    else
-        return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
-            return k => getfieldfn(x, k)
-        end
+function stable_hash_helper(x::T, hash_state, context, ::Union{Val{2}, Val{3}},
+                            use::StructHash{Pair{<:typeof(fieldnames_)}, S, R}) where {T,S,R}
+    _, getfieldfn = use.fnpair
+    # NOTE: sort fields at compile time if possible (~x1.33 speed up)
+    fields = S == :ByName ? sorted_field_names(x) : fieldnames(T)
+    # NOTE: hashes the field names at compile time if possible (~x10 speed up)
+    hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
+                                    WriteHash())
+    hash_state = hash_foreach(hash_state, context, fields, strip) do k
+        return getfieldfn(x, k)
     end
 end
 
-hash_field(x, ::Tuple{}, hash_state, context) = hash_state
-function hash_field(x, fields, hash_state, context)
-    field, fields... = fields
-    val = getfield(x, field)
-    T = fieldtype(x, field)
-    strip = Val(isdispatchtuple(Tuple{T}))
-    hash_state = stable_hash_helper(val, hash_state, context, hash_method(x, context, strip))
-    return hash_field(x, fields, hash_state, context)
+function stable_hash_helper(x, hash_state, context, root, use)
+    fieldsfn, getfieldfn = use.fnpair
+    return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
+        return k => getfieldfn(x, k)
+    end
 end
 
 #####
@@ -486,6 +454,7 @@ representation of a type is the same (invariant to comma spacing).
 
 NOTE: if the module of a type is `Core` it is renamed to `Base` before hashing because the
 location of some types changes between `Core` to `Base` across julia versions
+
 """
 stable_type_id(x) = stable_id_helper(x, Val(:type))
 
@@ -559,18 +528,84 @@ end
 ##### Tuples 
 #####
 
-strip_eltype(xs, _) = false
-strip_eltype(xs) = strip_eltype(xs, Base.IteratorEltype(xs))
-function strip_eltype(xs, ::Base.HasEltype, ::Type{T} = eltype(xs)) where T 
-    isdispatchtuple(Tuple{T}) && return true
-    return false
+function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
+    hash_tuple_trait(x, hash_state, context, methods)
 end
+
+function hash_tuple_trait(x, hash_state, context, methods)
+    for method in methods
+        result = stable_hash_helper(x, start_hash!(hash_state), context, method)
+        hash_state = stop_hash!(hash_state, result)
+    end
+
+    return hash_state
+end
+
+# In HashVersion{3} we can elide FnHash(stable_type_id) when it occurs in a 
+# struct with a concrete type or an iterator with a concrete eltype
+
+# struct type elision
+struct StrcttypeHashed{P}
+    parent::P
+end
+parent_context(x::StructtypeHashed) = x.parent
+# TODO: need to eval and loop over all `use` options
+function stable_hash_helper(x, hash_state, context::StructtypeHashed, root, use)
+    stable_hash_helper(x, hash_state, parent_context(context), root, use)
+end
+stable_hash_helper(x, hash_state, context::StructtypeHashed, root::Val{3}, use::StructHash)
+    hash_state = stable_hash_helper(stable_type_fieldtype_id(x), hash_state, 
+                                    parent_context(context), WriteHash())
+    return hash_field(x, fields, hash_state, parent_context(context))
+end
+
+# eltype elision
+hash_field(x, ::Tuple{}, hash_state, context) = hash_state
+function hash_field(x, fields, hash_state, context)
+    field, fields... = fields
+    val = getfield(x, field)
+    T = fieldtype(x, field)
+    strip = Val(isdispatchtuple(Tuple{T}))
+    hash_state = stable_hash_helper(val, hash_state, context, hash_method(x, context, strip))
+    return hash_field(x, fields, hash_state, context)
+end
+
+strip_singleton(x) = x
+strip_singleton(x::Tuple{<:Any}) = x[1]
+strip_type(x) = strip_singleton(strip_type_(x))
+strip_type_(trait) = trait
+strip_type_(trait::Tuple{}) = ()
+strip_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = rest
+strip_head_type(x::FnHash{<:typeof(stable_typename_id)}, rest) = rest
+strip_head_type(x, rest) = (x, strip_type_(rest)...)
+function strip_type_(trait::Tuple)
+    header, rest... = trait
+    return strip_heade_type(header, rest)
+end
+struct EltypeHashed{P}
+    parent::P
+end
+parent_context(x::EltypeHashed) = x.parent
+hash_method(x, context::EltypeHashed) = strip_type(hash_method(x, parent_context(context)))
+
+# detecting when we can elide struct and element types
+
 has_field_type(methods) = any(x -> x isa FnHash{<:typeof(stable_type_id)}, methods)
 has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
 has_struct_type(methods) = any(x -> x isa StructType{<:Pair{typeof(getfield_)}})
-function stable_hash_helper(x, hash_state, context, methods::Tuple)
+
+has_leaf_eltype(xs, _) = false
+has_leaf_eltype(xs) = has_leaf_eltype(xs, Base.IteratorEltype(xs))
+function has_leaf_eltype(xs, ::Base.HasEltype, ::Type{T} = eltype(xs)) where T 
+    isdispatchtuple(Tuple{T}) && return true
+    return false
+end
+
+# NOTE: if the eltype is elided here, we need to allow for that as wello
+# (so handle the method ambiguities)
+function stable_hash_helper(x, hash_state, context, root::Val{3}, methods::Tuple)
     # optimize away the repeated eltype hash, if possible
-    context = if has_field_type(methods) && has_iterate_type(methods) && strip_eltype(x) &&
+    context = if has_field_type(methods) && has_iterate_type(methods) && has_leaf_eltype(x) &&
         root_version(context) > 2
         EltypeHashed(context)
     else
@@ -586,12 +621,7 @@ function stable_hash_helper(x, hash_state, context, methods::Tuple)
         context
     end
 
-    for method in methods
-        result = stable_hash_helper(x, start_hash!(hash_state), context, method)
-        hash_state = stop_hash!(hash_state, result)
-    end
-
-    return hash_state
+    hash_tuple_trait(x, hash_state, context, methods)
 end
 
 #####
