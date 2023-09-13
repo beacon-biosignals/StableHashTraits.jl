@@ -307,18 +307,34 @@ end
 #####
 
 struct IterateHash end
-function stable_hash_helper(x, hash_state, context, ::IterateHash)
-    return hash_foreach(identity, hash_state, context, x)
+function stable_hash_helper(xs, hash_state, context, ::IterateHash)
+    return hash_foreach(hash_state, context, xs) do x
+        x, hash_method(x, context)
+    end
 end
 
 function hash_foreach(fn, hash_state, context, xs)
+    root_version(context) > 1 && return hash_foreach_new(fn, hash_state, context, xs)
+    return hash_foreach_old(fn, hash_state, context, xs)
+end
+
+function hash_foreach_old(fn, hash_state, context, xs)
     for x in xs
-        f_x = fn(x)
+        f_x, method = fn(x)
         inner_state = start_hash!(hash_state)
-        inner_state = stable_hash_helper(f_x, inner_state, context,
-                                         hash_method(f_x, context))
+        inner_state = stable_hash_helper(f_x, inner_state, context, method)
         hash_state = stop_hash!(hash_state, inner_state)
     end
+    return hash_state
+end
+
+function hash_foreach_new(fn, hash_state, context, xs)
+    inner_state = start_hash!(hash_state)
+    for x in xs
+        f_x, method = fn(x)
+        inner_state = stable_hash_helper(f_x, inner_state, context, method)
+    end
+    hash_state = stop_hash!(hash_state, inner_state)
     return hash_state
 end
 
@@ -342,7 +358,8 @@ sort_(x) = sort(x; by=string)
 function stable_hash_helper(x, hash_state, context, use::StructHash)
     fieldsfn, getfieldfn = use.fnpair
     return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
-        return k => getfieldfn(x, k)
+        pair = k => getfieldfn(x, k)
+        return pair, hash_method(pair, context)
     end
 end
 
@@ -409,12 +426,9 @@ end
 #####
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
-    for method in methods
-        result = stable_hash_helper(x, start_hash!(hash_state), context, method)
-        hash_state = stop_hash!(hash_state, result)
+    return hash_foreach(hash_state, context, methods) do method
+        x, method
     end
-
-    return hash_state
 end
 
 #####
@@ -555,31 +569,31 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     return (FnHash(qualified_type), StructHash(:ByName))
 end
 
-function hash_method(::NamedTuple, ::HashVersion{V}) where {V}
+function hash_method(::NamedTuple, ::HashVersion)
     return (FnHash(qualified_name), StructHash())
 end
-function hash_method(::AbstractRange, ::HashVersion{V}) where {V}
+function hash_method(::AbstractRange, ::HashVersion)
     return (FnHash(qualified_name), StructHash(:ByName))
 end
-function hash_method(::AbstractArray, ::HashVersion{V}) where {V}
+function hash_method(::AbstractArray, ::HashVersion)
     return (FnHash(qualified_name), FnHash(size), IterateHash())
 end
-function hash_method(::AbstractString, ::HashVersion{V}) where {V}
+function hash_method(::AbstractString, ::HashVersion)
     return (FnHash(qualified_name, WriteHash()), WriteHash())
 end
-hash_method(::Symbol, ::HashVersion{V}) where {V} = (ConstantHash(":"), WriteHash())
-function hash_method(::AbstractDict, ::HashVersion{V}) where {V}
+hash_method(::Symbol, ::HashVersion) = (ConstantHash(":"), WriteHash())
+function hash_method(::AbstractDict, ::HashVersion)
     return (FnHash(qualified_name), StructHash(keys => getindex, :ByName))
 end
-hash_method(::Tuple, ::HashVersion{V}) where {V} = (FnHash(qualified_name), IterateHash())
-hash_method(::Pair, ::HashVersion{V}) where {V} = (FnHash(qualified_name), IterateHash())
-function hash_method(::Type, ::HashVersion{V}) where {V}
+hash_method(::Tuple, ::HashVersion) = (FnHash(qualified_name), IterateHash())
+hash_method(::Pair, ::HashVersion) = (FnHash(qualified_name), IterateHash())
+function hash_method(::Type, ::HashVersion)
     return (ConstantHash("Base.DataType"), FnHash(qualified_type))
 end
-function hash_method(::Function, ::HashVersion{V}) where {V}
+function hash_method(::Function, ::HashVersion)
     return (ConstantHash("Base.Function"), FnHash(qualified_name))
 end
-function hash_method(::AbstractSet, ::HashVersion{V}) where {V}
+function hash_method(::AbstractSet, ::HashVersion)
     return (FnHash(qualified_name), FnHash(sort! ∘ collect))
 end
 
