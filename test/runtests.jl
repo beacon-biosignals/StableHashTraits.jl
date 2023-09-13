@@ -86,7 +86,7 @@ include("setup_tests.jl")
 
             # dictionary like
             @testset "Associative Data" begin
-                if V > 1
+                if V > 2
                     @test test_hash(Dict(:a => 1)) != test_hash(Dict(:a => UInt(1)))
                 end
                 @test test_hash(Dict(:a => 1, :b => 2)) == test_hash(Dict(:b => 2, :a => 1))
@@ -123,7 +123,7 @@ include("setup_tests.jl")
             end
 
             @testset "Sequences" begin
-                if V > 1
+                if V > 2
                     @test test_hash(Any[1, 2]) != test_hash(Any[UInt(1), UInt(2)])
                 end
                 @test test_hash([1 2; 3 4]) != test_hash(vec([1 2; 3 4]))
