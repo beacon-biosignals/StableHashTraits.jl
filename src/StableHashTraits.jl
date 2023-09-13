@@ -298,6 +298,7 @@ function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context
 end
 
 function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
+    # @show obj
     write(hash_state.io, obj, context)
     flush_bytes!(hash_state)
     return hash_state
@@ -321,23 +322,45 @@ eltype_(x, ::Base.HasEltype) = eltype(x)
 struct IterateHash end
 function stable_hash_helper(x, hash_state, context, ::IterateHash)
     T = eltype_(x)
-    return hash_foreach(identity, hash_state, context, x, _ -> T)
+    return hash_foreach(identity, hash_state, context, x, T)
 end
 
-elided_hash_method(f_x, context, f_type::Type) = hash_method(f_x, context)
-function elided_hash_method(f_x::T, context::ElideType, ::Type{T}) where {T} 
+elided_hash_method(f_x, context) = hash_method(f_x, context)
+function elided_hash_method(f_x, context::ElideType)
     method = hash_method(f_x, parent_context(context))
     return elide_type(method)
 end
 
-function hash_foreach(fn, hash_state, context, xs, fn_type=_ -> Any)
+function hash_foreach(fn, hash_state, context, xs, fn_type=Any)
+    root_version(context) > 2 && return hash_foreach_new(fn, hash_state, context, xs, fn_type)
+    return hash_foreach_old(fn, hash_state, context, xs)
+end
+
+function hash_foreach_old(fn, hash_state, context, xs)
     for x in xs
         f_x = fn(x)
-        f_type = fn_type(x)
-        inner_state = stable_hash_helper(f_x, start_hash!(hash_state), ignore_elision(context),
-                                         elided_hash_method(f_x, context, f_type))
+        method = hash_method(f_x, context)
+        inner_state = start_hash!(hash_state)
+        inner_state = stable_hash_helper(f_x, inner_state, context, method)
         hash_state = stop_hash!(hash_state, inner_state)
     end
+    return hash_state
+end
+
+function hash_foreach_new(fn, hash_state, context, xs, fn_type=Any)
+    inner_state = start_hash!(hash_state)
+    for x in xs
+        f_x = fn(x)
+        f_type = fn_type isa Function ? fn_type(x) : fn_type
+        method = if f_type == typeof(f_x)
+            elided_hash_method(f_x, context)
+        else
+            hash_method(f_x, context)
+        end
+        inner_context = ignore_elision(context)
+        inner_state = stable_hash_helper(f_x, inner_state, inner_context, method)
+    end
+    hash_state = stop_hash!(hash_state, inner_state)
     return hash_state
 end
 
@@ -349,6 +372,7 @@ struct StructHash{P,S}
     fnpair::P
 end
 fieldnames_(::T) where {T} = fieldnames(T)
+const FieldStructHash = StructHash{<:Pair{<:typeof(fieldnames_),<:Any}}
 function StructHash(sort::Symbol)
     return StructHash(fieldnames_ => getfield, sort)
 end
@@ -365,8 +389,7 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-const FieldStructHash{S} = StructHash{Pair{<:typeof(fieldnames_),S}}
-function stable_hash_helper(x::T, hash_state, context, use::StructHash) where {T}
+function stable_hash_helper(x::T, hash_state, context, use::StructHash{<:Any, S}) where {T, S}
     fieldsfn, getfieldfn = use.fnpair
     if root_version(context) > 1 && use isa FieldStructHash
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
@@ -517,6 +540,11 @@ struct FnHash{F,H}
     result_method::H # if non-nothing, apply to result of `fn`
 end
 FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
+# FnHash defaults to `WriteHash` when writing out type ids, since it is unnecessary and
+# redundant to write out the type id of a type id (which would happen in HashVersion{3}())
+FnHash(fn::typeof(stable_type_id)) = FnHash{typeof(stable_type_id),WriteHash}(fn, WriteHash())
+FnHash(fn::typeof(stable_typename_id)) = FnHash{typeof(stable_typename_id),WriteHash}(fn, WriteHash())
+
 get_value_(x, method::FnHash) = method.fn(x)
 
 struct ConstantHash{T,H}
@@ -573,20 +601,34 @@ has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
 has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
-    context = if has_type_id(methods) && has_iterate_type(methods) &&
-                 root_version(context) > 2
+    root_version(context) > 2 && return tuple_hash_new(x, hash_state, context, methods)
+    return tuple_hash_old(x, hash_state, context, methods)
+end
+
+function tuple_hash_old(x, hash_state, context, methods)
+    for method in methods
+        inner_state = start_hash!(hash_state)
+        inner_state = stable_hash_helper(x, inner_state, context, method)
+        hash_state = stop_hash!(hash_state, inner_state)
+    end
+
+    return hash_state
+end
+
+function tuple_hash_new(x, hash_state, context, methods)
+    context = if has_type_id(methods) && has_iterate_type(methods)
         ElideType(context)
-    elseif has_type_id(methods) && has_struct_type(methods) &&
-           root_version(context) > 2
+    elseif has_type_id(methods) && has_struct_type(methods)
         ElideType(context)
     else
         context
     end
 
+    inner_state = start_hash!(hash_state)
     for method in methods
-        result = stable_hash_helper(x, start_hash!(hash_state), context, method)
-        hash_state = stop_hash!(hash_state, result)
+        innert_state = stable_hash_helper(x, inner_state, context, method)
     end
+    hash_state = stop_hash!(hash_state, inner_state)
 
     return hash_state
 end
@@ -744,8 +786,8 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
     is_implemented(default_method) && return default_method
     if Base.isprimitivetype(T) 
-        root_version(c) < 2 && return WriteHash()
-        return (FnHash(stable_type_id, WriteHash()), WriteHash())
+        root_version(c) < 3 && return WriteHash()
+        return (FnHash(stable_type_id), WriteHash())
     end
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash

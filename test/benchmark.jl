@@ -38,14 +38,16 @@ benchmarks = [(; name="dataframes", a=data1, b=df);
               (; name="tuples", a=data1, b=data2);
               (; name="numbers", a=data, b=data)]
 
-for hashfn in (crc, sha256)
-    hstr = nameof(hashfn)
-    for (; name, a, b) in benchmarks
-        suite["$(name)_$hstr"] = BenchmarkGroup([name])
-        suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
-        suite["$(name)_$hstr"]["trait"] = @benchmarkable $(stable_hash)($b,
-                                                                        HashVersion{2}();
-                                                                        alg=$(hashfn))
+for V in (2, 3)
+    for hashfn in (crc, sha256)
+        hstr = nameof(hashfn)
+        for (; name, a, b) in benchmarks
+            suite["$(name)_$(hstr)_$(V)"] = BenchmarkGroup([name])
+            suite["$(name)_$(hstr)_$(V)"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
+            suite["$(name)_$(hstr)_$(V)"]["trait"] = @benchmarkable $(stable_hash)($b,
+                                                                            HashVersion{V}();
+                                                                            alg=$(hashfn))
+        end
     end
 end
 
@@ -68,7 +70,7 @@ rows = map(collect(keys(result))) do case
     m2 = minimum(result[case]["base"])
     m1 = minimum(result[case]["trait"])
     r1 = ratio(m1, m2)
-    benchmark, hash = split(case, "_")
-    return (; benchmark, hash, base=timestr(m2), trait=timestr(m1), ratio=r1.time)
+    benchmark, hash, version = split(case, "_")
+    return (; version, benchmark, hash, base=timestr(m2), trait=timestr(m1), ratio=r1.time)
 end
-display(sort(DataFrame(rows), [:hash, order(:ratio; rev=true)]))
+display(sort(DataFrame(rows), [:version, :hash, order(:ratio; rev=true)]))
