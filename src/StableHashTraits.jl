@@ -308,18 +308,34 @@ end
 #####
 
 struct IterateHash end
-function stable_hash_helper(x, hash_state, context, ::IterateHash)
-    return hash_foreach(identity, hash_state, context, x)
+function stable_hash_helper(xs, hash_state, context, ::IterateHash)
+    return hash_foreach(hash_state, context, xs) do x
+        x, hash_method(x, context)
+    end
 end
 
 function hash_foreach(fn, hash_state, context, xs)
+    root_version(context) > 1 && return hash_foreach_new(fn, hash_state, context, xs)
+    return hash_foreach_old(fn, hash_state, context, xs)
+end
+
+function hash_foreach_old(fn, hash_state, context, xs)
     for x in xs
-        f_x = fn(x)
+        f_x, method = fn(x)
         inner_state = start_hash!(hash_state)
-        inner_state = stable_hash_helper(f_x, inner_state, context,
-                                         hash_method(f_x, context))
+        inner_state = stable_hash_helper(f_x, inner_state, context, method)
         hash_state = stop_hash!(hash_state, inner_state)
     end
+    return hash_state
+end
+
+function hash_foreach_new(fn, hash_state, context, xs)
+    inner_state = start_hash!(hash_state)
+    for x in xs
+        f_x, method = fn(x)
+        inner_state = stable_hash_helper(f_x, inner_state, context, method)
+    end
+    hash_state = stop_hash!(hash_state, inner_state)
     return hash_state
 end
 
@@ -356,12 +372,14 @@ function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,S}) wh
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
         fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
         hash_state = hash_foreach(hash_state, context, fields) do k
-            return getfieldfn(x, k)
+            val = getfieldfn(x, k)
+            return val, hash_method(val, context)
         end
     else
         return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
-            return k => getfieldfn(x, k)
-        end
+            pair = k => getfieldfn(x, k)
+            return pair, hash_method(pair, context)
+    end
     end
 end
 
@@ -503,12 +521,9 @@ end
 #####
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
-    for method in methods
-        result = stable_hash_helper(x, start_hash!(hash_state), context, method)
-        hash_state = stop_hash!(hash_state, result)
+    return hash_foreach(hash_state, context, methods) do method
+        x, method
     end
-
-    return hash_state
 end
 
 #####
