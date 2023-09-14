@@ -320,26 +320,21 @@ eltype_(_, _) = Any
 eltype_(x, ::Base.HasEltype) = eltype(x)
 
 struct IterateHash end
-function stable_hash_helper(x, hash_state, context, ::IterateHash)
-    T = eltype_(x)
-    return hash_foreach(identity, hash_state, context, x, T)
-end
-
-elided_hash_method(f_x, context) = hash_method(f_x, context)
-function elided_hash_method(f_x, context::ElideType)
-    method = hash_method(f_x, parent_context(context))
-    return elide_type(method)
+function stable_hash_helper(xs, hash_state, context, ::IterateHash)
+    T = eltype_(xs)
+    return hash_foreach(hash_state, context, xs, T) do x
+        return x, hash_method(x, context)
+    end
 end
 
 function hash_foreach(fn, hash_state, context, xs, fn_type=Any)
-    root_version(context) > 2 && return hash_foreach_new(fn, hash_state, context, xs, fn_type)
+    root_version(context) > 1 && return hash_foreach_new(fn, hash_state, context, xs, fn_type)
     return hash_foreach_old(fn, hash_state, context, xs)
 end
 
 function hash_foreach_old(fn, hash_state, context, xs)
     for x in xs
-        f_x = fn(x)
-        method = hash_method(f_x, context)
+        f_x, method = fn(x)
         inner_state = start_hash!(hash_state)
         inner_state = stable_hash_helper(f_x, inner_state, context, method)
         hash_state = stop_hash!(hash_state, inner_state)
@@ -347,23 +342,38 @@ function hash_foreach_old(fn, hash_state, context, xs)
     return hash_state
 end
 
-function hash_foreach_new(fn, hash_state, context, xs, fn_type=Any)
+elide_type(method, context) = method
+elide_type(method, ::ElideType) = elide_type(method)
+
+function hash_foreach_new(fn, hash_state, context, xs, fn_type)
     inner_state = start_hash!(hash_state)
     for x in xs
-        f_x = fn(x)
-        f_type = fn_type isa Function ? fn_type(x) : fn_type
-        method = if f_type == typeof(f_x)
-            elided_hash_method(f_x, context)
-        else
-            hash_method(f_x, context)
-        end
-        inner_context = ignore_elision(context)
-        inner_state = stable_hash_helper(f_x, inner_state, inner_context, method)
+        f_x, method = fn(x)
+        method, context = handle_types(x, f_x, method, context, fn_type)
+        inner_state = stable_hash_helper(f_x, inner_state, context, method)
     end
     hash_state = stop_hash!(hash_state, inner_state)
     return hash_state
 end
 
+handle_types(x, f_x, method, context, ::Nothing) = method, context
+function handle_types(x, f_x, method, context, ::Type{T}) where T
+    method = f_x == T ? elide_type(method, context) : method
+    return method, ignore_elision(context)
+end
+function handle_types(x, f_x, method, context, fn::Function)
+    return handle_types(x, f_x, method, context, fn(x))
+end
+
+function hash_foreach_new(fn, hash_state, context, xs, ::Nothing)
+    inner_state = start_hash!(hash_state)
+    for x in xs
+        f_x, method = fn(x)
+        inner_state = stable_hash_helper(f_x, inner_state, context, method)
+    end
+    hash_state = stop_hash!(hash_state, inner_state)
+    return hash_state
+end
 #####
 ##### StructHash 
 #####
@@ -398,11 +408,13 @@ function stable_hash_helper(x::T, hash_state, context, use::StructHash{<:Any, S}
         hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
                                         WriteHash())
         hash_state = hash_foreach(hash_state, context, fields, k -> fieldtype(T, k)) do k
-            return getfieldfn(x, k)
+            val = getfieldfn(x, k)
+            return val, hash_method(val, context)
         end
     else
         return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
-            return k => getfieldfn(x, k)
+            pair = k => getfieldfn(x, k)
+            return pair, hash_method(pair, context)
         end
     end
 end
@@ -601,21 +613,6 @@ has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
 has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
-    root_version(context) > 2 && return tuple_hash_new(x, hash_state, context, methods)
-    return tuple_hash_old(x, hash_state, context, methods)
-end
-
-function tuple_hash_old(x, hash_state, context, methods)
-    for method in methods
-        inner_state = start_hash!(hash_state)
-        inner_state = stable_hash_helper(x, inner_state, context, method)
-        hash_state = stop_hash!(hash_state, inner_state)
-    end
-
-    return hash_state
-end
-
-function tuple_hash_new(x, hash_state, context, methods)
     context = if has_type_id(methods) && has_iterate_type(methods)
         ElideType(context)
     elseif has_type_id(methods) && has_struct_type(methods)
@@ -624,13 +621,9 @@ function tuple_hash_new(x, hash_state, context, methods)
         context
     end
 
-    inner_state = start_hash!(hash_state)
-    for method in methods
-        innert_state = stable_hash_helper(x, inner_state, context, method)
+    return hash_foreach(hash_state, context, methods, nothing) do method
+        return x, method
     end
-    hash_state = stop_hash!(hash_state, inner_state)
-
-    return hash_state
 end
 
 # In HashVersion{3} we can drop some uses of `FnHash(stable_type_id)`, if the container of
