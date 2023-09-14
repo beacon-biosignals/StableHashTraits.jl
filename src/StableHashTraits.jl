@@ -661,19 +661,20 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     Base.isprimitivetype(T) && return WriteHash()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
-    return (FnHash(typefn_for(c)), StructHash(:ByName))
+    return (TypeHash(c), StructHash(:ByName))
 end
-typenamefn_for(::HashVersion{1}) = qualified_name_
-typenamefn_for(::HashVersion{2}) = stable_typename_id
-typefn_for(::HashVersion{1}) = qualified_type_
-typefn_for(::HashVersion{2}) = stable_type_id
+TypeHash(::HashVersion{1}) = FnHash(qualified_type_)
+TypeHash(::HashVersion) = FnHash(stable_type_id, WriteHash())
+TypeNameHash(::HashVersion{1}) = FnHash(qualified_name)
+# we can use a more conservative id here, we used a shorter one before to avoid hashing long strings
+TypeNameHash(::HashVersion) = FnHash(sable_type_id, WriteHash())
 
-hash_method(::NamedTuple, c::HashVersion) = (FnHash(typenamefn_for(c)), StructHash())
+hash_method(::NamedTuple, c::HashVersion) = (TypeNameHash(c), StructHash())
 function hash_method(::AbstractRange, c::HashVersion)
-    return (FnHash(typenamefn_for(c)), StructHash(:ByName))
+    return (TypeNameHash(c), StructHash(:ByName))
 end
 function hash_method(::AbstractArray, c::HashVersion)
-    return (FnHash(typenamefn_for(c)), FnHash(size), IterateHash())
+    return (TypeNameHash(c), FnHash(size), IterateHash())
 end
 function hash_method(::AbstractString, c::HashVersion)
     return (FnHash(typenamefn_for(c), WriteHash()), WriteHash())
@@ -681,10 +682,10 @@ end
 hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
 hash_method(::Symbol, ::HashVersion) = (ConstantHash(":", WriteHash()), WriteHash())
 function hash_method(::AbstractDict, c::HashVersion)
-    return (FnHash(typenamefn_for(c)), StructHash(keys => getindex, :ByName))
+    return (TypeNameHash(c), StructHash(keys => getindex, :ByName))
 end
-hash_method(::Tuple, c::HashVersion) = (FnHash(typenamefn_for(c)), IterateHash())
-hash_method(::Pair, c::HashVersion) = (FnHash(typenamefn_for(c)), IterateHash())
+hash_method(::Tuple, c::HashVersion) = (TypeNameHash(c), IterateHash())
+hash_method(::Pair, c::HashVersion) = (TypeNameHash(c), IterateHash())
 function hash_method(::Type, c::HashVersion{1})
     return (ConstantHash("Base.DataType"), FnHash(qualified_type_))
 end
@@ -698,7 +699,7 @@ function hash_method(::Function, c::HashVersion)
     return (ConstantHash("Base.Function", WriteHash()), FnHash(stable_typename_id))
 end
 function hash_method(::AbstractSet, c::HashVersion)
-    return (FnHash(typenamefn_for(c)), FnHash(sort! ∘ collect))
+    return (TypeNameHash(c), FnHash(sort! ∘ collect))
 end
 
 #####
