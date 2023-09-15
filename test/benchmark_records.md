@@ -89,6 +89,11 @@ to be that there are some optimizations that can be applied in 1.1 that don't
 apply in the more generalized code in this version, since both HashVersion{2}
 and HashVersion{3} are slower.
 
+It's not clear how worthwhile this change is... it adds a lot of code complexity.
+If the cost were only for `HashVersion{3}` I could see an argument. But at the moment
+it could take a lot of work to fix. A more worthwhile endeavor woudl probably
+be the caching of objects.
+
 ```
 24×6 DataFrame
   Row │ version    benchmark   hash       base        trait       ratio     
