@@ -9,10 +9,10 @@ using SHA: SHA, sha256
 """
     HashVersion{V}()
 
-The default `hash_context` used by `stable_hash`. There are currently two versions
-(1 and 2). Version 2 is far more optimized than 1 and should generally be used in newly 
-written code. Version 1 is the default version, so as to changing the hash computed
-by existing code.
+The default `hash_context` used by `stable_hash`. There are currently three versions (1-3).
+Favor version 3 in all cases. It is far more optimized than 1 and has fewer hash collisions
+than 2. It should generally be used in newly written code. Version 1 is the default version,
+so as to avoid breaking old code.
 
 By explicitly passing this hash version in `stable_hash` you ensure that hash values for 
 these fallback methods will not change even if new fallbacks are defined. 
@@ -298,14 +298,17 @@ function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context
 end
 
 function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
+    # @show obj
     write(hash_state.io, obj, context)
     flush_bytes!(hash_state)
     return hash_state
 end
 
 #####
-##### IterateHash 
+##### Type Elision 
 #####
+
+# Type elision strips a hash method of type-based identifiers of an object
 
 struct ElideType{P}
     parent::P
@@ -313,6 +316,55 @@ end
 parent_context(x::ElideType) = x.parent
 ignore_elision(x) = x
 ignore_elision(x::ElideType) = parent_context(x)
+
+struct ElidedTypeHash end
+
+elide_type(trait) = trait
+elide_type(trait::Tuple{}) = ()
+function elide_type(trait::Tuple)
+    head, rest... = trait
+    return elide_head_type(head, rest)
+end
+
+elide_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = ElidedTypeHash(), rest...
+elide_head_type(x::FnHash{<:typeof(stable_typename_id)}, rest) = ElidedTypeHash(), rest...
+elide_head_type(x, rest) = (x, elide_type_(rest)...)
+
+#####
+##### Tuples 
+#####
+
+# detecting when we can elide struct and element types
+has_type_id(methods) = any(x -> x isa FnHash{<:typeof(stable_type_id)} || x isa ElidedHash, methods)
+has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
+has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
+
+function stable_hash_helper(x, hash_state, context, methods::Tuple)
+    context = if has_type_id(methods) && has_iterate_type(methods)
+        ElideType(context)
+    elseif has_type_id(methods) && has_struct_type(methods)
+        ElideType(context)
+    else
+        context
+    end
+    methods = if first(methods) isa ElidedTypeHash 
+        if length(methods) == 2
+            return stable_hash_helper(x, hash_state, context, methods[2])
+        else
+            _, rest... = methods
+            rest
+        end
+    else
+        methods
+    end
+    return hash_foreach(hash_state, context, methods, nothing) do method
+        return x, method
+    end
+end
+
+#####
+##### IterateHash 
+#####
 
 eltype_(xs) = eltype_(xs, Base.IteratorEltype(xs))
 eltype_(_, _) = Any
@@ -327,7 +379,8 @@ function stable_hash_helper(xs, hash_state, context, ::IterateHash)
 end
 
 function hash_foreach(fn, hash_state, context, xs, fn_type=Any)
-    root_version(context) > 1 && return hash_foreach_new(fn, hash_state, context, xs, fn_type)
+    root_version(context) > 1 && 
+        return hash_foreach_new(fn, hash_state, context, xs, fn_type)
     return hash_foreach_old(fn, hash_state, context, xs)
 end
 
@@ -348,20 +401,19 @@ function hash_foreach_new(fn, hash_state, context, xs, fn_type)
     inner_state = start_hash!(hash_state)
     for x in xs
         f_x, method = fn(x)
-        method, context = handle_types(x, f_x, method, context, fn_type)
-        inner_state = stable_hash_helper(f_x, inner_state, context, method)
+        method, inner_context = handle_type_hashes(x, f_x, method, context, fn_type)
+        inner_state = stable_hash_helper(f_x, inner_state, inner_context, method)
     end
     hash_state = stop_hash!(hash_state, inner_state)
     return hash_state
 end
 
-handle_types(x, f_x, method, context, ::Nothing) = method, context
-function handle_types(x, f_x, method, context, ::Type{T}) where T
-    method = f_x == T ? elide_type(method, context) : method
+handle_type_hashes(x, f_x, method, context, ::Nothing) = method, context
+handle_type_hashes(x, f_x, method, context, ::Type{Any}) = method, context
+function handle_type_hashes(x, f_x, method, context, fn_type)
+    T = fn_type isa Function ? fn_type(x) : fn_type
+    method = typeof(f_x) == T ? elide_type(method, context) : method
     return method, ignore_elision(context)
-end
-function handle_types(x, f_x, method, context, fn::Function)
-    return handle_types(x, f_x, method, context, fn(x))
 end
 
 #####
@@ -394,9 +446,12 @@ function stable_hash_helper(x::T, hash_state, context, use::StructHash{<:Any, S}
     if root_version(context) > 1 && use isa FieldStructHash
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
         fields = S == :ByName ? sorted_field_names(x) : fieldnames(T)
-        # NOTE: hashes the field names at compile time if possible (~x10 speed up)
-        hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
-                                        WriteHash())
+        # do we even need the field names if we know the type of the struct??
+        # if !(root_version(context) > 2 && context isa ElideType)
+            # NOTE: hashes the field names at compile time if possible (~x10 speed up)
+            hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
+                                            WriteHash())
+        # end
         hash_state = hash_foreach(hash_state, context, fields, k -> fieldtype(T, k)) do k
             val = getfieldfn(x, k)
             return val, hash_method(val, context)
@@ -503,7 +558,7 @@ stable_type_id(x) = stable_id_helper(x, Val(:type))
 """
     stable_typefields_id(x)
 
-Returns a 128bit hash that is the same for a given type so long as the set of field names
+Returns a 64 bit hash that is the same for a given type so long as the set of field names
 remains unchanged.
 """
 stable_typefields_id(::Type{T}) where {T} = hash_field_str(T)
@@ -573,69 +628,6 @@ function stable_hash_helper(x, hash_state, context, method::Union{FnHash,Constan
 
     return stable_hash_helper(y, hash_state, context, new_method)
 end
-
-#####
-##### Type Elision 
-#####
-
-# Type elision strips a hash method of type-based identifiers of an object
-
-elide_type(trait) = strip_singleton(elide_type_(trait))
-strip_singleton(x) = x
-strip_singleton(x::Tuple{<:Any}) = x[1]
-elide_type_(trait) = trait
-elide_type_(trait::Tuple{}) = ()
-function elide_type_(trait::Tuple)
-    head, rest... = trait
-    return elide_head_type(head, rest)
-end
-
-elide_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = rest
-elide_head_type(x::FnHash{<:typeof(stable_typename_id)}, rest) = rest
-elide_head_type(x, rest) = (x, elide_type_(rest)...)
-
-#####
-##### Tuples 
-#####
-
-# detecting when we can elide struct and element types
-has_type_id(methods) = any(x -> x isa FnHash{<:typeof(stable_type_id)}, methods)
-has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
-has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
-
-function stable_hash_helper(x, hash_state, context, methods::Tuple)
-    context = if has_type_id(methods) && has_iterate_type(methods)
-        ElideType(context)
-    elseif has_type_id(methods) && has_struct_type(methods)
-        ElideType(context)
-    else
-        context
-    end
-
-    return hash_foreach(hash_state, context, methods, nothing) do method
-        return x, method
-    end
-end
-
-# In HashVersion{3} we can drop some uses of `FnHash(stable_type_id)`, if the container of
-# that object uses `FnHash(stable_type_id)`.
-
-# struct type elision
-
-# function hash_field(x, fields, hash_state, context)
-#     for field in fields
-#         val = getfield(x, field)
-#         T = fieldtype(x, field)
-#         method = hash_method(x, context)
-#         method = isdispatchtuple(Tuple{T}) ? elide_type(method) : method
-
-#     inner_state = start_hash!(inner_state)
-#     inner_state = stable_hash_helper(val, inner_state, context, method)
-#     hash_state = stop_hash!(hash_state, inner_state)
-#     return hash_field(x, fields, hash_state, context)
-# end
-
-# iterator type elision
 
 #####
 ##### HashAndContext 
@@ -739,14 +731,13 @@ end
 """
     StableHashTraits.root_version(context)
 
-Return the version of the root context: an integer in the range (1, 2). The default
-fallback method value returns 1. 
+Return the version of the root context: an integer in the range 1-3. The default fallback
+method value returns 1. 
 
-In almost all cases, a root hash context should return 2. The optimizations used in
-HashVersion{2} include a number of changes to the hash-trait implementations that do not
-alter the documented behavior but do change the actual hash value returned because of how
-and when elements get hashed. 
-
+In almost all cases, a root hash context should return 3, since it is the latest version.
+The optimizations used in hash versions often include a number of changes to the hash-trait
+implementations that do not alter the documented behavior but do change the actual hash
+value returned because of how and when elements get hashed. 
 """
 root_version(x::Nothing) = 1
 root_version(x) = root_version(parent_context(x))

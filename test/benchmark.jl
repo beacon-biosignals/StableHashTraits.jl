@@ -45,7 +45,7 @@ for V in (2, 3)
             suite["$(name)_$(hstr)_$(V)"] = BenchmarkGroup([name])
             suite["$(name)_$(hstr)_$(V)"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
             suite["$(name)_$(hstr)_$(V)"]["trait"] = @benchmarkable $(stable_hash)($b,
-                                                                            HashVersion{V}();
+                                                                            HashVersion{$V}();
                                                                             alg=$(hashfn))
         end
     end

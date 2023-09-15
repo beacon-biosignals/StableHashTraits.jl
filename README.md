@@ -98,7 +98,8 @@ This release introduces a new hash context that reduces hash collisions.
 - `HashVersion{3}` avoids more hash collisions, by ensuring that the type of
   primitive types is encoded in the hashed data. It has a minor cost in speed
   relative to HashVersion{3}.
-- Favor version 3 over 2 in all cases.
+- Favor version 3 over 2 in all cases; though there is a small cost in speed,
+both versions 2 and 3 pay this cost.
 
 ### In 1.1
 
