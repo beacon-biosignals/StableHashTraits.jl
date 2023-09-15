@@ -192,20 +192,21 @@ include("setup_tests.jl")
                 @test test_hash(TestType(1, 2)) != test_hash(TestType4(2, 1))
                 @test_throws ArgumentError test_hash(BadHashMethod())
             end
-
-            @testset "Deprecations" begin
-                @test (@test_deprecated(r"`parent_context`",
-                                        test_hash([1, 2], MyOldContext()))) !=
-                      test_hash([1, 2])
-                @test (@test_deprecated(r"`parent_context`",
-                                        test_hash("12", MyOldContext()))) ==
-                      test_hash("12", HashVersion{1}())
-                @test_deprecated(UseProperties(:ByName))
-                @test_deprecated(UseQualifiedName())
-                @test_deprecated(UseSize(UseIterate()))
-                @test_deprecated(UseTable())
-            end
         end
+    end
+    @testset "Deprecations" begin
+        @test (@test_deprecated(r"`parent_context`",
+                                stable_hash([1, 2], MyOldContext()))) !=
+              stable_hash([1, 2], HashVersion{1}())
+        @test (@test_deprecated(r"`parent_context`",
+                                stable_hash("12", MyOldContext()))) ==
+              stable_hash("12", HashVersion{1}())
+        @test_deprecated(HashVersion{1}())
+        @test_deprecated(HashVersion{2}())
+        @test_deprecated(UseProperties(:ByName))
+        @test_deprecated(UseQualifiedName())
+        @test_deprecated(UseSize(UseIterate()))
+        @test_deprecated(UseTable())
     end
 end
 

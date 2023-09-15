@@ -19,7 +19,7 @@ these fallback methods will not change even if new fallbacks are defined.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
-        V == 1 && Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in " *
+        V < 3 && Base.depwarn("HashVersion{$V} is deprecated, favor `HashVersion{3}` in " *
                                "all cases where backwards compatible hash values are not " *
                                "required.", :HashVersion)
         return new{V}()
@@ -376,22 +376,18 @@ has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
 has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
-    context = if has_type_id(methods) && has_iterate_type(methods)
-        ElideType(context)
-    elseif has_type_id(methods) && has_struct_type(methods)
-        ElideType(context)
-    else
-        context
-    end
-    methods = if first(methods) isa ElidedTypeHash 
-        if length(methods) == 2
-            return stable_hash_helper(x, hash_state, context, methods[2])
-        else
-            _, rest... = methods
-            rest
+    if root_version(context) > 2
+        if has_type_id(methods) && (has_iterate_type(methods) || has_struct_type(methods))
+            context = ElideType(context)
         end
-    else
-        methods
+        if first(methods) isa ElidedTypeHash 
+            if length(methods) == 2
+                return stable_hash_helper(x, hash_state, context, methods[2])
+            else
+                _, rest... = methods
+                methods = rest
+            end
+        end
     end
     return hash_foreach(hash_state, context, methods, nothing) do method
         return x, method
