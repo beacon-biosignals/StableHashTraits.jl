@@ -298,7 +298,6 @@ function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context
 end
 
 function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
-    # @show obj
     write(hash_state.io, obj, context)
     flush_bytes!(hash_state)
     return hash_state
@@ -365,15 +364,6 @@ function handle_types(x, f_x, method, context, fn::Function)
     return handle_types(x, f_x, method, context, fn(x))
 end
 
-function hash_foreach_new(fn, hash_state, context, xs, ::Nothing)
-    inner_state = start_hash!(hash_state)
-    for x in xs
-        f_x, method = fn(x)
-        inner_state = stable_hash_helper(f_x, inner_state, context, method)
-    end
-    hash_state = stop_hash!(hash_state, inner_state)
-    return hash_state
-end
 #####
 ##### StructHash 
 #####
@@ -552,6 +542,7 @@ struct FnHash{F,H}
     result_method::H # if non-nothing, apply to result of `fn`
 end
 FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
+
 # FnHash defaults to `WriteHash` when writing out type ids, since it is unnecessary and
 # redundant to write out the type id of a type id (which would happen in HashVersion{3}())
 FnHash(fn::typeof(stable_type_id)) = FnHash{typeof(stable_type_id),WriteHash}(fn, WriteHash())
@@ -675,7 +666,7 @@ StableHashTraits.hash_method(::Number, ::EndianInvariant) = FnHash(htol, WriteHa
 StableHashTraits.hash_method(::CrossPlatformData) = HashAndContext(IterateHash(), EndianInvariant)
 ```
 
-Note that we could accomplish this same behavior using `HashFn(x -> htol.(x.data))`, but it
+Note that we could accomplish this same behavior using `FnHash(x -> htol.(x.data))`, but it
 would require copying that data to do so.
 """
 struct HashAndContext{F,M}
