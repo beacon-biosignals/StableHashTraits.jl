@@ -305,6 +305,42 @@ function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
 end
 
 #####
+##### FnHash 
+#####
+
+struct FnHash{F,H}
+    fn::F
+    result_method::H # if non-nothing, apply to result of `fn`
+end
+FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
+
+get_value_(x, method::FnHash) = method.fn(x)
+
+struct ConstantHash{T,H}
+    constant::T
+    result_method::H # if non-nothing, apply to value `constant`
+end
+ConstantHash(val) = ConstantHash{typeof(val),Nothing}(val, nothing)
+get_value_(x, method::ConstantHash) = method.constant
+
+function stable_hash_helper(x, hash_state, context, method::Union{FnHash,ConstantHash})
+    context = ignore_elision(context)
+
+    y = get_value_(x, method)
+    new_method = @something(method.result_method, hash_method(y, context))
+    if typeof(x) == typeof(y) && method == new_method
+        methodstr = nameof(typeof(method))
+        msg = """`$methodstr` is incorrectly called inside 
+              `hash_method(::$(typeof(x)), ::$(typeof(context))). Applying
+              it would lead to infinite recursion. This can usually be
+              fixed by passing a second argument to `$methodstr`."""
+        throw(ArgumentError(replace(msg, r"\s+" => " ")))
+    end
+
+    return stable_hash_helper(y, hash_state, context, new_method)
+end
+
+#####
 ##### Type Elision 
 #####
 
@@ -326,16 +362,16 @@ function elide_type(trait::Tuple)
     return elide_head_type(head, rest)
 end
 
+function stable_type_id end
 elide_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = ElidedTypeHash(), rest...
-elide_head_type(x::FnHash{<:typeof(stable_typename_id)}, rest) = ElidedTypeHash(), rest...
-elide_head_type(x, rest) = (x, elide_type_(rest)...)
+elide_head_type(x, rest) = (x, elide_type(rest)...)
 
 #####
 ##### Tuples 
 #####
 
 # detecting when we can elide struct and element types
-has_type_id(methods) = any(x -> x isa FnHash{<:typeof(stable_type_id)} || x isa ElidedHash, methods)
+has_type_id(methods) = any(x -> x isa FnHash{<:typeof(stable_type_id)} || x isa ElidedTypeHash, methods)
 has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
 has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
 
@@ -589,47 +625,6 @@ function validate_name(str)
 end
 
 #####
-##### FnHash 
-#####
-
-struct FnHash{F,H}
-    fn::F
-    result_method::H # if non-nothing, apply to result of `fn`
-end
-FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
-
-# FnHash defaults to `WriteHash` when writing out type ids, since it is unnecessary and
-# redundant to write out the type id of a type id (which would happen in HashVersion{3}())
-FnHash(fn::typeof(stable_type_id)) = FnHash{typeof(stable_type_id),WriteHash}(fn, WriteHash())
-FnHash(fn::typeof(stable_typename_id)) = FnHash{typeof(stable_typename_id),WriteHash}(fn, WriteHash())
-
-get_value_(x, method::FnHash) = method.fn(x)
-
-struct ConstantHash{T,H}
-    constant::T
-    result_method::H # if non-nothing, apply to value `constant`
-end
-ConstantHash(val) = ConstantHash{typeof(val),Nothing}(val, nothing)
-get_value_(x, method::ConstantHash) = method.constant
-
-function stable_hash_helper(x, hash_state, context, method::Union{FnHash,ConstantHash})
-    context = ignore_elision(context)
-
-    y = get_value_(x, method)
-    new_method = @something(method.result_method, hash_method(y, context))
-    if typeof(x) == typeof(y) && method == new_method
-        methodstr = nameof(typeof(method))
-        msg = """`$methodstr` is incorrectly called inside 
-              `hash_method(::$(typeof(x)), ::$(typeof(context))). Applying
-              it would lead to infinite recursion. This can usually be
-              fixed by passing a second argument to `$methodstr`."""
-        throw(ArgumentError(replace(msg, r"\s+" => " ")))
-    end
-
-    return stable_hash_helper(y, hash_state, context, new_method)
-end
-
-#####
 ##### HashAndContext 
 #####
 
@@ -762,7 +757,7 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     is_implemented(default_method) && return default_method
     if Base.isprimitivetype(T) 
         root_version(c) < 3 && return WriteHash()
-        return (FnHash(stable_type_id), WriteHash())
+        return (FnHash(stable_type_id, WriteHash()), WriteHash())
     end
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
