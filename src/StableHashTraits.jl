@@ -304,24 +304,94 @@ function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
 end
 
 #####
+##### FnHash 
+#####
+
+struct FnHash{F,H}
+    fn::F
+    result_method::H # if non-nothing, apply to result of `fn`
+end
+FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
+get_value_(x, method::FnHash) = method.fn(x)
+
+struct ConstantHash{T,H}
+    constant::T
+    result_method::H # if non-nothing, apply to value `constant`
+end
+ConstantHash(val) = ConstantHash{typeof(val),Nothing}(val, nothing)
+get_value_(x, method::ConstantHash) = method.constant
+
+function stable_hash_helper(x, hash_state, context, method::Union{FnHash,ConstantHash})
+    y = get_value_(x, method)
+    new_method = @something(method.result_method, hash_method(y, context))
+    if typeof(x) == typeof(y) && method == new_method
+        methodstr = nameof(typeof(method))
+        msg = """`$methodstr` is incorrectly called inside 
+              `hash_method(::$(typeof(x)), ::$(typeof(context))). Applying
+              it would lead to infinite recursion. This can usually be
+              fixed by passing a second argument to `$methodstr`."""
+        throw(ArgumentError(replace(msg, r"\s+" => " ")))
+    end
+
+    return stable_hash_helper(y, hash_state, context, new_method)
+end
+
+#####
+##### Type Elision 
+#####
+
+# Type elision strips a hash method of type-based identifiers of an object
+
+struct ElideType{P}
+    parent::P
+end
+parent_context(x::ElideType) = x.parent
+ignore_elision(x) = x
+ignore_elision(x::ElideType) = parent_context(x)
+
+struct ElidedTypeHash end
+
+elide_type(trait) = trait
+elide_type(trait::Tuple{}) = ()
+function elide_type(trait::Tuple)
+    head, rest... = trait
+    return elide_head_type(head, rest)
+end
+
+function stable_type_id end
+elide_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = ElidedTypeHash(), rest...
+elide_head_type(x, rest) = (x, elide_type(rest)...)
+
+#####
 ##### IterateHash 
 #####
 
+eltype_(xs) = eltype_(xs, Base.IteratorEltype(xs))
+eltype_(_, _) = Any
+eltype_(x, ::Base.HasEltype) = eltype(x)
+
 struct IterateHash end
 function stable_hash_helper(xs, hash_state, context, ::IterateHash)
-    return hash_foreach(hash_state, context, xs) do x
-        x, hash_method(x, context)
+    if isdispatchtuple(Tuple{eltype_(xs)}) && context isa ElideType &&
+        root_version(context) > 2
+        return hash_foreach(hash_state, context, xs) do x
+            x, elide_type(hash_method(x, context)), ignore_elision(context)
+        end
+    else
+        return hash_foreach(hash_state, context, xs) do x
+            x, hash_method(x, context), context
+        end
     end
 end
 
-function hash_foreach(fn, hash_state, context, xs)
+function hash_foreach(fn, hash_state, xs)
     root_version(context) > 1 && return hash_foreach_new(fn, hash_state, context, xs)
-    return hash_foreach_old(fn, hash_state, context, xs)
+    return hash_foreach_old(fn, hash_state, xs)
 end
 
-function hash_foreach_old(fn, hash_state, context, xs)
+function hash_foreach_old(fn, hash_state, xs)
     for x in xs
-        f_x, method = fn(x)
+        f_x, method, context = fn(x)
         inner_state = start_hash!(hash_state)
         inner_state = stable_hash_helper(f_x, inner_state, context, method)
         hash_state = stop_hash!(hash_state, inner_state)
@@ -329,10 +399,10 @@ function hash_foreach_old(fn, hash_state, context, xs)
     return hash_state
 end
 
-function hash_foreach_new(fn, hash_state, context, xs)
+function hash_foreach_new(fn, hash_state, xs)
     inner_state = start_hash!(hash_state)
     for x in xs
-        f_x, method = fn(x)
+        f_x, method, context = fn(x)
         inner_state = stable_hash_helper(f_x, inner_state, context, method)
     end
     hash_state = stop_hash!(hash_state, inner_state)
@@ -350,6 +420,7 @@ fieldnames_(::T) where {T} = fieldnames(T)
 function StructHash(sort::Symbol)
     return StructHash(fieldnames_ => getfield, sort)
 end
+const FieldStructHash = StructHash{<:Pair{<:typeof(fieldnames_),<:Any}}
 function StructHash(fnpair::Pair=fieldnames_ => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return StructHash{typeof(fnpair),by}(fnpair)
@@ -371,14 +442,14 @@ function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,S}) wh
                                         WriteHash())
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
         fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
-        hash_state = hash_foreach(hash_state, context, fields) do k
+        hash_state = hash_foreach(hash_state, fields) do k
             val = getfieldfn(x, k)
-            return val, hash_method(val, context)
+            return val, hash_method(val, context), context
         end
     else
-        return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
+        return hash_foreach(hash_state, orderfields(use, fieldsfn(x))) do k
             pair = k => getfieldfn(x, k)
-            return pair, hash_method(pair, context)
+            return pair, hash_method(pair, context), context
     end
     end
 end
@@ -484,45 +555,36 @@ function validate_name(str)
 end
 
 #####
-##### FnHash 
-#####
-
-struct FnHash{F,H}
-    fn::F
-    result_method::H # if non-nothing, apply to result of `fn`
-end
-FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
-get_value_(x, method::FnHash) = method.fn(x)
-
-struct ConstantHash{T,H}
-    constant::T
-    result_method::H # if non-nothing, apply to value `constant`
-end
-ConstantHash(val) = ConstantHash{typeof(val),Nothing}(val, nothing)
-get_value_(x, method::ConstantHash) = method.constant
-
-function stable_hash_helper(x, hash_state, context, method::Union{FnHash,ConstantHash})
-    y = get_value_(x, method)
-    new_method = @something(method.result_method, hash_method(y, context))
-    if typeof(x) == typeof(y) && method == new_method
-        methodstr = nameof(typeof(method))
-        msg = """`$methodstr` is incorrectly called inside 
-              `hash_method(::$(typeof(x)), ::$(typeof(context))). Applying
-              it would lead to infinite recursion. This can usually be
-              fixed by passing a second argument to `$methodstr`."""
-        throw(ArgumentError(replace(msg, r"\s+" => " ")))
-    end
-
-    return stable_hash_helper(y, hash_state, context, new_method)
-end
-
-#####
 ##### Tuples 
 #####
 
+# detecting when we can elide struct and element types
+has_type_id(methods) = any(x -> x isa FnHash{<:typeof(stable_type_id)} || x isa ElidedTypeHash, methods)
+has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
+has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
+
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
-    return hash_foreach(hash_state, context, methods) do method
-        x, method
+    if root_version(context) > 2
+        if has_type_id(methods) && (has_iterate_type(methods) || has_struct_type(methods))
+            context = ElideType(context)
+        end
+        if first(methods) isa ElidedTypeHash 
+            if length(methods) == 2
+                return stable_hash_helper(x, hash_state, context, methods[2])
+            else
+                _, rest... = methods
+                methods = rest
+            end
+    end
+    end
+
+    return stable_hash_helper(y, hash_state, context, new_method)
+        end
+
+    return stable_hash_helper(y, hash_state, context, new_method)
+    end
+    return hash_foreach(hash_state, methods) do method
+        return x, method, context
     end
 end
 

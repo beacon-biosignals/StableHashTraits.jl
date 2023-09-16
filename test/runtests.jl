@@ -26,7 +26,7 @@ include("setup_tests.jl")
         @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
     end
 
-    for V in (1, 2), hashfn in (sha256, sha1, crc)
+    for V in (1, 2, 3), hashfn in (sha256, sha1, crc)
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
             test_hash(x, c=ctx) = stable_hash(x, c; alg=hashfn)
