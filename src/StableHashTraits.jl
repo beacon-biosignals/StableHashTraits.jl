@@ -49,6 +49,7 @@ third argument to [`StableHashTraits.write`](@ref)
 """
 function stable_hash(x, context=HashVersion{1}(); alg=sha256)
     return compute_hash!(stable_hash_helper(x, setup_hash_state(alg, context), context,
+                                            Val(root_version(context)), 
                                             hash_method(x, context)))
 end
 
@@ -88,13 +89,13 @@ hash_method(_) = NotImplemented()
 is_implemented(::NotImplemented) = false
 is_implemented(_) = true
 
-function stable_hash_helper(x, hash_state, context, method::NotImplemented)
+function stable_hash_helper(x, hash_state, context, root, method::NotImplemented)
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects" *
                         " of type `$(typeof(x))` in context of type `$(typeof(context))`."))
     return nothing
 end
 
-function stable_hash_helper(x, hash_state, context, method)
+function stable_hash_helper(x, hash_state, context, root, method)
     throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when " *
                         "hashing object $x. The implementation of `hash_method` for this " *
                         "object is invalid."))
@@ -284,7 +285,7 @@ See also: [`StableHashTraits.hash_method`](@ref).
 write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
 
-function stable_hash_helper(x, hash_state, context, ::WriteHash)
+function stable_hash_helper(x, hash_state, context, root, ::WriteHash)
     io = IOBuffer()
     write(io, x, context)
     return update_hash!(hash_state, take!(io))
@@ -293,11 +294,11 @@ end
 # with a buffered hash, we don't need to create a new IOBuffer
 # just use the one we've already allocated
 function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context,
-                            c::WriteHash)
-    return MarkerHash(stable_hash_helper(obj, hash_state.hash, context, c))
+                            root, c::WriteHash)
+    return MarkerHash(stable_hash_helper(obj, hash_state.hash, context, root, c))
 end
 
-function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
+function stable_hash_helper(obj, hash_state::BufferedHash, context, root, ::WriteHash)
     write(hash_state.io, obj, context)
     flush_bytes!(hash_state)
     return hash_state
@@ -321,7 +322,7 @@ end
 ConstantHash(val) = ConstantHash{typeof(val),Nothing}(val, nothing)
 get_value_(x, method::ConstantHash) = method.constant
 
-function stable_hash_helper(x, hash_state, context, method::Union{FnHash,ConstantHash})
+function stable_hash_helper(x, hash_state, context, root, method::Union{FnHash,ConstantHash})
     y = get_value_(x, method)
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method
@@ -333,7 +334,7 @@ function stable_hash_helper(x, hash_state, context, method::Union{FnHash,Constan
         throw(ArgumentError(replace(msg, r"\s+" => " ")))
     end
 
-    return stable_hash_helper(y, hash_state, context, new_method)
+    return stable_hash_helper(y, hash_state, context, root, new_method)
 end
 
 #####
@@ -371,39 +372,34 @@ eltype_(_, _) = Any
 eltype_(x, ::Base.HasEltype) = eltype(x)
 
 struct IterateHash end
-function stable_hash_helper(xs, hash_state, context, ::IterateHash)
+function stable_hash_helper(xs, hash_state, context, root, ::IterateHash)
     if isdispatchtuple(Tuple{eltype_(xs)}) && context isa ElideType &&
-        root_version(context) > 2
-        return hash_foreach(hash_state, context, xs) do x
+       !(root isa Union{Val{1}, Val{2}})
+        return hash_foreach(hash_state, root, xs) do x
             x, elide_type(hash_method(x, context)), ignore_elision(context)
         end
     else
-        return hash_foreach(hash_state, context, xs) do x
+        return hash_foreach(hash_state, root, xs) do x
             x, hash_method(x, context), context
         end
     end
 end
 
-function hash_foreach(fn, hash_state, xs)
-    root_version(context) > 1 && return hash_foreach_new(fn, hash_state, context, xs)
-    return hash_foreach_old(fn, hash_state, xs)
-end
-
-function hash_foreach_old(fn, hash_state, xs)
+function hash_foreach(fn, hash_state, root::Val{1}, xs)
     for x in xs
         f_x, method, context = fn(x)
         inner_state = start_hash!(hash_state)
-        inner_state = stable_hash_helper(f_x, inner_state, context, method)
+        inner_state = stable_hash_helper(f_x, inner_state, context, root, method)
         hash_state = stop_hash!(hash_state, inner_state)
     end
     return hash_state
 end
 
-function hash_foreach_new(fn, hash_state, xs)
+function hash_foreach(fn, hash_state, root, xs)
     inner_state = start_hash!(hash_state)
     for x in xs
         f_x, method, context = fn(x)
-        inner_state = stable_hash_helper(f_x, inner_state, context, method)
+        inner_state = stable_hash_helper(f_x, inner_state, context, root, method)
     end
     hash_state = stop_hash!(hash_state, inner_state)
     return hash_state
@@ -434,20 +430,20 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,S}) where {S}
+function stable_hash_helper(x, hash_state, context, root, use::StructHash{<:Any,S}) where {S}
     fieldsfn, getfieldfn = use.fnpair
-    if root_version(context) > 1 && fieldsfn isa typeof(fieldnames_)
+    if !(root isa Val{1}) && fieldsfn isa typeof(fieldnames_)
         # NOTE: hashes the field names at compile time if possible (~x10 speed up)
         hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
-                                        WriteHash())
+                                        root, WriteHash())
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
         fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
-        hash_state = hash_foreach(hash_state, fields) do k
+        hash_state = hash_foreach(hash_state, root, fields) do k
             val = getfieldfn(x, k)
             return val, hash_method(val, context), context
         end
     else
-        return hash_foreach(hash_state, orderfields(use, fieldsfn(x))) do k
+        return hash_foreach(hash_state, root, orderfields(use, fieldsfn(x))) do k
             pair = k => getfieldfn(x, k)
             return pair, hash_method(pair, context), context
     end
@@ -563,27 +559,26 @@ has_type_id(methods) = any(x -> x isa FnHash{<:typeof(stable_type_id)} || x isa 
 has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
 has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
 
-function stable_hash_helper(x, hash_state, context, methods::Tuple)
-    if root_version(context) > 2
-        if has_type_id(methods) && (has_iterate_type(methods) || has_struct_type(methods))
-            context = ElideType(context)
-        end
-        if first(methods) isa ElidedTypeHash 
-            if length(methods) == 2
-                return stable_hash_helper(x, hash_state, context, methods[2])
-            else
-                _, rest... = methods
-                methods = rest
-            end
+function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
+    if has_type_id(methods) && (has_iterate_type(methods) || has_struct_type(methods))
+        context = ElideType(context)
     end
+    if first(methods) isa ElidedTypeHash 
+        if length(methods) == 2
+            return stable_hash_helper(x, hash_state, context, root, methods[2])
+        else
+            _, rest... = methods
+            methods = rest
+        end
     end
 
-    return stable_hash_helper(y, hash_state, context, new_method)
-        end
-
-    return stable_hash_helper(y, hash_state, context, new_method)
+    return hash_foreach(hash_state, root, methods) do method
+        return x, method, context
     end
-    return hash_foreach(hash_state, methods) do method
+end
+
+function stable_hash_helper(x, hash_state, context, root::Union{Val{1}, Val{2}}, methods::Tuple)
+    return hash_foreach(hash_state, root, methods) do method
         return x, method, context
     end
 end
@@ -624,8 +619,8 @@ struct HashAndContext{F,M}
     parent::M
     contextfn::F
 end
-function stable_hash_helper(x, hash_state, context, method::HashAndContext)
-    return stable_hash_helper(x, hash_state, method.contextfn(context), method.parent)
+function stable_hash_helper(x, hash_state, context, root, method::HashAndContext)
+    return stable_hash_helper(x, hash_state, method.contextfn(context), root, method.parent)
 end
 
 #####
@@ -720,7 +715,12 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # arguments.
     default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
     is_implemented(default_method) && return default_method
-    Base.isprimitivetype(T) && return WriteHash()
+    if Base.isprimitivetype(T) 
+        if V < 3
+            return WriteHash()
+        end
+        return (TypeHash(c), WriteHash())
+    end
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
     return (TypeHash(c), StructHash(:ByName))
@@ -738,14 +738,14 @@ end
 function hash_method(::AbstractArray, c::HashVersion)
     return (TypeNameHash(c), FnHash(size), IterateHash())
 end
-function hash_method(::AbstractString, c::HashVersion)
-    return (FnHash(root_version(c) > 1 ? stable_type_id : qualified_name, WriteHash()), 
+function hash_method(::AbstractString, c::HashVersion{V}) where V
+    return (FnHash(V > 1 ? stable_type_id : qualified_name, WriteHash()), 
             WriteHash())
 end
 hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
 hash_method(::Symbol, ::HashVersion) = (ConstantHash(":", WriteHash()), WriteHash())
-function hash_method(::AbstractDict, c::HashVersion)
-    return (root_version(c) < 2 ? FnHash(qualified_name_) :
+function hash_method(::AbstractDict, c::HashVersion{V}) where V
+    return (V < 2 ? FnHash(qualified_name_) :
             FnHash(stable_typename_id, WriteHash()),
             StructHash(keys => getindex, :ByName))
 end
