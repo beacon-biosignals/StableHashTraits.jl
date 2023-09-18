@@ -9,17 +9,17 @@ using SHA: SHA, sha256
 """
     HashVersion{V}()
 
-The default `hash_context` used by `stable_hash`. There are currently two versions
-(1 and 2). Version 2 is far more optimized than 1 and should generally be used in newly 
-written code. Version 1 is the default version, so as to changing the hash computed
-by existing code.
+The default `hash_context` used by `stable_hash`. There are currently three versions
+(1-3). Unless you are aiming for backwards compatibility with an existing code base
+it is recommended that you use the latest version, as it is fast and avoids
+more hash collisions.
 
 By explicitly passing this hash version in `stable_hash` you ensure that hash values for 
 these fallback methods will not change even if new fallbacks are defined. 
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
-        V == 1 && Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in " *
+        V < 3 && Base.depwarn("HashVersion{V} with V < 2 is deprecated, favor `HashVersion{3}` in " *
                                "all cases where backwards compatible hash values are not " *
                                "required.", :HashVersion)
         return new{V}()
@@ -34,10 +34,11 @@ intended to remain unchanged across julia versions. How each object is hashed is
 by [`hash_method`](@ref), which aims to have sensible fallbacks.
 
 To ensure the greatest stability, you should explicitly pass the context object. It is also
-best to pass an explicit version, since `HashVersion{2}` is generally faster than
-`HashVersion{1}`. If the fallback methods change in a future release, the hash you get
-by passing an explicit `HashVersion{N}` should *not* change. (Note that the number in
-`HashVersion` does not necessarily match the package version of `StableHashTraits`).
+best to pass an explicit version, since `HashVersion{3}` is generally faster and has fewer
+hash collisions, it is the recommended version. If the fallback methods change in a future
+release, the hash you get by passing an explicit `HashVersion{N}` should *not* change. (Note
+that the number in `HashVersion` does not necessarily match the package version of
+`StableHashTraits`).
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
@@ -373,8 +374,10 @@ eltype_(x, ::Base.HasEltype) = eltype(x)
 
 struct IterateHash end
 function stable_hash_helper(xs, hash_state, context, root, ::IterateHash)
-    if isdispatchtuple(Tuple{eltype_(xs)}) && context isa ElideType &&
-       !(root isa Union{Val{1}, Val{2}})
+    if !(root isa Union{Val{1}, Val{2}}) &&
+       context isa ElideType && 
+       (isdispatchtuple(typeof(xs)) || isdispatchtuple(Tuple{eltype_(xs)}))
+       
         return hash_foreach(hash_state, root, xs) do x
             x, elide_type(hash_method(x, context)), ignore_elision(context)
         end
@@ -430,7 +433,8 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-function stable_hash_helper(x, hash_state, context, root, use::StructHash{<:Any,S}) where {S}
+function stable_hash_helper(x::T, hash_state, context, root,
+                            use::StructHash{<:Any,S}) where {T,S}
     fieldsfn, getfieldfn = use.fnpair
     if !(root isa Val{1}) && fieldsfn isa typeof(fieldnames_)
         # NOTE: hashes the field names at compile time if possible (~x10 speed up)
@@ -438,15 +442,27 @@ function stable_hash_helper(x, hash_state, context, root, use::StructHash{<:Any,
                                         root, WriteHash())
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
         fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
-        hash_state = hash_foreach(hash_state, root, fields) do k
-            val = getfieldfn(x, k)
-            return val, hash_method(val, context), context
+        if !(root isa Val{2}) && getfieldfn isa typeof(getfield)
+            return hash_foreach(hash_state, root, fields) do k
+                val = getfield(x, k)
+                if isdispatchtuple(Tuple{fieldtype(T, k)})
+                    return val, elide_type(hash_method(val, context)),
+                           ignore_elision(context)
+                else
+                    return val, hash_method(val, context), ignore_elision(context)
+                end
+            end
+        else
+            return hash_foreach(hash_state, root, fields) do k
+                val = getfieldfn(x, k)
+                return val, hash_method(val, context), context
+            end
         end
     else
         return hash_foreach(hash_state, root, orderfields(use, fieldsfn(x))) do k
             pair = k => getfieldfn(x, k)
             return pair, hash_method(pair, context), context
-    end
+        end
     end
 end
 
@@ -526,7 +542,7 @@ stable_type_id(x) = stable_id_helper(x, Val(:type))
 """
     stable_typefields_id(x)
 
-Returns a 128bit hash that is the same for a given type so long as the set of field names
+Returns a 64 bit hash that is the same for a given type so long as the set of field names
 remains unchanged.
 """
 stable_typefields_id(::Type{T}) where {T} = hash_field_str(T)
@@ -561,19 +577,26 @@ has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
 
 function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
     if has_type_id(methods) && (has_iterate_type(methods) || has_struct_type(methods))
-        context = ElideType(context)
+        return tuple_hash_helper(x, hash_state, ElideType(context), root, methods)
+    else
+        return tuple_hash_helper(x, hash_state, context, root, methods)
     end
+end
+
+function tuple_hash_helper(x, hash_state, context, root, methods)
     if first(methods) isa ElidedTypeHash 
         if length(methods) == 2
             return stable_hash_helper(x, hash_state, context, root, methods[2])
         else
             _, rest... = methods
-            methods = rest
+            return hash_foreach(hash_state, root, rest) do method
+                return x, method, context
+            end
         end
-    end
-
-    return hash_foreach(hash_state, root, methods) do method
-        return x, method, context
+    else
+        return hash_foreach(hash_state, root, methods) do method
+            return x, method, context
+        end
     end
 end
 
@@ -716,9 +739,7 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
     is_implemented(default_method) && return default_method
     if Base.isprimitivetype(T) 
-        if V < 3
-            return WriteHash()
-        end
+        V < 3 && return WriteHash()
         return (TypeHash(c), WriteHash())
     end
     # merely reordering a struct's fields should be considered an implementation detail, and

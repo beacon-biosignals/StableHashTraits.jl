@@ -10,6 +10,11 @@ using DataFrames
 using Tables
 using AWSS3
 
+struct TestAnyField
+    a::Int
+    b::Any
+end
+
 struct TestType
     a::Any
     b::Any

@@ -24,7 +24,7 @@ end
 StableHashTraits.stable_hash(::MyType) = FnHash(x -> x.data) 
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
-stable_hash(a, HashVersion{2}()) == stable_hash(b, HashVersion{2}()) # true
+stable_hash(a, HashVersion{3}()) == stable_hash(b, HashVersion{3}()) # true
 ```
 
 ## Why use `stable_hash` instead of `Base.hash`?
@@ -39,9 +39,10 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 
 ## Details
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section below for more details. It is generally recommended that you explicitly set the context to the latest version (`HashVersion{2}()`) as it includes substantial speed improvements.
+You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section below for more details. It is generally recommended that you explicitly set the context to the latest version (`HashVersion{3}()`) as it includes substantial speed improvements and fewer hash
+collisions.
 
-There are sensible defaults for `stable_hash` that aim to ensure that if two values are
+These standard contexts (`HashVersion{V}`) aim to ensure that if two values are
 different, the input to the hash algorithm will differ. 
 
 You can customize the hash behavior for particular types by implementing the trait
@@ -90,6 +91,13 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 <!-- END_HASH_TRAITS -->
 
 ## Breaking changes
+
+### In 1.2
+
+This release introduces a new hash context that reduces hash collisions.
+
+- `HashVersion{3}` avoids more hash collisions, by ensuring that the type of
+  primitive types is encoded in the hashed data. 
 
 ### In 1.1
 
