@@ -644,6 +644,14 @@ root_version(x) = root_version(parent_context(x))
 ##### HashVersion{V} (root contexts)
 #####
 
+macro inthash(constant)
+    if constant isa Symbol || constant isa String
+        return first(reinterpret(UInt64, sha256(codeunits(String(constant)))))
+    else
+        error("Unexpected expression: `$constant`")
+    end
+end
+
 parent_context(::HashVersion) = nothing
 root_version(::HashVersion{V}) where {V} = V
 
@@ -681,7 +689,7 @@ function hash_method(::AbstractString, c::HashVersion)
             WriteHash())
 end
 hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
-hash_method(::Symbol, ::HashVersion) = (ConstantHash(":", WriteHash()), WriteHash())
+hash_method(::Symbol, ::HashVersion) = (ConstantHash(@inthash(":")), WriteHash())
 function hash_method(::AbstractDict, c::HashVersion)
     return (root_version(c) < 2 ? FnHash(qualified_name_) :
             FnHash(stable_typename_id, WriteHash()),
@@ -693,13 +701,13 @@ function hash_method(::Type, c::HashVersion{1})
     return (ConstantHash("Base.DataType"), FnHash(qualified_type_))
 end
 function hash_method(::Type, c::HashVersion)
-    return (ConstantHash("Base.DataType", WriteHash()), FnHash(stable_type_id))
+    return (ConstantHash(@inthash("Base.DataType")), FnHash(stable_type_id))
 end
 function hash_method(::Function, c::HashVersion{1})
     return (ConstantHash("Base.Function"), FnHash(qualified_name_))
 end
 function hash_method(::Function, c::HashVersion)
-    return (ConstantHash("Base.Function", WriteHash()), FnHash(stable_typename_id))
+    return (ConstantHash(@inthash("Base.Function")), FnHash(stable_typename_id))
 end
 function hash_method(::AbstractSet, c::HashVersion)
     return (TypeNameHash(c), FnHash(sort! ∘ collect))
@@ -723,7 +731,8 @@ TablesEq() = TablesEq(HashVersion{1}())
 parent_context(x::TablesEq) = x.parent
 function hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
-        return (ConstantHash("Tables.istable"),
+        return (root_version(m) > 1 ? ConstantHash(@inthash("Tables.istable")) : 
+                                      ConstantHash("Tables.istable"),
                 FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn)))
     end
     return hash_method(x, parent_context(m))
@@ -745,11 +754,13 @@ struct ViewsEq{T}
 end
 ViewsEq() = ViewsEq(HashVersion{1}())
 parent_context(x::ViewsEq) = x.parent
-function hash_method(::AbstractArray, ::ViewsEq)
-    return (ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
+function hash_method(::AbstractArray, c::ViewsEq)
+    return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractArray")) : 
+                                  ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
 end
-function hash_method(::AbstractString, ::ViewsEq)
-    return (ConstantHash("Base.AbstractString", WriteHash()), WriteHash())
+function hash_method(::AbstractString, c::ViewsEq)
+    return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractString")) : 
+                                  ConstantHash("Base.AbstractString", WriteHash()), WriteHash())
 end
 
 end
