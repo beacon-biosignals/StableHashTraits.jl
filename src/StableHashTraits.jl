@@ -838,6 +838,7 @@ end
 ViewsEq() = ViewsEq(HashVersion{1}())
 parent_context(x::ViewsEq) = x.parent
 function hash_method(::AbstractArray, c::ViewsEq)
+    # TODO: encode eltype and make sure it elides when possible
     return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractArray")) : 
                                   ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
 end
