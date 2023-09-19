@@ -97,7 +97,7 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 This release introduces a new hash context that reduces hash collisions.
 
 - `HashVersion{3}` avoids more hash collisions, by ensuring that the type of
-  primitive types is encoded in the hashed data. 
+  primitive types is encoded in the hashed data.
 
 ### In 1.1
 
@@ -199,7 +199,7 @@ StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
     return FnHash(qualified_name), UseStruct(:ByName)
 end
-c = NamedTuplesEq(HashVersion{2}())
+c = NamedTuplesEq(HashVersion{3}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
 ```
 
