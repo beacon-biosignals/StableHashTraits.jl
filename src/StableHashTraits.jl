@@ -310,7 +310,7 @@ end
 struct IterateHash end
 function stable_hash_helper(xs, hash_state, context, ::IterateHash)
     return hash_foreach(hash_state, context, xs) do x
-        x, hash_method(x, context)
+        return x, hash_method(x, context)
     end
 end
 
@@ -379,7 +379,7 @@ function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,S}) wh
         return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
             pair = k => getfieldfn(x, k)
             return pair, hash_method(pair, context)
-    end
+        end
     end
 end
 
@@ -522,7 +522,7 @@ end
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
     return hash_foreach(hash_state, context, methods) do method
-        x, method
+        return x, method
     end
 end
 
@@ -677,7 +677,7 @@ function hash_method(::AbstractArray, c::HashVersion)
     return (TypeNameHash(c), FnHash(size), IterateHash())
 end
 function hash_method(::AbstractString, c::HashVersion)
-    return (FnHash(root_version(c) > 1 ? stable_type_id : qualified_name, WriteHash()), 
+    return (FnHash(root_version(c) > 1 ? stable_type_id : qualified_name, WriteHash()),
             WriteHash())
 end
 hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
