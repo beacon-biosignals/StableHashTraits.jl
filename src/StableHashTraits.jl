@@ -732,8 +732,8 @@ TablesEq() = TablesEq(HashVersion{1}())
 parent_context(x::TablesEq) = x.parent
 function hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
-        return (root_version(m) > 1 ? ConstantHash(@inthash("Tables.istable")) : 
-                                      ConstantHash("Tables.istable"),
+        return (root_version(m) > 1 ? ConstantHash(@inthash("Tables.istable")) :
+                ConstantHash("Tables.istable"),
                 FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn)))
     end
     return hash_method(x, parent_context(m))
@@ -756,12 +756,12 @@ end
 ViewsEq() = ViewsEq(HashVersion{1}())
 parent_context(x::ViewsEq) = x.parent
 function hash_method(::AbstractArray, c::ViewsEq)
-    return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractArray")) : 
-                                  ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
+    return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractArray")) :
+            ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
 end
 function hash_method(::AbstractString, c::ViewsEq)
-    return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractString")) : 
-                                  ConstantHash("Base.AbstractString", WriteHash()), WriteHash())
+    return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractString")) :
+            ConstantHash("Base.AbstractString", WriteHash()), WriteHash())
 end
 
 end
