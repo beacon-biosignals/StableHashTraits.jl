@@ -59,22 +59,22 @@ a function of the type of objects, not their content. These hashes can be optimi
 using `@generated` functions to guarantee that their hashes are computed at compile time.
 
 ```
-  12×5 DataFrame
-  Row │ benchmark   hash       base        trait       ratio
-      │ SubStrin…   SubStrin…  String      String      Float64
+12×5 DataFrame
+ Row │ benchmark   hash       base        trait       ratio     
+     │ SubStrin…   SubStrin…  String      String      Float64   
 ─────┼──────────────────────────────────────────────────────────
-    1 │ structs     crc        71.542 μs   934.042 μs  13.0559
-    2 │ tuples      crc        71.500 μs   727.750 μs  10.1783
-    3 │ dataframes  crc        71.416 μs   215.916 μs   3.02336
-    4 │ numbers     crc        35.833 μs   106.625 μs   2.97561
-    5 │ symbols     crc        536.833 μs  600.958 μs   1.11945
-    6 │ strings     crc        537.125 μs  494.792 μs   0.921186
-    7 │ structs     sha256     543.542 μs  2.047 ms     3.7665
-    8 │ tuples      sha256     543.542 μs  1.583 ms     2.91176
-    9 │ dataframes  sha256     543.583 μs  706.667 μs   1.30002
-   10 │ numbers     sha256     271.375 μs  352.167 μs   1.29771
-   11 │ strings     sha256     4.079 ms    1.721 ms     0.421928
-   12 │ symbols     sha256     4.079 ms    1.625 ms     0.398343
+   1 │ tuples      crc        71.417 μs   2.818 ms    39.4566
+   2 │ structs     crc        71.583 μs   2.673 ms    37.3401
+   3 │ dataframes  crc        71.458 μs   383.708 μs   5.3697
+   4 │ numbers     crc        35.959 μs   188.084 μs   5.23051
+   5 │ symbols     crc        536.666 μs  1.529 ms     2.84822
+   6 │ strings     crc        536.750 μs  1.302 ms     2.42509
+   7 │ structs     sha256     543.167 μs  7.037 ms    12.9558
+   8 │ tuples      sha256     543.209 μs  6.893 ms    12.6899
+   9 │ dataframes  sha256     543.167 μs  1.154 ms     2.12419
+  10 │ numbers     sha256     271.083 μs  565.834 μs   2.08731
+  11 │ strings     sha256     4.076 ms    3.966 ms     0.972932
+  12 │ symbols     sha256     4.075 ms    3.845 ms     0.943553
 ```
 
 # Version 1.1:
