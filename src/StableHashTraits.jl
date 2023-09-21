@@ -152,12 +152,12 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
     if CTX in names(SHA)
         @eval function setup_hash_state(::typeof(SHA.$(fn)), context)
             root_version(context) < 2 && return SHA.$(CTX)()
-            return MarkerHash(BufferedHash(SHA.$(CTX)()))
+            return BufferedHash(SHA.$(CTX)())
         end
     end
 end
 
-# NOTE: while MarkerHash is a faster implementation of `start/stop_hash!`
+# NOTE: while BufferedHash is a faster implementation of `start/stop_hash!`
 # we still need a recursive hash implementation to implement `HashVersion{1}()`
 start_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
 update_hash!(sha::SHA.SHA_CTX, bytes) = (SHA.update!(sha, bytes); sha)
@@ -172,7 +172,7 @@ compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 
 function setup_hash_state(fn::Function, context)
     root_version(context) < 2 && return RecursiveHash(fn)
-    return MarkerHash(BufferedHash(RecursiveHash(fn)))
+    return BufferedHash(RecursiveHash(fn))
 end
 
 struct RecursiveHash{F,T}
@@ -195,8 +195,8 @@ compute_hash!(x::RecursiveHash) = x.val
 ##### BufferedHash: wrapper that buffers bytes before passing them to the hash algorithm 
 #####
 
-# NOTE: buffered hash never needs to implement `start/stop_hash!` since that
-# is handled by `MarkerHash`
+const START = 0x1c601cccabb1eb32 # first 64 bytes of sha("(")
+const STOP = 0x0eaca4071dc55eba # first 64 bytes of sha(")")
 
 mutable struct BufferedHash{T}
     hash::T
@@ -217,44 +217,51 @@ function write_(io::IO, bytes::Tuple)
     end
 end
 
-function flush_bytes!(x::BufferedHash)
-    # try to avoid overflowing the allocated buffer
-    if position(x.io) ≥ x.limit - (x.limit >> 2)
-        x.hash = update_hash!(x.hash, @view x.bytes[1:position(x.io)])
-        seek(x.io, 0)
+function escape_delimeters!(x::BufferedHash, bytes)
+    words = reinterpret(UInt64, bytes)
+    write_(x.io, START)
+    @inbounds for (i, w) in enumerate(words)
+        w == START && write_(x.io, i)
+        w == STOP && write_(x.io, i)
     end
-end
-
-function update_hash!(x::BufferedHash, bytes)
-    write_(x.io, bytes)
-    flush_bytes!(x)
+    write_(x.io, STOP)
     return x
 end
 
-function compute_hash!(x::BufferedHash)
-    hash = if position(x.io) > 0
-        update_hash!(x.hash, @view x.bytes[1:position(x.io)])
-    else
-        x.hash
+function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2), final=false)
+    # the default `limit` tries to flush before the allocated buffer increases in size
+    if position(x.io) ≥ limit
+        full_words = 8div(position(x.io), 8, RoundDown)
+        full_word_bytes = @view x.bytes[1:full_words]
+        
+        if !final
+            x.hash = update_hash!(x.hash, full_word_bytes)
+        else
+            x.hash = update_hash!(x.hash, @view x.bytes[1:position(x.io)])
+        end
+        escape_delimeters!(x, full_word_bytes)
+
+        seek(x.io, 0)
+        if !final
+            leftover = x.bytes[(full_words+1):end]
+            write_(x.io, leftover)
+        end
     end
-    return compute_hash!(hash)
+    return x
 end
 
-#####
-##### MarkerHash: wrapper that uses delimiters to handle `start/stop_hash!` 
-#####
+start_hash!(x::BufferedHash) = update_hash!(x, START)
+stop_hash!(::BufferedHash, nested::BufferedHash) = update_hash!(nested, STOP)
 
-struct MarkerHash{T}
-    hash::T
+function update_hash!(x::BufferedHash, bytes)
+    write_(x.io, bytes)
+    return flush_bytes!(x)
 end
-function start_hash!(x::MarkerHash)
-    return MarkerHash(update_hash!(x.hash, (0x01,)))
+
+
+function compute_hash!(x::BufferedHash)
+    return compute_hash!(flush_bytes!(x, 0, true).hash)
 end
-update_hash!(x::MarkerHash, bytes) = MarkerHash(update_hash!(x.hash, bytes))
-function stop_hash!(::MarkerHash, nested::MarkerHash)
-    return MarkerHash(update_hash!(nested.hash, (0x02,)))
-end
-compute_hash!(x::MarkerHash) = compute_hash!(x.hash)
 
 #####
 ##### ================ Hash Traits ================
@@ -291,11 +298,6 @@ end
 
 # with a buffered hash, we don't need to create a new IOBuffer
 # just use the one we've already allocated
-function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context,
-                            c::WriteHash)
-    return MarkerHash(stable_hash_helper(obj, hash_state.hash, context, c))
-end
-
 function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
     write(hash_state.io, obj, context)
     flush_bytes!(hash_state)
