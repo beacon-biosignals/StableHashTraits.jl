@@ -300,6 +300,7 @@ function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context
 end
 
 function stable_hash_helper(obj, hash_state::BufferedHash, context, root, ::WriteHash)
+    @show obj
     write(hash_state.io, obj, context)
     flush_bytes!(hash_state)
     return hash_state
@@ -843,8 +844,9 @@ ViewsEq() = ViewsEq(HashVersion{1}())
 parent_context(x::ViewsEq) = x.parent
 function hash_method(::AbstractArray, c::ViewsEq)
     return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractArray")) : 
-                                  ConstantHash("Base.AbstractArray"), FnHash(size), 
-            FnHash(stable_eltype_id),
+                                  ConstantHash("Base.AbstractArray"), 
+            (root_version(c) > 2 ? (FnHash(stable_eltype_id),) : ())...,
+            FnHash(size), 
             IterateHash())
 end
 function hash_method(::AbstractString, c::ViewsEq)
