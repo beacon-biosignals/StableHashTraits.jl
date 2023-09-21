@@ -97,7 +97,8 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 This release introduces a new hash context that reduces hash collisions.
 
 - `HashVersion{3}` avoids more hash collisions, by ensuring that the type of
-  primitive types is encoded in the hashed data.
+  primitive types is always encoded in the hashed data. HashVersion{1} remains
+  the default context to avoid breaking existing code.
 
 ### In 1.1
 
