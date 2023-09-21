@@ -298,7 +298,6 @@ function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context
 end
 
 function stable_hash_helper(obj, hash_state::BufferedHash, context, ::WriteHash)
-    @show obj
     write(hash_state.io, obj, context)
     flush_bytes!(hash_state)
     return hash_state
