@@ -5,9 +5,9 @@ A record of benchmarks from various versions of `stable_hash`
 # Version 1.0
 
 ```
- 12×5 DataFrame
-  Row │ benchmark   hash       base        trait       ratio
-      │ SubStrin…   SubStrin…  String      String      Float64
+12×5 DataFrame
+ Row │ benchmark   hash       base        trait       ratio
+     │ SubStrin…   SubStrin…  String      String      Float64
 ─────┼───────────────────────────────────────────────────────────
     1 │ structs     crc        78.667 μs   125.481 ms  1595.09
     2 │ tuples      crc        79.250 μs   31.102 ms    392.453
@@ -32,22 +32,49 @@ where the type of the objects is represented as a string for each value in an ar
 remains quite slow.
 
 ```
- 12×5 DataFrame
+12×5 DataFrame
+ Row │ benchmark   hash       base        trait       ratio
+     │ SubStrin…   SubStrin…  String      String      Float64
+─────┼──────────────────────────────────────────────────────────
+   1 │ structs     crc        71.542 μs   53.244 ms   744.231
+   2 │ tuples      crc        71.458 μs   11.342 ms   158.728
+   3 │ symbols     crc        537.375 μs  6.330 ms     11.7795
+   4 │ strings     crc        537.250 μs  5.267 ms      9.80301
+   5 │ dataframes  crc        71.500 μs   417.583 μs    5.84032
+   6 │ numbers     crc        35.875 μs   189.458 μs    5.28106
+   7 │ structs     sha256     549.333 μs  69.535 ms   126.581
+   8 │ tuples      sha256     543.334 μs  15.546 ms    28.6128
+   9 │ symbols     sha256     4.077 ms    9.834 ms      2.41228
+  10 │ dataframes  sha256     543.459 μs  1.190 ms      2.19044
+  11 │ numbers     sha256     271.250 μs  566.834 μs    2.08971
+  12 │ strings     sha256     4.078 ms    7.907 ms      1.93885
+```
+
+# Version 1.1:
+
+With the addition of `dfl/compiled-type-labels` we compute more quantities at compile time:
+
+There are a number of hash quantities that are, strictly speaking,
+a function of the type of objects, not their content. These hashes can be optimized
+using `@generated` functions to guarantee that their hashes are computed at compile time.
+
+```
+  12×5 DataFrame
   Row │ benchmark   hash       base        trait       ratio
       │ SubStrin…   SubStrin…  String      String      Float64
 ─────┼──────────────────────────────────────────────────────────
-    1 │ structs     crc        70.167 μs   51.761 ms   737.68
-    2 │ tuples      crc        71.375 μs   9.623 ms    134.829
-    3 │ symbols     crc        530.667 μs  5.145 ms      9.69535
-    4 │ strings     crc        527.125 μs  4.413 ms      8.37159
-    5 │ dataframes  crc        70.167 μs   385.792 μs    5.4982
-    6 │ numbers     crc        35.208 μs   176.875 μs    5.02372
-    7 │ structs     sha256     533.041 μs  55.757 ms   104.601
-    8 │ tuples      sha256     532.958 μs  10.976 ms    20.5939
-    9 │ dataframes  sha256     533.000 μs  993.000 μs    1.86304
-   10 │ numbers     sha256     266.125 μs  487.792 μs    1.83294
-   11 │ symbols     sha256     4.000 ms    6.611 ms      1.65291
-   12 │ strings     sha256     4.000 ms    6.321 ms      1.58011
+    1 │ structs     crc        71.542 μs   934.042 μs  13.0559
+    2 │ tuples      crc        71.500 μs   727.750 μs  10.1783
+    3 │ dataframes  crc        71.416 μs   215.916 μs   3.02336
+    4 │ numbers     crc        35.833 μs   106.625 μs   2.97561
+    5 │ symbols     crc        536.833 μs  600.958 μs   1.11945
+    6 │ strings     crc        537.125 μs  494.792 μs   0.921186
+    7 │ structs     sha256     543.542 μs  2.047 ms     3.7665
+    8 │ tuples      sha256     543.542 μs  1.583 ms     2.91176
+    9 │ dataframes  sha256     543.583 μs  706.667 μs   1.30002
+   10 │ numbers     sha256     271.375 μs  352.167 μs   1.29771
+   11 │ strings     sha256     4.079 ms    1.721 ms     0.421928
+   12 │ symbols     sha256     4.079 ms    1.625 ms     0.398343
 ```
 
 # Version 1.1:
