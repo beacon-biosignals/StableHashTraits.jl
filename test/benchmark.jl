@@ -44,19 +44,20 @@ for V in (2, 3)
         hstr = nameof(hashfn)
         for (; name, a, b) in benchmarks
             suite["$(name)_$(hstr)_$(V)"] = BenchmarkGroup([name])
-            suite["$(name)_$(hstr)_$(V)"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
+            a_run = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
+            suite["$(name)_$(hstr)_$(V)"]["base"] = a_run
             if name == "vnumbers"
-                suite["$(name)_$(hstr)_$(V)"]["trait"] = @benchmarkable $(stable_hash)($b,
-                                                                                ViewsEq(HashVersion{$V}();
-                                                                                alg=$(hashfn)))
+                b_run = @benchmarkable $(stable_hash)($b, ViewsEq(HashVersion{$V}()); alg=$(hashfn))
+                suite["$(name)_$(hstr)_$(V)"]["trait"] = b_run
             else
-                suite["$(name)_$(hstr)_$(V)"]["trait"] = @benchmarkable $(stable_hash)($b,
-                                                                                HashVersion{$V}();
-                                                                                alg=$(hashfn))
+                b_run = @benchmarkable $(stable_hash)($b, HashVersion{$V}(); alg=$(hashfn))
+                suite["$(name)_$(hstr)_$(V)"]["trait"] = b_run
             end
         end
     end
 end
+
+# NOTE: I think we caught an intersting bug by trying to hash the benchmark
 
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
 # the benchmark parameters. Reusing cached parameters is faster and more reliable
