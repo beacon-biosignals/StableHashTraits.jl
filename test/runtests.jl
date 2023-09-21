@@ -128,13 +128,18 @@ include("setup_tests.jl")
             @testset "Sequences" begin
                 if V > 2
                     @test test_hash(Any[1, 2]) != test_hash(Any[UInt(1), UInt(2)])
+                    @test test_hash(Any[1, 2], ViewsEq(HashVersion{V}())) != 
+                          test_hash(Any[UInt(1), UInt(2)], ViewsEq(HashVersion{V}()))
                 else
                     @test test_hash(Any[1, 2]) == test_hash(Any[UInt(1), UInt(2)])
+                    @test test_hash(Any[1, 2], ViewsEq(HashVersion{V}())) == 
+                          test_hash(Any[UInt(1), UInt(2)], ViewsEq(HashVersion{V}()))
                 end
 
                 @test test_hash([1 2; 3 4]) != test_hash(vec([1 2; 3 4]))
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4]')
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4])
+                # TODO: setup some tests for eltype elision in ViewsEq (also add benchmark)
                 @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) !=
                       test_hash(vec([1 2; 3 4]), ViewsEq(HashVersion{V}()))
                 @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) == test_hash([1 3; 2 4]', ViewsEq(HashVersion{V}()))

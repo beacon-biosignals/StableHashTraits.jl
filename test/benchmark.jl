@@ -36,6 +36,7 @@ benchmarks = [(; name="dataframes", a=data1, b=df);
               (; name="symbols", a=symdata, b=symbols);
               (; name="strings", a=strdata, b=strings);
               (; name="tuples", a=data1, b=data2);
+              (; name="vnumbers", a=data, b=data);
               (; name="numbers", a=data, b=data)]
 
 for V in (2, 3)
@@ -44,9 +45,15 @@ for V in (2, 3)
         for (; name, a, b) in benchmarks
             suite["$(name)_$(hstr)_$(V)"] = BenchmarkGroup([name])
             suite["$(name)_$(hstr)_$(V)"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
-            suite["$(name)_$(hstr)_$(V)"]["trait"] = @benchmarkable $(stable_hash)($b,
-                                                                            HashVersion{$V}();
-                                                                            alg=$(hashfn))
+            if name == "vnumbers"
+                suite["$(name)_$(hstr)_$(V)"]["trait"] = @benchmarkable $(stable_hash)($b,
+                                                                                ViewsEq(HashVersion{$V}();
+                                                                                alg=$(hashfn)))
+            else
+                suite["$(name)_$(hstr)_$(V)"]["trait"] = @benchmarkable $(stable_hash)($b,
+                                                                                HashVersion{$V}();
+                                                                                alg=$(hashfn))
+            end
         end
     end
 end

@@ -2,7 +2,7 @@ module StableHashTraits
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq,
-       stable_typename_id, stable_type_id
+       stable_typename_id, stable_type_id, stable_eltype_id
 using TupleTools, Tables, Compat
 using SHA: SHA, sha256
 
@@ -551,6 +551,8 @@ stable_typefields_id(::Type{T}) where {T} = hash_field_str(T)
     :(return $number)
 end
 
+stable_eltype_id(x) = stable_type_id(eltype(x))
+
 function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
     # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
@@ -571,12 +573,14 @@ end
 #####
 
 # detecting when we can elide struct and element types
-has_type_id(methods) = any(x -> x isa FnHash{<:typeof(stable_type_id)} || x isa ElidedTypeHash, methods)
+elideable(fn::F, methods) where F = any(x -> x isa FnHash{F} || x isa ElidedTypeHash, methods)
 has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
 has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
 
 function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
-    if has_type_id(methods) && (has_iterate_type(methods) || has_struct_type(methods))
+    if (elideable(stable_type_id, methods) && (has_iterate_type(methods) || has_struct_type(methods)))
+        return tuple_hash_helper(x, hash_state, ElideType(context), root, methods)
+    elseif (elideable(stable_eltype_id, methods) && has_iterate_type(methods))
         return tuple_hash_helper(x, hash_state, ElideType(context), root, methods)
     else
         return tuple_hash_helper(x, hash_state, context, root, methods)
@@ -838,13 +842,15 @@ end
 ViewsEq() = ViewsEq(HashVersion{1}())
 parent_context(x::ViewsEq) = x.parent
 function hash_method(::AbstractArray, c::ViewsEq)
-    # TODO: encode eltype and make sure it elides when possible
     return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractArray")) : 
-                                  ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
+                                  ConstantHash("Base.AbstractArray"), FnHash(size), 
+            FnHash(stable_eltype_id),
+            IterateHash())
 end
 function hash_method(::AbstractString, c::ViewsEq)
     return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractString")) : 
-                                  ConstantHash("Base.AbstractString", WriteHash()), WriteHash())
+                                  ConstantHash("Base.AbstractString", WriteHash()), 
+            WriteHash())
 end
 
 end
