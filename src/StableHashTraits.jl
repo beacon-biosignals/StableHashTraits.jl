@@ -789,13 +789,13 @@ function hash_method(::Type, c::HashVersion{1})
     return (ConstantHash("Base.DataType"), FnHash(qualified_type_))
 end
 function hash_method(::Type, c::HashVersion)
-    return (ConstantHash(@inthash("Base.DataType")), TypeHash(c))
+    return (ConstantHash(@inthash("Base.DataType", WriteHash())), TypeHash(c))
 end
 function hash_method(::Function, c::HashVersion{1})
     return (ConstantHash("Base.Function"), FnHash(qualified_name_))
 end
 function hash_method(::Function, c::HashVersion)
-    return (ConstantHash(@inthash("Base.Function")), TypeHash(c))
+    return (ConstantHash(@inthash("Base.Function", WriteHash())), TypeHash(c))
 end
 function hash_method(::AbstractSet, c::HashVersion)
     return (TypeNameHash(c), FnHash(sort! ∘ collect))
