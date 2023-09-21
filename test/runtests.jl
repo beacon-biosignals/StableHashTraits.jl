@@ -194,6 +194,7 @@ include("setup_tests.jl")
                 @test_deprecated(UseProperties(:ByName))
                 @test_deprecated(UseQualifiedName())
                 @test_deprecated(UseSize(UseIterate()))
+                @test_deprecated(ConstantHash("foo"))
                 @test_deprecated(UseTable())
             end
         end

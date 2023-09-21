@@ -1,6 +1,6 @@
 module StableHashTraits
 
-export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash,
+export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq,
        stable_typename_id, stable_type_id
 using TupleTools, Tables, Compat
@@ -494,14 +494,28 @@ end
 FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
 get_value_(x, method::FnHash) = method.fn(x)
 
-struct ConstantHash{T,H}
+struct PrivateConstantHash{T,H}
     constant::T
     result_method::H # if non-nothing, apply to value `constant`
 end
-ConstantHash(val) = ConstantHash{typeof(val),Nothing}(val, nothing)
-get_value_(x, method::ConstantHash) = method.constant
+PrivateConstantHash(val) = PrivateConstantHash{typeof(val),Nothing}(val, nothing)
+get_value_(x, method::PrivateConstantHash) = method.constant
 
-function stable_hash_helper(x, hash_state, context, method::Union{FnHash,ConstantHash})
+function ConstantHash(constant, method=nothing)
+    Base.depwarn("`ConstantHash` has been deprecated, favor `@ConstantHash`.", :ConstantHash)
+    return PrivateConstantHash(constant, method)
+end
+macro ConstantHash(constant)
+    if constant isa Symbol || constant isa String
+        return PrivateConstantHash(first(reinterpret(UInt64, sha256(codeunits(String(constant))))), WriteHash())
+    elseif constant isa Number
+        return PrivateConstantHash(first(reinterpret(UInt64, sha256(reinterpret(UInt8, [constant])))), WriteHash())
+    else
+        error("Unexpected expression: `$constant`")
+    end
+end
+
+function stable_hash_helper(x, hash_state, context, method::Union{FnHash,PrivateConstantHash})
     y = get_value_(x, method)
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method
@@ -644,14 +658,6 @@ root_version(x) = root_version(parent_context(x))
 ##### HashVersion{V} (root contexts)
 #####
 
-macro inthash(constant)
-    if constant isa Symbol || constant isa String
-        return first(reinterpret(UInt64, sha256(codeunits(String(constant)))))
-    else
-        error("Unexpected expression: `$constant`")
-    end
-end
-
 parent_context(::HashVersion) = nothing
 root_version(::HashVersion{V}) where {V} = V
 
@@ -688,8 +694,8 @@ function hash_method(::AbstractString, c::HashVersion)
     return (FnHash(root_version(c) > 1 ? stable_type_id : qualified_name, WriteHash()),
             WriteHash())
 end
-hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
-hash_method(::Symbol, ::HashVersion) = (ConstantHash(@inthash(":")), WriteHash())
+hash_method(::Symbol, ::HashVersion{1}) = (PrivateConstantHash(":"), WriteHash())
+hash_method(::Symbol, ::HashVersion) = (@ConstantHash(":"), WriteHash())
 function hash_method(::AbstractDict, c::HashVersion)
     return (root_version(c) < 2 ? FnHash(qualified_name_) :
             FnHash(stable_typename_id, WriteHash()),
@@ -698,16 +704,16 @@ end
 hash_method(::Tuple, c::HashVersion) = (TypeNameHash(c), IterateHash())
 hash_method(::Pair, c::HashVersion) = (TypeNameHash(c), IterateHash())
 function hash_method(::Type, c::HashVersion{1})
-    return (ConstantHash("Base.DataType"), FnHash(qualified_type_))
+    return (PrivateConstantHash("Base.DataType"), FnHash(qualified_type_))
 end
 function hash_method(::Type, c::HashVersion)
-    return (ConstantHash(@inthash("Base.DataType"), WriteHash()), TypeHash(c))
+    return (@ConstantHash("Base.DataType"), TypeHash(c))
 end
 function hash_method(::Function, c::HashVersion{1})
-    return (ConstantHash("Base.Function"), FnHash(qualified_name_))
+    return (PrivateConstantHash("Base.Function"), FnHash(qualified_name_))
 end
 function hash_method(::Function, c::HashVersion)
-    return (ConstantHash(@inthash("Base.Function"), WriteHash()), TypeHash(c))
+    return (@ConstantHash("Base.Function"), TypeHash(c))
 end
 function hash_method(::AbstractSet, c::HashVersion)
     return (TypeNameHash(c), FnHash(sort! ∘ collect))
@@ -731,8 +737,8 @@ TablesEq() = TablesEq(HashVersion{1}())
 parent_context(x::TablesEq) = x.parent
 function hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
-        return (root_version(m) > 1 ? ConstantHash(@inthash("Tables.istable")) :
-                ConstantHash("Tables.istable"),
+        return (root_version(m) > 1 ? @ConstantHash("Tables.istable") :
+                PrivateConstantHash("Tables.istable"),
                 FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn)))
     end
     return hash_method(x, parent_context(m))
@@ -755,12 +761,12 @@ end
 ViewsEq() = ViewsEq(HashVersion{1}())
 parent_context(x::ViewsEq) = x.parent
 function hash_method(::AbstractArray, c::ViewsEq)
-    return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractArray")) :
-            ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
+    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractArray") :
+            PrivateConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
 end
 function hash_method(::AbstractString, c::ViewsEq)
-    return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractString")) :
-            ConstantHash("Base.AbstractString", WriteHash()), WriteHash())
+    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractString") :
+            PrivateConstantHash("Base.AbstractString", WriteHash()), WriteHash())
 end
 
 end
