@@ -615,20 +615,26 @@ function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
     end
 end
 
+function tuple_hash_helper(x, hash_state, context, root, methods::Tuple{<:ElidedTypeHash})
+    return hash_state
+end
+
+function tuple_hash_helper(x, hash_state, context, root, 
+                           methods::Tuple{<:ElidedTypeHash, <:Any})
+    return stable_hash_helper(x, hash_state, context, root, methods[2])
+end
+
+function tuple_hash_helper(x, hash_state, context, root, 
+                           methods::Tuple{<:ElidedTypeHash, <:Any, Vararg{<:Any}})
+    _, rest... = methods
+    return hash_foreach(hash_state, root, rest) do method
+        return x, method, context
+    end
+end
+
 function tuple_hash_helper(x, hash_state, context, root, methods)
-    if first(methods) isa ElidedTypeHash 
-        if length(methods) == 2
-            return stable_hash_helper(x, hash_state, context, root, methods[2])
-        else
-            _, rest... = methods
-            return hash_foreach(hash_state, root, rest) do method
-                return x, method, context
-            end
-        end
-    else
-        return hash_foreach(hash_state, root, methods) do method
-            return x, method, context
-        end
+    return hash_foreach(hash_state, root, methods) do method
+        return x, method, context
     end
 end
 
