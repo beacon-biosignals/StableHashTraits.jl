@@ -19,8 +19,8 @@ these fallback methods will not change even if new fallbacks are defined.
 struct HashVersion{V}
     function HashVersion{V}() where {V}
         V == 1 && Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in " *
-                     "all cases where backwards compatible hash values are not " *
-                     "required.", :HashVersion)
+                               "all cases where backwards compatible hash values are not " *
+                               "required.", :HashVersion)
         return new{V}()
     end
 end
@@ -214,7 +214,7 @@ end
 
 const MARK = 0xcc56c9cc4deb0162 # first 8 bytes of sha256("mark")
 
-function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2))
+function flush_bytes!(x::BufferedHash, limit=x.limit - (x.limit >> 2))
     # the default `limit` tries to flush before the allocated buffer increases in size
     if position(x.io) ≥ limit
         full_words = 8div(position(x.io), 8, RoundDown)
@@ -224,7 +224,7 @@ function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2))
         # actual content already written to x.bytes, we use an control sequence (`MARK`) and
         # we also record all cases where we need to escape that control sequence inside the
         # user data.
- 
+
         # the control sequence: delimits the start of the meta-datablock
         Base.write(x.io, MARK)
 
@@ -256,7 +256,7 @@ function start_hash!(x::BufferedHash)
     return x
 end
 
-function stop_hash!(::BufferedHash, x::BufferedHash) 
+function stop_hash!(::BufferedHash, x::BufferedHash)
     push!(x.stops, position(x.io))
     return x
 end
@@ -316,7 +316,7 @@ end
 struct IterateHash end
 function stable_hash_helper(xs, hash_state, context, ::IterateHash)
     return hash_foreach(hash_state, context, xs) do x
-        x, hash_method(x, context)
+        return x, hash_method(x, context)
     end
 end
 
@@ -434,7 +434,7 @@ end
 
 function stable_hash_helper(x, hash_state, context, methods::Tuple)
     return hash_foreach(hash_state, context, methods) do method
-        x, method
+        return x, method
     end
 end
 
