@@ -422,7 +422,7 @@ function hash_field_str(T)
     for f in sort_(fieldnames(T))
         if f isa Symbol
             SHA.update!(sha, codeunits(String(f)))
-        else # isa Number
+        else # e.g. in some weird cases the field names can be numbers ???
             SHA.update!(sha, reinterpret(UInt8, [f]))
         end
     end

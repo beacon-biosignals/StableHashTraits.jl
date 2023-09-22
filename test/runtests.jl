@@ -172,6 +172,8 @@ include("setup_tests.jl")
             end
 
             @testset "Custom hash_method" begin
+                @test @ConstantHash(5).constant isa UInt64
+                @test @ConstantHash("foo").constant isa UInt64
                 @test test_hash(ExtraTypeParams{:A,Int}(2)) !=
                       test_hash(ExtraTypeParams{:B,Int}(2))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType(1, 2))
