@@ -29,14 +29,14 @@ end
     stable_hash(x, context=HashVersion{1}(); alg=sha256)
 
 Create a stable hash of the given objects. As long as the context remains the same, this is
-intended to remain unchanged across julia verisons. How each object is hashed is determined
+intended to remain unchanged across julia versions. How each object is hashed is determined
 by [`hash_method`](@ref), which aims to have sensible fallbacks.
 
 To ensure the greatest stability, you should explicitly pass the context object. It is also
 best to pass an explicit version, since `HashVersion{2}` is generally faster than
-`HashVerison{1}`. If the fallback methods change in a future release, the hash you get
-by passing an explicit `HashVersin{N}` should *not* change. (Note that the number in
-`HashVersion` does not necessarily match the package verison of `StableHashTraits`).
+`HashVersion{1}`. If the fallback methods change in a future release, the hash you get
+by passing an explicit `HashVersion{N}` should *not* change. (Note that the number in
+`HashVersion` does not necessarily match the package version of `StableHashTraits`).
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
@@ -94,7 +94,7 @@ function stable_hash_helper(x, hash_state, context, method::NotImplemented)
 end
 
 function stable_hash_helper(x, hash_state, context, method)
-    throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when " *
+    throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *
                         "hashing object $x. The implementation of `hash_method` for this " *
                         "object is invalid."))
     return nothing
@@ -130,7 +130,7 @@ function compute_hash! end
 """
     start_hash!(state)
 
-Return an updated state that delimits hashing of a nested struture; calls made to
+Return an updated state that delimits hashing of a nested structure; calls made to
 `update_hash!` after start_hash! will be handled as nested elements up until `stop_hash!` is
 called.
 """
@@ -195,9 +195,6 @@ compute_hash!(x::RecursiveHash) = x.val
 ##### BufferedHash: wrapper that buffers bytes before passing them to the hash algorithm 
 #####
 
-const START = 0x1c601cccabb1eb32 # first 64 bytes of sha("(")
-const STOP = 0x0eaca4071dc55eba # first 64 bytes of sha(")")
-
 mutable struct BufferedHash{T}
     hash::T
     bytes::Vector{UInt8}
@@ -214,12 +211,6 @@ function BufferedHash(hash, size=HASH_BUFFER_SIZE)
     io = IOBuffer(bytes; write=true, read=false)
     return BufferedHash(hash, bytes, starts, stops, size, io)
 end
-write_(io::IO, x) = Base.write(io, x)
-function write_(io::IO, bytes::Tuple)
-    @inbounds for b in bytes
-        Base.write(io, b)
-    end
-end
 
 const MARK = 0xcc56c9cc4deb0162 # first 8 bytes of sha256("mark")
 
@@ -235,11 +226,11 @@ function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2))
         # user data.
  
         # the control sequence: delimits the start of the meta-datablock
-        write_(x.io, MARK)
+        Base.write(x.io, MARK)
 
         # write out the delimeters
-        write_(x.io, x.starts)
-        write_(x.io, x.stops)
+        Base.write(x.io, x.starts)
+        Base.write(x.io, x.stops)
         empty!(x.starts)
         empty!(x.stops)
 
@@ -247,10 +238,10 @@ function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2))
         full_word_bytes = @view x.bytes[1:full_words]
         words = reinterpret(UInt64, full_word_bytes)
         to_escape = sum(words .== MARK)
-        write_(x.io, to_escape)
+        Base.write(x.io, to_escape)
 
         # delimit the end of this meta-data block
-        write_(x.io, MARK)
+        Base.write(x.io, MARK)
 
         # hash both user data and the data block above
         x.hash = update_hash!(x.hash, @view x.bytes[1:position(x.io)])
@@ -270,11 +261,8 @@ function stop_hash!(::BufferedHash, x::BufferedHash)
     return x
 end
 
-function update_hash!(x::BufferedHash, bytes)
-    write_(x.io, bytes)
-    return flush_bytes!(x)
-end
-
+# NOTE: we do not implement update_hash!; instead we specialize on 
+# BufferedHash when calling `stable_hash_helper(..., ::WriteHash)
 
 function compute_hash!(x::BufferedHash)
     return compute_hash!(flush_bytes!(x, 0).hash)
