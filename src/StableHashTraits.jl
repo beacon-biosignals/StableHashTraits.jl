@@ -509,20 +509,26 @@ PrivateConstantHash(val) = PrivateConstantHash{typeof(val),Nothing}(val, nothing
 get_value_(x, method::PrivateConstantHash) = method.constant
 
 function ConstantHash(constant, method=nothing)
-    Base.depwarn("`ConstantHash` has been deprecated, favor `@ConstantHash`.", :ConstantHash)
+    Base.depwarn("`ConstantHash` has been deprecated, favor `@ConstantHash`.",
+                 :ConstantHash)
     return PrivateConstantHash(constant, method)
 end
 macro ConstantHash(constant)
     if constant isa Symbol || constant isa String
-        return PrivateConstantHash(first(reinterpret(UInt64, sha256(codeunits(String(constant))))), WriteHash())
+        return PrivateConstantHash(first(reinterpret(UInt64,
+                                                     sha256(codeunits(String(constant))))),
+                                   WriteHash())
     elseif constant isa Number
-        return PrivateConstantHash(first(reinterpret(UInt64, sha256(reinterpret(UInt8, [constant])))), WriteHash())
+        return PrivateConstantHash(first(reinterpret(UInt64,
+                                                     sha256(reinterpret(UInt8, [constant])))),
+                                   WriteHash())
     else
         error("Unexpected expression: `$constant`")
     end
 end
 
-function stable_hash_helper(x, hash_state, context, method::Union{FnHash,PrivateConstantHash})
+function stable_hash_helper(x, hash_state, context,
+                            method::Union{FnHash,PrivateConstantHash})
     y = get_value_(x, method)
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method
