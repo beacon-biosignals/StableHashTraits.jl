@@ -1,6 +1,6 @@
 module StableHashTraits
 
-export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash,
+export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq,
        stable_typename_id, stable_type_id, stable_eltype_id
 using TupleTools, Tables, Compat
@@ -97,7 +97,7 @@ function stable_hash_helper(x, hash_state, context, root, method::NotImplemented
 end
 
 function stable_hash_helper(x, hash_state, context, root, method)
-    throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when " *
+    throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *
                         "hashing object $x. The implementation of `hash_method` for this " *
                         "object is invalid."))
     return nothing
@@ -155,12 +155,12 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
     if CTX in names(SHA)
         @eval function setup_hash_state(::typeof(SHA.$(fn)), context)
             root_version(context) < 2 && return SHA.$(CTX)()
-            return MarkerHash(BufferedHash(SHA.$(CTX)()))
+            return BufferedHash(SHA.$(CTX)())
         end
     end
 end
 
-# NOTE: while MarkerHash is a faster implementation of `start/stop_hash!`
+# NOTE: while BufferedHash is a faster implementation of `start/stop_hash!`
 # we still need a recursive hash implementation to implement `HashVersion{1}()`
 start_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
 update_hash!(sha::SHA.SHA_CTX, bytes) = (SHA.update!(sha, bytes); sha)
@@ -175,7 +175,7 @@ compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 
 function setup_hash_state(fn::Function, context)
     root_version(context) < 2 && return RecursiveHash(fn)
-    return MarkerHash(BufferedHash(RecursiveHash(fn)))
+    return BufferedHash(RecursiveHash(fn))
 end
 
 struct RecursiveHash{F,T}
@@ -198,66 +198,78 @@ compute_hash!(x::RecursiveHash) = x.val
 ##### BufferedHash: wrapper that buffers bytes before passing them to the hash algorithm 
 #####
 
-# NOTE: buffered hash never needs to implement `start/stop_hash!` since that
-# is handled by `MarkerHash`
-
 mutable struct BufferedHash{T}
     hash::T
     bytes::Vector{UInt8}
+    starts::Vector{Int}
+    stops::Vector{Int}
     limit::Int
     io::IOBuffer
 end
 const HASH_BUFFER_SIZE = 2^14
 function BufferedHash(hash, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
+    starts = sizehint!(Vector{Int}(), size)
+    stops = sizehint!(Vector{Int}(), size)
     io = IOBuffer(bytes; write=true, read=false)
-    return BufferedHash(hash, bytes, size, io)
-end
-write_(io::IO, x) = Base.write(io, x)
-function write_(io::IO, bytes::Tuple)
-    @inbounds for b in bytes
-        Base.write(io, b)
-    end
+    return BufferedHash(hash, bytes, starts, stops, size, io)
 end
 
-function flush_bytes!(x::BufferedHash)
-    # try to avoid overflowing the allocated buffer
-    if position(x.io) ≥ x.limit - (x.limit >> 2)
+const MARK = 0xcc56c9cc4deb0162 # first 8 bytes of sha256("mark")
+
+function flush_bytes!(x::BufferedHash, limit=x.limit - (x.limit >> 2))
+    # the default `limit` tries to flush before the allocated buffer increases in size
+    if position(x.io) ≥ limit
+        full_words = 8div(position(x.io), 8, RoundDown)
+
+        # NOTE: we now write a block of meta-data that represents the start/stop delimeters
+        # for nested elements. To ensure this block of bytes cannot be replicated by the
+        # actual content already written to x.bytes, we use an control sequence (`MARK`) and
+        # we also record all cases where we need to escape that control sequence inside the
+        # user data.
+
+        # the control sequence: delimits the start of the meta-datablock
+        Base.write(x.io, MARK)
+
+        # write out the delimeters
+        Base.write(x.io, x.starts)
+        Base.write(x.io, x.stops)
+        empty!(x.starts)
+        empty!(x.stops)
+
+        # number of control sequences to escape in the user data
+        full_word_bytes = @view x.bytes[1:full_words]
+        words = reinterpret(UInt64, full_word_bytes)
+        to_escape = sum(words .== MARK)
+        Base.write(x.io, to_escape)
+
+        # delimit the end of this meta-data block
+        Base.write(x.io, MARK)
+
+        # hash both user data and the data block above
         x.hash = update_hash!(x.hash, @view x.bytes[1:position(x.io)])
+
         seek(x.io, 0)
     end
-end
-
-function update_hash!(x::BufferedHash, bytes)
-    write_(x.io, bytes)
-    flush_bytes!(x)
     return x
 end
 
+function start_hash!(x::BufferedHash)
+    push!(x.starts, position(x.io))
+    return x
+end
+
+function stop_hash!(::BufferedHash, x::BufferedHash)
+    push!(x.stops, position(x.io))
+    return x
+end
+
+# NOTE: we do not implement update_hash!; instead we specialize on 
+# BufferedHash when calling `stable_hash_helper(..., ::WriteHash)
+
 function compute_hash!(x::BufferedHash)
-    hash = if position(x.io) > 0
-        update_hash!(x.hash, @view x.bytes[1:position(x.io)])
-    else
-        x.hash
-    end
-    return compute_hash!(hash)
+    return compute_hash!(flush_bytes!(x, 0).hash)
 end
-
-#####
-##### MarkerHash: wrapper that uses delimiters to handle `start/stop_hash!` 
-#####
-
-struct MarkerHash{T}
-    hash::T
-end
-function start_hash!(x::MarkerHash)
-    return MarkerHash(update_hash!(x.hash, (0x01,)))
-end
-update_hash!(x::MarkerHash, bytes) = MarkerHash(update_hash!(x.hash, bytes))
-function stop_hash!(::MarkerHash, nested::MarkerHash)
-    return MarkerHash(update_hash!(nested.hash, (0x02,)))
-end
-compute_hash!(x::MarkerHash) = compute_hash!(x.hash)
 
 #####
 ##### ================ Hash Traits ================
@@ -294,12 +306,8 @@ end
 
 # with a buffered hash, we don't need to create a new IOBuffer
 # just use the one we've already allocated
-function stable_hash_helper(obj, hash_state::MarkerHash{<:BufferedHash}, context,
+function stable_hash_helper(obj, hash_state::BufferedHash, context,
                             root, c::WriteHash)
-    return MarkerHash(stable_hash_helper(obj, hash_state.hash, context, root, c))
-end
-
-function stable_hash_helper(obj, hash_state::BufferedHash, context, root, ::WriteHash)
     write(hash_state.io, obj, context)
     flush_bytes!(hash_state)
     return hash_state
@@ -316,14 +324,34 @@ end
 FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
 get_value_(x, method::FnHash) = method.fn(x)
 
-struct ConstantHash{T,H}
+struct PrivateConstantHash{T,H}
     constant::T
     result_method::H # if non-nothing, apply to value `constant`
 end
-ConstantHash(val) = ConstantHash{typeof(val),Nothing}(val, nothing)
-get_value_(x, method::ConstantHash) = method.constant
+PrivateConstantHash(val) = PrivateConstantHash{typeof(val),Nothing}(val, nothing)
+get_value_(x, method::PrivateConstantHash) = method.constant
 
-function stable_hash_helper(x, hash_state, context, root, method::Union{FnHash,ConstantHash})
+function ConstantHash(constant, method=nothing)
+    Base.depwarn("`ConstantHash` has been deprecated, favor `@ConstantHash`.",
+                 :ConstantHash)
+    return PrivateConstantHash(constant, method)
+end
+macro ConstantHash(constant)
+    if constant isa Symbol || constant isa String
+        return PrivateConstantHash(first(reinterpret(UInt64,
+                                                     sha256(codeunits(String(constant))))),
+                                   WriteHash())
+    elseif constant isa Number
+        return PrivateConstantHash(first(reinterpret(UInt64,
+                                                     sha256(reinterpret(UInt8, [constant])))),
+                                   WriteHash())
+    else
+        error("Unexpected expression: `$constant`")
+    end
+end
+
+function stable_hash_helper(x, hash_state, context, root,
+                            method::Union{FnHash,PrivateConstantHash})
     y = get_value_(x, method)
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method
@@ -498,7 +526,7 @@ function hash_field_str(T)
     for f in sort_(fieldnames(T))
         if f isa Symbol
             SHA.update!(sha, codeunits(String(f)))
-        else # isa Number
+        else # e.g. in some weird cases the field names can be numbers ???
             SHA.update!(sha, reinterpret(UInt8, [f]))
         end
     end
@@ -728,14 +756,6 @@ root_version(x) = root_version(parent_context(x))
 ##### HashVersion{V} (root contexts)
 #####
 
-macro inthash(constant)
-    if constant isa Symbol || constant isa String
-        return first(reinterpret(UInt64, sha256(codeunits(String(constant)))))
-    else
-        error("Unexpected expression: `$constant`")
-    end
-end
-
 parent_context(::HashVersion) = nothing
 root_version(::HashVersion{V}) where {V} = V
 
@@ -775,8 +795,8 @@ function hash_method(::AbstractString, c::HashVersion{V}) where V
     return (FnHash(V > 1 ? stable_type_id : qualified_name, WriteHash()),
             WriteHash())
 end
-hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
-hash_method(::Symbol, ::HashVersion) = (ConstantHash(@inthash(":")), WriteHash())
+hash_method(::Symbol, ::HashVersion{1}) = (PrivateConstantHash(":"), WriteHash())
+hash_method(::Symbol, ::HashVersion) = (@ConstantHash(":"), WriteHash())
 function hash_method(::AbstractDict, c::HashVersion{V}) where V
     return (V < 2 ? FnHash(qualified_name_) :
             FnHash(stable_typename_id, WriteHash()),
@@ -785,16 +805,16 @@ end
 hash_method(::Tuple, c::HashVersion) = (TypeNameHash(c), IterateHash())
 hash_method(::Pair, c::HashVersion) = (TypeNameHash(c), IterateHash())
 function hash_method(::Type, c::HashVersion{1})
-    return (ConstantHash("Base.DataType"), FnHash(qualified_type_))
+    return (PrivateConstantHash("Base.DataType"), FnHash(qualified_type_))
 end
 function hash_method(::Type, c::HashVersion)
-    return (ConstantHash(@inthash("Base.DataType"), WriteHash()), TypeHash(c))
+    return (@ConstantHash("Base.DataType"), TypeHash(c))
 end
 function hash_method(::Function, c::HashVersion{1})
-    return (ConstantHash("Base.Function"), FnHash(qualified_name_))
+    return (PrivateConstantHash("Base.Function"), FnHash(qualified_name_))
 end
 function hash_method(::Function, c::HashVersion)
-    return (ConstantHash(@inthash("Base.Function"), WriteHash()), TypeHash(c))
+    return (@ConstantHash("Base.Function"), TypeHash(c))
 end
 function hash_method(::AbstractSet, c::HashVersion)
     return (TypeNameHash(c), FnHash(sort! ∘ collect))
@@ -818,8 +838,8 @@ TablesEq() = TablesEq(HashVersion{1}())
 parent_context(x::TablesEq) = x.parent
 function hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
-        return (root_version(m) > 1 ? ConstantHash(@inthash("Tables.istable")) :
-                ConstantHash("Tables.istable"),
+        return (root_version(m) > 1 ? @ConstantHash("Tables.istable") :
+                PrivateConstantHash("Tables.istable"),
                 FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn)))
     end
     return hash_method(x, parent_context(m))
@@ -842,14 +862,14 @@ end
 ViewsEq() = ViewsEq(HashVersion{1}())
 parent_context(x::ViewsEq) = x.parent
 function hash_method(::AbstractArray, c::ViewsEq)
-    return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractArray")) : 
+    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractArray") : 
                                   ConstantHash("Base.AbstractArray"), 
             (root_version(c) > 2 ? (FnHash(stable_eltype_id),) : ())...,
             FnHash(size), 
             IterateHash())
 end
 function hash_method(::AbstractString, c::ViewsEq)
-    return (root_version(c) > 1 ? ConstantHash(@inthash("Base.AbstractString")) : 
+    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractString") : 
                                   ConstantHash("Base.AbstractString", WriteHash()), 
             WriteHash())
 end

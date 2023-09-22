@@ -197,6 +197,8 @@ include("setup_tests.jl")
             end
 
             @testset "Custom hash_method" begin
+                @test @ConstantHash(5).constant isa UInt64
+                @test @ConstantHash("foo").constant isa UInt64
                 if V > 1
                     @test test_hash(TestType(1, 2)) != TestType(UInt(1), UInt(2))
                 end
@@ -225,6 +227,7 @@ include("setup_tests.jl")
         @test_deprecated(UseProperties(:ByName))
         @test_deprecated(UseQualifiedName())
         @test_deprecated(UseSize(UseIterate()))
+        @test_deprecated(ConstantHash("foo"))
         @test_deprecated(UseTable())
     end
 end
