@@ -207,7 +207,7 @@ mutable struct BufferedHash{T}
     limit::Int
     io::IOBuffer
 end
-const HASH_BUFFER_SIZE = 2^15
+const HASH_BUFFER_SIZE = 2^14
 function BufferedHash(hash, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
     starts = sizehint!(Vector{Int}(), size)
@@ -224,36 +224,36 @@ end
 
 const MARK = 0xcc56c9cc4deb0162 # first 8 bytes of sha256("mark")
 
-function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2), 
-                      final=false)
+function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2))
     # the default `limit` tries to flush before the allocated buffer increases in size
     if position(x.io) ≥ limit
-        # NOTE: the below sequence is written so that in principle we could extract it from
-        # the sequence of written bytes, scanning from the end to the front of the byte
-        # sequence. MARK is a control sequence that tells us what bytes to extract, we need
-        # to write the location of all delimeters (this is what tells us about the nesting
-        # of elements in the buffer) and we need to store the location of an MARK byte
-        # sequences written to x.bytes, so we would know to skip them. The idea is that this
-        # allows any arbitrary byte sequence to occur in x.bytes and the information about
-        # the delimeters is still findable, meaning we can distingush it from content
+        full_words = 8div(position(x.io), 8, RoundDown)
+
+        # NOTE: we now write a block of meta-data that represents the start/stop delimeters
+        # for nested elements. To ensure this block of bytes cannot be replicated by the
+        # actual content already written to x.bytes, we use an control sequence (`MARK`) and
+        # we also record all cases where we need to escape that control sequence inside the
+        # user data.
+ 
+        # the control sequence: delimits the start of the meta-datablock
+        write_(x.io, MARK)
 
         # write out the delimeters
-        # @show(position(x.io))
-        write_(x.io, MARK)
         write_(x.io, x.starts)
         write_(x.io, x.stops)
         empty!(x.starts)
         empty!(x.stops)
 
-        # count the number of MARK's that need to be escaped
-        full_words = 8div(position(x.io), 8, RoundDown)
+        # number of control sequences to escape in the user data
         full_word_bytes = @view x.bytes[1:full_words]
         words = reinterpret(UInt64, full_word_bytes)
         to_escape = sum(words .== MARK)
         write_(x.io, to_escape)
+
+        # delimit the end of this meta-data block
         write_(x.io, MARK)
 
-        # hash the buffer
+        # hash both user data and the data block above
         x.hash = update_hash!(x.hash, @view x.bytes[1:position(x.io)])
 
         seek(x.io, 0)
@@ -278,7 +278,7 @@ end
 
 
 function compute_hash!(x::BufferedHash)
-    return compute_hash!(flush_bytes!(x, 0, true).hash)
+    return compute_hash!(flush_bytes!(x, 0).hash)
 end
 
 #####
