@@ -95,7 +95,7 @@ function stable_hash_helper(x, hash_state, context, method::NotImplemented)
 end
 
 function stable_hash_helper(x, hash_state, context, method)
-    throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when " *
+    throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *
                         "hashing object $x. The implementation of `hash_method` for this " *
                         "object is invalid."))
     return nothing
@@ -196,9 +196,6 @@ compute_hash!(x::RecursiveHash) = x.val
 ##### BufferedHash: wrapper that buffers bytes before passing them to the hash algorithm 
 #####
 
-const START = 0x1c601cccabb1eb32 # first 64 bytes of sha("(")
-const STOP = 0x0eaca4071dc55eba # first 64 bytes of sha(")")
-
 mutable struct BufferedHash{T}
     hash::T
     bytes::Vector{UInt8}
@@ -215,16 +212,10 @@ function BufferedHash(hash, size=HASH_BUFFER_SIZE)
     io = IOBuffer(bytes; write=true, read=false)
     return BufferedHash(hash, bytes, starts, stops, size, io)
 end
-write_(io::IO, x) = Base.write(io, x)
-function write_(io::IO, bytes::Tuple)
-    @inbounds for b in bytes
-        Base.write(io, b)
-    end
-end
 
 const MARK = 0xcc56c9cc4deb0162 # first 8 bytes of sha256("mark")
 
-function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2))
+function flush_bytes!(x::BufferedHash, limit=x.limit - (x.limit >> 2))
     # the default `limit` tries to flush before the allocated buffer increases in size
     if position(x.io) ≥ limit
         full_words = 8div(position(x.io), 8, RoundDown)
@@ -234,13 +225,13 @@ function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2))
         # actual content already written to x.bytes, we use an control sequence (`MARK`) and
         # we also record all cases where we need to escape that control sequence inside the
         # user data.
- 
+
         # the control sequence: delimits the start of the meta-datablock
-        write_(x.io, MARK)
+        Base.write(x.io, MARK)
 
         # write out the delimeters
-        write_(x.io, x.starts)
-        write_(x.io, x.stops)
+        Base.write(x.io, x.starts)
+        Base.write(x.io, x.stops)
         empty!(x.starts)
         empty!(x.stops)
 
@@ -248,10 +239,10 @@ function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2))
         full_word_bytes = @view x.bytes[1:full_words]
         words = reinterpret(UInt64, full_word_bytes)
         to_escape = sum(words .== MARK)
-        write_(x.io, to_escape)
+        Base.write(x.io, to_escape)
 
         # delimit the end of this meta-data block
-        write_(x.io, MARK)
+        Base.write(x.io, MARK)
 
         # hash both user data and the data block above
         x.hash = update_hash!(x.hash, @view x.bytes[1:position(x.io)])
@@ -266,16 +257,13 @@ function start_hash!(x::BufferedHash)
     return x
 end
 
-function stop_hash!(::BufferedHash, x::BufferedHash) 
+function stop_hash!(::BufferedHash, x::BufferedHash)
     push!(x.stops, position(x.io))
     return x
 end
 
-function update_hash!(x::BufferedHash, bytes)
-    write_(x.io, bytes)
-    return flush_bytes!(x)
-end
-
+# NOTE: we do not implement update_hash!; instead we specialize on 
+# BufferedHash when calling `stable_hash_helper(..., ::WriteHash)
 
 function compute_hash!(x::BufferedHash)
     return compute_hash!(flush_bytes!(x, 0).hash)
