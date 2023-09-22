@@ -202,14 +202,18 @@ const STOP = 0x0eaca4071dc55eba # first 64 bytes of sha(")")
 mutable struct BufferedHash{T}
     hash::T
     bytes::Vector{UInt8}
+    starts::Vector{Int}
+    stops::Vector{Int}
     limit::Int
     io::IOBuffer
 end
-const HASH_BUFFER_SIZE = 2^14
+const HASH_BUFFER_SIZE = 2^15
 function BufferedHash(hash, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
+    starts = sizehint!(Vector{Int}(), size)
+    stops = sizehint!(Vector{Int}(), size)
     io = IOBuffer(bytes; write=true, read=false)
-    return BufferedHash(hash, bytes, size, io)
+    return BufferedHash(hash, bytes, starts, stops, size, io)
 end
 write_(io::IO, x) = Base.write(io, x)
 function write_(io::IO, bytes::Tuple)
@@ -218,41 +222,54 @@ function write_(io::IO, bytes::Tuple)
     end
 end
 
-function escape_delimeters!(x::BufferedHash, bytes)
-    words = reinterpret(UInt64, bytes)
-    write_(x.io, START)
-    @inbounds for (i, w) in enumerate(words)
-        w == START && write_(x.io, i)
-        w == STOP && write_(x.io, i)
-    end
-    write_(x.io, STOP)
-    return x
-end
+const MARK = 0xcc56c9cc4deb0162 # first 8 bytes of sha256("mark")
 
-function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2), final=false)
+function flush_bytes!(x::BufferedHash, limit = x.limit - (x.limit >> 2), 
+                      final=false)
     # the default `limit` tries to flush before the allocated buffer increases in size
     if position(x.io) ≥ limit
+        # NOTE: the below sequence is written so that in principle we could extract it from
+        # the sequence of written bytes, scanning from the end to the front of the byte
+        # sequence. MARK is a control sequence that tells us what bytes to extract, we need
+        # to write the location of all delimeters (this is what tells us about the nesting
+        # of elements in the buffer) and we need to store the location of an MARK byte
+        # sequences written to x.bytes, so we would know to skip them. The idea is that this
+        # allows any arbitrary byte sequence to occur in x.bytes and the information about
+        # the delimeters is still findable, meaning we can distingush it from content
+
+        # write out the delimeters
+        # @show(position(x.io))
+        write_(x.io, MARK)
+        write_(x.io, x.starts)
+        write_(x.io, x.stops)
+        empty!(x.starts)
+        empty!(x.stops)
+
+        # count the number of MARK's that need to be escaped
         full_words = 8div(position(x.io), 8, RoundDown)
         full_word_bytes = @view x.bytes[1:full_words]
-        
-        if !final
-            x.hash = update_hash!(x.hash, full_word_bytes)
-        else
-            x.hash = update_hash!(x.hash, @view x.bytes[1:position(x.io)])
-        end
-        escape_delimeters!(x, full_word_bytes)
+        words = reinterpret(UInt64, full_word_bytes)
+        to_escape = sum(words .== MARK)
+        write_(x.io, to_escape)
+        write_(x.io, MARK)
+
+        # hash the buffer
+        x.hash = update_hash!(x.hash, @view x.bytes[1:position(x.io)])
 
         seek(x.io, 0)
-        if !final
-            leftover = x.bytes[(full_words+1):end]
-            write_(x.io, leftover)
-        end
     end
     return x
 end
 
-start_hash!(x::BufferedHash) = update_hash!(x, START)
-stop_hash!(::BufferedHash, nested::BufferedHash) = update_hash!(nested, STOP)
+function start_hash!(x::BufferedHash)
+    push!(x.starts, position(x.io))
+    return x
+end
+
+function stop_hash!(::BufferedHash, x::BufferedHash) 
+    push!(x.stops, position(x.io))
+    return x
+end
 
 function update_hash!(x::BufferedHash, bytes)
     write_(x.io, bytes)
