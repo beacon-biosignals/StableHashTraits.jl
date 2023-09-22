@@ -96,23 +96,26 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 
 This release includes speed improvements of about 100 fold.
 
-- **Feature**: `HashVersion{2}` is a new hash context that can be faster (~x100) than
+- **Feature**: `HashVersion{2}` is a new hash context that can be up to ~100x faster than
   `HashVersion{1}`.
 - **Feature**: The requirements for `HashVersion{2}` on the passed hash function have been
   relaxed, such that `alg=crc32` should again work (no need to call `alg=(x,s=UInt32(0)) ->
   crc32c(copy(x),s)`).
-- **Feature**: `@ConstantHash` is a more optimized, simplified version of `ConstantHash`
-- **Deprecation**: `HashVersion{1}` has been deprecated, favor version 2 over 1 in all cases
-  where backwards compatibility is not required.  
-- **Deprecation**: `qualified_name` and `qualified_type` have been deprected, favor
-  `stable_typename_id` and `stable_type_id` as they are much faster.
-- **Deprecation**: `ConstantHash` has been deprecated in favor of `@ConstantHash`.
-- **Feature**: `root_version`: Most users can safely ignore this function. If you are
+- **Feature**: `@ConstantHash` allow for precomputed hash values of constant strings and
+  numbers.
+- **Feature**:  `stable_typename_id` and `stable_type_id` provide compile-time 64 bit hashes
+  of the types of objects
+- **Feature**: `root_version`: Most users can safely ignore this new function. If you are
   implementing a root context (one that returns `parent_context(::MyContext) = nothing`) you
   will need to define this function. It indicates what version of the hashing
   implementations to use (1 or 2). It defaults to 1 to avoid changing the hash values of
   existing root contexts, but should be defined to return 2 to make use of the more
   optimized implementations used by `HashVersion{2}`.
+- **Deprecation**: `HashVersion{1}` has been deprecated, favor version 2 over 1 in all cases
+  where backwards compatibility is not required.  
+- **Deprecation**: `qualified_name` and `qualified_type` have been deprected, in favor of
+  `stable_typename_id` and `stable_type_id`.
+- **Deprecation**: `ConstantHash` has been deprecated in favor of `@ConstantHash`.
 
 ### In 1.0:
 
