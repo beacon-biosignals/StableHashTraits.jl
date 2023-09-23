@@ -235,9 +235,7 @@ function flush_bytes!(x::BufferedHash, limit=x.limit - (x.limit >> 2))
         empty!(x.stops)
 
         # number of control sequences to escape in the user data
-        full_word_bytes = @view x.bytes[1:full_words]
-        words = reinterpret(UInt64, full_word_bytes)
-        to_escape = sum(words .== MARK)
+        to_escape = sum(==(MARK), reinterpret(UInt64, @view x.bytes[1:full_words]))
         Base.write(x.io, to_escape)
 
         # delimit the end of this meta-data block
