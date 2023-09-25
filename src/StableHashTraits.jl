@@ -589,7 +589,7 @@ StableHashTraits.hash_method(::Number, ::EndianInvariant) = FnHash(htol, WriteHa
 StableHashTraits.hash_method(::CrossPlatformData) = HashAndContext(IterateHash(), EndianInvariant)
 ```
 
-Note that we could accomplish this same behavior using `HashFn(x -> htol.(x.data))`, but it
+Note that we could accomplish this same behavior using `FnHash(x -> htol.(x.data))`, but it
 would require copying that data to do so.
 """
 struct HashAndContext{F,M}

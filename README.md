@@ -74,7 +74,7 @@ following values, typically based only on the *type* of its input.
     - `stable_typename_id`: Get the qualified name of an object's type, e.g. `Base.String` and return 64 bit hash of this string
     - `stable_type_id`: Get the qualified name and type parameters of a type, e.g.
        `Base.Vector{Int}`, and return a 64 bit hash of this string.
-5. `@ConstantHash(str)`: at compile time, hash the literal string or number using `sha256`
+5. `@ConstantHash(x)`: at compile time, hash the literal string or number using `sha256`
   and include the first 64 bytes as a constant number that is recursively hashed
   using the `WriteHash` method.
 6. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
@@ -115,7 +115,7 @@ This release includes speed improvements of about 100 fold.
   where backwards compatibility is not required.  
 - **Deprecation**: `qualified_name` and `qualified_type` have been deprected, in favor of
   `stable_typename_id` and `stable_type_id`.
-- **Deprecation**: `ConstantHash` has been deprecated in favor of `@ConstantHash`.
+- **Deprecation**: `ConstantHash` has been deprecated in favor of the more efficient `@ConstantHash`.
 
 ### In 1.0:
 
@@ -197,7 +197,7 @@ struct NamedTuplesEq{T}
 end
 StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
-    return FnHash(qualified_name), UseStruct(:ByName)
+    return FnHash(stable_typename_id), UseStruct(:ByName)
 end
 c = NamedTuplesEq(HashVersion{2}())
 stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
