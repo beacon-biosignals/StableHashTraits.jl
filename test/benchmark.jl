@@ -16,14 +16,22 @@ struct BenchTest
     b::Int
 end
 
+function str_to_data(strs)
+    io = IOBuffer()
+    for str in strings
+        write(io, str)
+    end
+    take!(io)
+end
+
 const N = 10_000
 data = rand(Int, N)
 data1 = vec(rand(Int, 2, N))
 data2 = tuple.(rand(Int, N), rand(Int, N))
 strings = [String(rand('a':'z', 30)) for _ in 1:N]
-strdata = [c for str in strings for c in str]
+strdata = str_to_data(strings)
 symbols = [Symbol(String(rand('a':'z', 30))) for _ in 1:N]
-symdata = [c for sym in symbols for c in String(sym)]
+symdata = str_to_data(String(sym) for sym in symbols)
 structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:N]
 struct_data = [x for st in structs for x in (st.a, st.b)]
 df = DataFrame(; x=1:N, y=1:N)
