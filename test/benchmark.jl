@@ -57,7 +57,7 @@ for V in (2, 3)
             end
             suite["$(name)_$(hstr)_$(V)"]["base"] = a_run
             
-            b_run_ = if name == "vnumbers"
+            b_run = if name == "vnumbers"
                 @benchmarkable $(stable_hash)($b, ViewsEq(HashVersion{$V}()); alg=$(hashfn))
             else
                 @benchmarkable $(stable_hash)($b, HashVersion{$V}(); alg=$(hashfn))
