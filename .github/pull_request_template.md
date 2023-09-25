@@ -3,7 +3,7 @@
 Author, please:
 
 - Provide a description of the goals of this PR.
-- Justify any substantial drop in the ratios shown in the final column of the `After`
+- Justify any substantial increase in the ratios shown in the final column of the `After`
   table of the benchmarks.
 
 ## Benchmarks

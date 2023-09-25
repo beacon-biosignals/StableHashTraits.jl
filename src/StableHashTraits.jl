@@ -111,8 +111,20 @@ end
 
 Returns the updated hash state given a set of bytes (either a tuple or array of UInt8
 values).
+
+    update_hash!(state, obj, context)
+
+Returns the update hash, given an object and some context. The object will
+be written to some bytes using `StableHashTraits.write(io, obj, context)`.
 """
 function update_hash! end
+
+# when a hasher has no internal buffer, we allocate one for each call to `update_hash!`
+function update_hash!(hasher, x, context) 
+    io = IOBuffer()
+    write(io, x, context)
+    return update_hash!(hasher, take!(io))
+end
 
 """
     setup_hash_state(alg, context)
@@ -155,81 +167,87 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
     if CTX in names(SHA)
         @eval function setup_hash_state(::typeof(SHA.$(fn)), context)
             root_version(context) < 2 && return SHA.$(CTX)()
-            return BufferedHash(SHA.$(CTX)())
+            return BufferedHasher(SHA.$(CTX)())
         end
     end
 end
 
-# NOTE: while BufferedHash is a faster implementation of `start/stop_hash!`
+# NOTE: while BufferedHasher is a faster implementation of `start/stop_hash!`
 # we still need a recursive hash implementation to implement `HashVersion{1}()`
 start_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
-update_hash!(sha::SHA.SHA_CTX, bytes) = (SHA.update!(sha, bytes); sha)
+function update_hash!(sha::SHA.SHA_CTX, bytes::AbstractVector{UInt8}) 
+    SHA.update!(sha, bytes)
+    return sha
+end
 function stop_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
-    return update_hash!(hash_state, SHA.digest!(nested_hash_state))
+    SHA.update!(hash_state, SHA.digest!(nested_hash_state))
+    return hash_state
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 
 #####
-##### RecursiveHash: handles a function of the form hash(bytes, [old_hash]) 
+##### RecursiveHasher: handles a function of the form hash(bytes, [old_hash]) 
 #####
 
 function setup_hash_state(fn::Function, context)
-    root_version(context) < 2 && return RecursiveHash(fn)
-    return BufferedHash(RecursiveHash(fn))
+    root_version(context) < 2 && return RecursiveHasher(fn)
+    return BufferedHasher(RecursiveHasher(fn))
 end
 
-struct RecursiveHash{F,T}
+struct RecursiveHasher{F,T}
     fn::F
     val::T
     init::T
 end
-function RecursiveHash(fn)
+function RecursiveHasher(fn)
     hash = fn(UInt8[])
-    return RecursiveHash(fn, hash, hash)
+    return RecursiveHasher(fn, hash, hash)
 end
-start_hash!(x::RecursiveHash) = RecursiveHash(x.fn, x.init, x.init)
-update_hash!(x::RecursiveHash, bytes) = RecursiveHash(x.fn, x.fn(bytes, x.val), x.init)
-function stop_hash!(fn::RecursiveHash, nested::RecursiveHash)
+start_hash!(x::RecursiveHasher) = RecursiveHasher(x.fn, x.init, x.init)
+function update_hash!(hasher::RecursiveHasher, bytes::AbstractVector{UInt8})
+    return RecursiveHasher(hasher.fn, hasher.fn(bytes, hasher.val), hasher.init)
+end
+function stop_hash!(fn::RecursiveHasher, nested::RecursiveHasher)
     return update_hash!(fn, reinterpret(UInt8, [nested.val]))
 end
-compute_hash!(x::RecursiveHash) = x.val
+compute_hash!(x::RecursiveHasher) = x.val
 
 #####
-##### BufferedHash: wrapper that buffers bytes before passing them to the hash algorithm 
+##### BufferedHasher: wrapper that buffers bytes before passing them to the hash algorithm 
 #####
 
-mutable struct BufferedHash{T}
-    hash::T
-    bytes::Vector{UInt8}
-    starts::Vector{Int}
-    stops::Vector{Int}
-    limit::Int
+mutable struct BufferedHasher{T}
+    hasher::T
+    bytes::Vector{UInt8} # tye bytes that back `io`
+    starts::Vector{Int} # delimits the start of nested structures (for `start_hash!`)
+    stops::Vector{Int} # delimits the end of nested structures (for `stop_hash!`)
+    limit::Int # the preferred limit on the size of `io`'s buffer
     io::IOBuffer
 end
 const HASH_BUFFER_SIZE = 2^14
-function BufferedHash(hash, size=HASH_BUFFER_SIZE)
+function BufferedHasher(hasher, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
     starts = sizehint!(Vector{Int}(), size)
     stops = sizehint!(Vector{Int}(), size)
     io = IOBuffer(bytes; write=true, read=false)
-    return BufferedHash(hash, bytes, starts, stops, size, io)
+    return BufferedHasher(hasher, bytes, starts, stops, size, io)
 end
 
-const MARK = 0xcc56c9cc4deb0162 # first 8 bytes of sha256("mark")
-
-function flush_bytes!(x::BufferedHash, limit=x.limit - (x.limit >> 2))
+# flush bytes that are stored internally to the underlying hasher
+function flush_bytes!(x::BufferedHasher, limit=x.limit - (x.limit >> 2))
     # the default `limit` tries to flush before the allocated buffer increases in size
     if position(x.io) ≥ limit
-        full_words = 8div(position(x.io), 8, RoundDown)
+        content_size = position(x.io)
 
         # NOTE: we now write a block of meta-data that represents the start/stop delimeters
-        # for nested elements. To ensure this block of bytes cannot be replicated by the
-        # actual content already written to x.bytes, we use an control sequence (`MARK`) and
-        # we also record all cases where we need to escape that control sequence inside the
-        # user data.
-
-        # the control sequence: delimits the start of the meta-datablock
-        Base.write(x.io, MARK)
+        # for nested elements. We mark the number of bytes of user-hashed content it covers,
+        # and the number of delimeters represented, so that there is no way to have content
+        # replicate the exact metadata block used to represent a given byte sequence
+        # (including any such block would change the nubmer of bytes the metadata block
+        # indexes). We can verify that this is the cases by imagining that we're scanning
+        # the bytes from end to start; given the information in the metadata block (and
+        # given that we know the last thing written is metadata) we can easily scan in this
+        # direction to correctly distinguish all metadata from all user-hashed content
 
         # write out the delimeters
         Base.write(x.io, x.starts)
@@ -237,38 +255,37 @@ function flush_bytes!(x::BufferedHash, limit=x.limit - (x.limit >> 2))
         empty!(x.starts)
         empty!(x.stops)
 
-        # number of control sequences to escape in the user data
-        full_word_bytes = @view x.bytes[1:full_words]
-        words = reinterpret(UInt64, full_word_bytes)
-        to_escape = sum(words .== MARK)
-        Base.write(x.io, to_escape)
-
-        # delimit the end of this meta-data block
-        Base.write(x.io, MARK)
+        # write out user and metadata content size
+        @assert x.starts == x.stops
+        Base.write(x.io, length(x.starts))
+        Base.write(x.io, content_size)
 
         # hash both user data and the data block above
-        x.hash = update_hash!(x.hash, @view x.bytes[1:position(x.io)])
+        x.hasher = update_hash!(x.hasher, @view x.bytes[1:position(x.io)])
 
         seek(x.io, 0)
     end
     return x
 end
 
-function start_hash!(x::BufferedHash)
+function start_hash!(x::BufferedHasher)
     push!(x.starts, position(x.io))
     return x
 end
 
-function stop_hash!(::BufferedHash, x::BufferedHash)
+function stop_hash!(root::BufferedHasher, x::BufferedHasher)
     push!(x.stops, position(x.io))
     return x
 end
 
-# NOTE: we do not implement update_hash!; instead we specialize on 
-# BufferedHash when calling `stable_hash_helper(..., ::WriteHash)
+function update_hash!(hasher::BufferedHasher, obj, context)
+    write(hasher.io, obj, context)
+    flush_bytes!(hasher)
+    return hasher
+end
 
-function compute_hash!(x::BufferedHash)
-    return compute_hash!(flush_bytes!(x, 0).hash)
+function compute_hash!(x::BufferedHasher)
+    return compute_hash!(flush_bytes!(x, 0).hasher)
 end
 
 #####
@@ -299,18 +316,7 @@ write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
 
 function stable_hash_helper(x, hash_state, context, root, ::WriteHash)
-    io = IOBuffer()
-    write(io, x, context)
-    return update_hash!(hash_state, take!(io))
-end
-
-# with a buffered hash, we don't need to create a new IOBuffer
-# just use the one we've already allocated
-function stable_hash_helper(obj, hash_state::BufferedHash, context,
-                            root, c::WriteHash)
-    write(hash_state.io, obj, context)
-    flush_bytes!(hash_state)
-    return hash_state
+    update_hash!(hash_state, x, context)
 end
 
 #####
@@ -673,7 +679,7 @@ StableHashTraits.hash_method(::Number, ::EndianInvariant) = FnHash(htol, WriteHa
 StableHashTraits.hash_method(::CrossPlatformData) = HashAndContext(IterateHash(), EndianInvariant)
 ```
 
-Note that we could accomplish this same behavior using `HashFn(x -> htol.(x.data))`, but it
+Note that we could accomplish this same behavior using `FnHash(x -> htol.(x.data))`, but it
 would require copying that data to do so.
 """
 struct HashAndContext{F,M}
