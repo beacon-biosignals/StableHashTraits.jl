@@ -24,7 +24,7 @@ end
 StableHashTraits.stable_hash(::MyType) = FnHash(x -> x.data) 
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
-stable_hash(a, HashVersion{2}()) == stable_hash(b, HashVersion{2}()) # true
+stable_hash(a; version=2) == stable_hash(b; version=2) # true
 ```
 
 ## Why use `stable_hash` instead of `Base.hash`?
@@ -39,7 +39,13 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 
 ## Details
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`), see the final section below for more details. It is generally recommended that you explicitly set the context to the latest version (`HashVersion{2}()`) as it includes substantial speed improvements.
+You compute hashes using `stable_hash`. This is called on the object you want to hash, and
+(optionally) a second argument called the context. The context you use affects how hashing
+occurs (it defaults to `HashVersion{1}()`), see the final section below for details on
+how you can implement your own contexts. It is generally recommended that you avoid
+`HashVerison{1}()`, favoring `HashVersion{2}()` as it include substantial speed
+improvements. When you do not need to include a custom context, a short hand for specifying
+`HashVersion{2}()` is to call `stable_hash(x; version=2)`.
 
 There are sensible defaults for `stable_hash` that aim to ensure that if two values are
 different, the input to the hash algorithm will differ. 
@@ -182,14 +188,16 @@ is passed as the second argument to `stable_hash`. By default it is equal to
 
 This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
 is the method called for `WriteHash`, and falls back to `Base.write`). Because of the way
-the default context (`HashVersion{1}`) is defined, you normally don't have to include this
-context as an argument when you define a method of `hash_context` or `write` because there
-are appropriate fallback methods.
+the root contexts (`HashVersion{1}` and `HashVersion{2}`) are defined, you normally don't
+have to include this context as an argument when you define a method of `hash_context` or
+`write` because there are appropriate fallback methods.
 
 When you define a hash context it should normally accept a parent context that serves as a
 fallback, and return it in an implementation of the method
-`StableHashTraits.parent_context`. For example, here is how we could write a context that
-treats all named tuples with the same keys as equivalent. 
+`StableHashTraits.parent_context`. 
+
+As an example, here is how we could write a context that treats all named tuples with the
+same keys as equivalent. 
 
 ```julia
 struct NamedTuplesEq{T}
@@ -199,8 +207,8 @@ StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
     return FnHash(stable_typename_id), UseStruct(:ByName)
 end
-c = NamedTuplesEq(HashVersion{2}())
-stable_hash((; a=1:2, b=1:2), c) == stable_hash((; b=1:2, a=1:2), c) # true
+context = NamedTuplesEq(HashVersion{2}())
+stable_hash((; a=1:2, b=1:2), context) == stable_hash((; b=1:2, a=1:2), context) # true
 ```
 
 If we instead defined `parent_context` to return `nothing`, our context would need to

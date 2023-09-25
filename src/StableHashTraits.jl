@@ -27,7 +27,7 @@ struct HashVersion{V}
 end
 
 """
-    stable_hash(x, context=HashVersion{1}(); alg=sha256)
+    stable_hash(x, context=HashVersion{version}(); alg=sha256, version=1)
 
 Create a stable hash of the given objects. As long as the context remains the same, this is
 intended to remain unchanged across julia versions. How each object is hashed is determined
@@ -39,6 +39,9 @@ best to pass an explicit version, since `HashVersion{2}` is generally faster tha
 by passing an explicit `HashVersion{N}` should *not* change. (Note that the number in
 `HashVersion` does not necessarily match the package version of `StableHashTraits`).
 
+Instead of passing a context, you can instead pass a `version` keyword, that will
+set the context to `HashVersion{version}()`.
+
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
 [old_hash])`. 
@@ -47,7 +50,8 @@ The `context` value gets passed as the second argument to [`hash_method`](@ref),
 third argument to [`StableHashTraits.write`](@ref)
 
 """
-function stable_hash(x, context=HashVersion{1}(); alg=sha256)
+stable_hash(x; alg=sha256, version=1) = return stable_hash(x, HashVersion{version}(); alg)
+function stable_hash(x, context; alg=sha256)
     return compute_hash!(stable_hash_helper(x, setup_hash_state(alg, context), context,
                                             hash_method(x, context)))
 end
