@@ -29,9 +29,7 @@ data = rand(Int, N)
 data1 = vec(rand(Int, 2, N))
 data2 = tuple.(rand(Int, N), rand(Int, N))
 strings = [String(rand('a':'z', 30)) for _ in 1:N]
-strdata = str_to_data(strings)
 symbols = [Symbol(String(rand('a':'z', 30))) for _ in 1:N]
-symdata = str_to_data(String(sym) for sym in symbols)
 structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:N]
 struct_data = [x for st in structs for x in (st.a, st.b)]
 df = DataFrame(; x=1:N, y=1:N)
@@ -50,7 +48,11 @@ for hashfn in (crc, sha256)
     hstr = nameof(hashfn)
     for (; name, a, b) in benchmarks
         suite["$(name)_$hstr"] = BenchmarkGroup([name])
-        suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
+        if name in ("strings", "symbols")
+            suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(str_to_data($a))
+        else
+            suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
+        end
         suite["$(name)_$hstr"]["trait"] = @benchmarkable $(stable_hash)($b,
                                                                         HashVersion{2}();
                                                                         alg=$(hashfn))
