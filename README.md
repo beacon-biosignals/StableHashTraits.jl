@@ -44,7 +44,7 @@ You compute hashes using `stable_hash`. This is called on the object you want to
 occurs (it defaults to `HashVersion{1}()`), see the final section below for details on
 how you can implement your own contexts. It is generally recommended that you avoid
 `HashVerison{1}()`, favoring `HashVersion{2}()` as it include substantial speed
-improvements. When you do not need to include a custom context, a short hand for specifying
+improvements. When you do not need to include a custom context, a short-hand for specifying
 `HashVersion{2}()` is to call `stable_hash(x; version=2)`.
 
 There are sensible defaults for `stable_hash` that aim to ensure that if two values are
