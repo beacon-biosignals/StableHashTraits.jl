@@ -167,7 +167,8 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
     if CTX in names(SHA)
         @eval function setup_hash_state(::typeof(SHA.$(fn)), context)
             root_version(context) < 2 && return SHA.$(CTX)()
-            return BufferedHasher(SHA.$(CTX)())
+            root_version(context) < 4 && BufferedHasher(SHA.$(CTX)())
+            return CachedHasher(BufferedHasher(SHA.$(CTX)()))
         end
     end
 end
@@ -191,7 +192,8 @@ compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 
 function setup_hash_state(fn::Function, context)
     root_version(context) < 2 && return RecursiveHasher(fn)
-    return BufferedHasher(RecursiveHasher(fn))
+    root_version(context) < 4 && return BufferedHasher(RecursiveHasher(fn))
+    return CachedHasher(BufferedHasher(RecursiveHasher(fn)))
 end
 
 struct RecursiveHasher{F,T}
@@ -289,48 +291,45 @@ function compute_hash!(x::BufferedHasher)
 end
 
 #####
-##### CachedHash: cache hashed values where appropriate 
+##### CachedHasher: cache hashed values where appropriate 
 #####
 
-struct CachedHash{H}
-    buffered::BufferedHash
-    cache::Dict{Tuple{UInt,Uint},H}
-    seen::IdSet
-    caching::Bool
+struct CachedHasher{H}
+    buffered::BufferedHasher
+    cache::Dict{Tuple{UInt,UInt},H}
+    seen::Set{Tuple{UInt,UInt}}
+    nested::Bool
 end
-CachedHash(buffered, caching) = CachedHash(buffered, IdDict{Union{hash_type(buffered), Nothing}}(), 0, caching)
+CachedHasher(buffered) = CachedHasher(buffered, IdDict{Union{hash_type(buffered), Nothing}}(), 0, false)
 
-# sketch of how to handle caching
-# we might also want to have some cumulative count for an object
-# e.g. if we hash 1MB or mor of the same object (e.g. hashing the 
-# same object twice for 0.5MB)
-# acutally I like that, so we should just count the contents of an
-# object (with sizeof being a lower bound)
-
-# TODO: also, how do manage the context (it could change)
-const CACHCE_CAP = HASH_BUFFER_SIZE - (HASH_BUFFER_SIZE >> 2)
-function hash_within(body, x::T, hash::CachedHash, context) where T
-    isprimitivetype(T) && return body(hash)
-    if hash.caching
-        if !isnothing(get(hash.cache, x, nothing)) 
-            return update_hash!(hash, hash.cache[x])
-        end
-
-        # cache object id's that are above a size limit or
-        # that have been marked as being above the size limit, post-hoc
-        if sizeof(x) > CACHE_CAP || get(hash.object_cost, x, 0) > CACHE_CAP
-            new_buffered = BufferedHash(hash.buffered.hash)
-            result = body(CachedHash(new_buffered, false))
-            hash.cache[x] = compute_hash!(result)
-            return update_hash!(hash, hash.cache[x])
-        end
+cached_stable_hash(x, hash, context, root, method) = stable_hash_helper(x, hash, context, root, method)
+const CACHE_MIN_SIZE = 2^10
+function cached_stable_hash(x::T, hash::CachedHasher, context, root, method) where T
+    if isprimitivetype(T) || (isbitstype(T) && sizeof(x) < CACHE_MIN_SIZE)
+        return stable_hash_helper(x, hash, context, root, method)
     end
 
-    bytebefore = hash.bytecount
-    result = body(hash)
+    key = (objectid(x), objectid(context))
 
+    haskey(hash.cache, key) && return hash.cache[key]
 
-    return result
+    if sizeof(x) > (hash.buffered.limit << 2) || (key ∈ hash.seen && !hash.nested)
+        # NOTE: this is "inefficient" in that we can end up recomputing the hash of objects
+        # twice: once, when it is first seen and a second time, when it is seen but not yet
+        # in the cache. However, it's not clear that there is a better alternative.
+        value = get!(hash.cache, key) do 
+            new_buffered = BufferedHasher(hash.buffered.hash)
+            new_hash = CachedHasher(new_buffered, hash.cache, hash.seen, true)
+            return compute_hash!(stable_hash_helper(x, new_hash, context, root, method))
+        end
+
+        method = hash_method(value, context)
+        return stable_hash_helper(value, hash, context, root, method)
+    else
+        push!(hash.seen, key)
+    end
+
+    return stable_hash_helper(x, hash, context, root, method)
 end
 
 #####
@@ -481,7 +480,7 @@ function hash_foreach(fn, hash_state, root, xs)
     inner_state = start_hash!(hash_state)
     for x in xs
         f_x, method, context = fn(x)
-        inner_state = stable_hash_helper(f_x, inner_state, context, root, method)
+        inner_state = cached_stable_hash(f_x, inner_state, context, root, method)
     end
     hash_state = stop_hash!(hash_state, inner_state)
     return hash_state
