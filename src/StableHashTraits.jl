@@ -190,6 +190,8 @@ function stop_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 
+hash_type(::SHA.SHA_CTX) = Vector{UInt}
+
 #####
 ##### RecursiveHasher: handles a function of the form hash(bytes, [old_hash]) 
 #####
@@ -217,6 +219,8 @@ function stop_hash!(fn::RecursiveHasher, nested::RecursiveHasher)
     return update_hash!(fn, reinterpret(UInt8, [nested.val]))
 end
 compute_hash!(x::RecursiveHasher) = x.val
+
+hash_type(x::RecursiveHasher{<:Any,T}) where T = T
 
 #####
 ##### BufferedHasher: wrapper that buffers bytes before passing them to the hash algorithm 
@@ -285,6 +289,7 @@ function stop_hash!(root::BufferedHasher, x::BufferedHasher)
 end
 
 function update_hash!(hasher::BufferedHasher, obj, context)
+    # @show obj
     write(hasher.io, obj, context)
     flush_bytes!(hasher)
     return hasher
@@ -294,47 +299,56 @@ function compute_hash!(x::BufferedHasher)
     return compute_hash!(flush_bytes!(x, 0).hasher)
 end
 
+hash_type(x::BufferedHasher) = hash_type(x.hasher)
+
 #####
 ##### CachedHasher: cache hashed values where appropriate 
 #####
 
-struct CachedHasher{H}
-    buffered::BufferedHasher
-    cache::Dict{Tuple{UInt,UInt},H}
-    seen::Set{Tuple{UInt,UInt}}
+const CacheKey = Tuple{UInt,UInt,UInt}
+mutable struct CachedHasher{T,H}
+    buffered::BufferedHasher{T}
+    cache::Dict{CacheKey,H}
+    seen::Set{CacheKey}
     nested::Bool
 end
-CachedHasher(buffered) = CachedHasher(buffered, IdDict{Union{hash_type(buffered), Nothing}}(), 0, false)
+function CachedHasher(buffered)
+    return CachedHasher(buffered, Dict{CacheKey,hash_type(buffered)}(),
+                        Set{CacheKey}(), false)
+end
 
 cached_stable_hash(x, hash, context, root, method) = stable_hash_helper(x, hash, context, root, method)
 const CACHE_MIN_SIZE = 2^10
-function cached_stable_hash(x::T, hash::CachedHasher, context, root, method) where T
-    if isprimitivetype(T) || (isbitstype(T) && sizeof(x) < CACHE_MIN_SIZE)
-        return stable_hash_helper(x, hash, context, root, method)
-    end
 
-    key = (objectid(x), objectid(context))
-
-    haskey(hash.cache, key) && return hash.cache[key]
-
-    if sizeof(x) > (hash.buffered.limit << 2) || (key ∈ hash.seen && !hash.nested)
-        # NOTE: this is "inefficient" in that we can end up recomputing the hash of objects
-        # twice: once, when it is first seen and a second time, when it is seen but not yet
-        # in the cache. However, it's not clear that there is a better alternative.
-        value = get!(hash.cache, key) do 
-            new_buffered = BufferedHasher(hash.buffered.hash)
-            new_hash = CachedHasher(new_buffered, hash.cache, hash.seen, true)
-            return compute_hash!(stable_hash_helper(x, new_hash, context, root, method))
-        end
-
-        method = hash_method(value, context)
-        return stable_hash_helper(value, hash, context, root, method)
-    else
-        push!(hash.seen, key)
-    end
-
-    return stable_hash_helper(x, hash, context, root, method)
+# ensure this occurs at compile time
+@generated function dont_cache_me(T)
+    T <: Tuple && return :(true)
+    T <: DataType && return :(true)
+    isprimitivetype(T) && return :(true)
+    isbitstype(T) && sizeof(T) < CACHE_MIN_SIZE && return :(true)
+    return :(false)
 end
+
+function start_hash!(x::CachedHasher) 
+    x.buffered = start_hash!(x.buffered)
+    return x
+end
+
+function update_hash!(x::CachedHasher, obj, context)
+    x.buffered = update_hash!(x.buffered, obj, context)
+    return x
+end
+
+function stop_hash!(x::CachedHasher, nested::CachedHasher)
+    x.buffered = stop_hash!(x.buffered, nested.buffered)
+    return x
+end
+
+function compute_hash!(x::CachedHasher)
+    return compute_hash!(x.buffered)
+end
+
+hash_type(x::CachedHasher) = hash_type(x.buffered)
 
 #####
 ##### ================ Hash Traits ================
@@ -546,6 +560,35 @@ function stable_hash_helper(x::T, hash_state, context, root,
             return pair, hash_method(pair, context), context
         end
     end
+end
+
+# TODO: move this somewhere better
+function cached_stable_hash(x, hash::CachedHasher, context, root, method::Union{StructHash, IterateHash})
+    dont_cache_me(x) && return stable_hash_helper(x, hash, context, root, method)
+
+    key = (objectid(x), objectid(method), objectid(context))
+
+    if haskey(hash.cache, key)
+        return update_hash!(hash, hash.cache[key], context)
+    end
+
+    if sizeof(x) > (hash.buffered.limit << 2) || (key ∈ hash.seen && !hash.nested)
+        # NOTE: this is "inefficient" in that we can end up recomputing the hash of objects
+        # twice: once, when it is first seen and a second time, when it is seen but not yet
+        # in the cache. However, it is not clear to me, in practice, what would be better
+        # solution that is not overly complicated
+        value = get!(hash.cache, key) do 
+            new_buffered = BufferedHasher(start_hash!(hash.buffered.hasher))
+            new_hash = CachedHasher(new_buffered, hash.cache, hash.seen, true)
+            return compute_hash!(stable_hash_helper(x, new_hash, context, root, method))
+        end
+
+        return update_hash!(hash, value, context)
+    else
+        push!(hash.seen, key)
+    end
+
+    return stable_hash_helper(x, hash, context, root, method)
 end
 
 #####

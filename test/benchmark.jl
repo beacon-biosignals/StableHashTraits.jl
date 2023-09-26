@@ -43,9 +43,10 @@ benchmarks = [(; name="dataframes", a=data1, b=df);
               (; name="strings", a=strings, b=strings);
               (; name="tuples", a=data1, b=data2);
               (; name="vnumbers", a=data, b=data);
-              (; name="numbers", a=data, b=data)]
+              (; name="numbers", a=data, b=data);
+              (; name="repeated", a=data, b=(data, data, data, data))]
 
-for V in (2, 3)
+for V in (2,3,4,)
     for hashfn in (crc, sha256)
         hstr = nameof(hashfn)
         for (; name, a, b) in benchmarks
