@@ -16,14 +16,20 @@ struct BenchTest
     b::Int
 end
 
+function str_to_data(strs)
+    io = IOBuffer()
+    for str in strings
+        write(io, str)
+    end
+    take!(io)
+end
+
 const N = 10_000
 data = rand(Int, N)
 data1 = vec(rand(Int, 2, N))
 data2 = tuple.(rand(Int, N), rand(Int, N))
 strings = [String(rand('a':'z', 30)) for _ in 1:N]
-strdata = [c for str in strings for c in str]
 symbols = [Symbol(String(rand('a':'z', 30))) for _ in 1:N]
-symdata = [c for sym in symbols for c in String(sym)]
 structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:N]
 struct_data = [x for st in structs for x in (st.a, st.b)]
 df = DataFrame(; x=1:N, y=1:N)
@@ -33,8 +39,8 @@ const suite = BenchmarkGroup()
 
 benchmarks = [(; name="dataframes", a=data1, b=df);
               (; name="structs", a=struct_data, b=structs);
-              (; name="symbols", a=symdata, b=symbols);
-              (; name="strings", a=strdata, b=strings);
+              (; name="symbols", a=symbols, b=symbols);
+              (; name="strings", a=strings, b=strings);
               (; name="tuples", a=data1, b=data2);
               (; name="vnumbers", a=data, b=data);
               (; name="numbers", a=data, b=data)]
@@ -44,15 +50,19 @@ for V in (2, 3)
         hstr = nameof(hashfn)
         for (; name, a, b) in benchmarks
             suite["$(name)_$(hstr)_$(V)"] = BenchmarkGroup([name])
-            a_run = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
-            suite["$(name)_$(hstr)_$(V)"]["base"] = a_run
-            if name == "vnumbers"
-                b_run = @benchmarkable $(stable_hash)($b, ViewsEq(HashVersion{$V}()); alg=$(hashfn))
-                suite["$(name)_$(hstr)_$(V)"]["trait"] = b_run
+            a_run = if name in ("strings", "symbols")
+                @benchmarkable $(hashfn)(str_to_data($a))
             else
-                b_run = @benchmarkable $(stable_hash)($b, HashVersion{$V}(); alg=$(hashfn))
-                suite["$(name)_$(hstr)_$(V)"]["trait"] = b_run
+                @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
             end
+            suite["$(name)_$(hstr)_$(V)"]["base"] = a_run
+            
+            b_run = if name == "vnumbers"
+                @benchmarkable $(stable_hash)($b, ViewsEq(HashVersion{$V}()); alg=$(hashfn))
+            else
+                @benchmarkable $(stable_hash)($b, HashVersion{$V}(); alg=$(hashfn))
+            end
+            suite["$(name)_$(hstr)_$(V)"]["trait"] = b_run
         end
     end
 end
