@@ -272,6 +272,51 @@ function compute_hash!(x::BufferedHash)
 end
 
 #####
+##### CachedHash: cache hashed values where appropriate 
+#####
+
+struct CachedHash{H}
+    buffered::BufferedHash
+    cache::Dict{Tuple{UInt,Uint},H}
+    seen::IdSet
+    caching::Bool
+end
+CachedHash(buffered, caching) = CachedHash(buffered, IdDict{Union{hash_type(buffered), Nothing}}(), 0, caching)
+
+# sketch of how to handle caching
+# we might also want to have some cumulative count for an object
+# e.g. if we hash 1MB or mor of the same object (e.g. hashing the 
+# same object twice for 0.5MB)
+# acutally I like that, so we should just count the contents of an
+# object (with sizeof being a lower bound)
+
+# TODO: also, how do manage the context (it could change)
+const CACHCE_CAP = HASH_BUFFER_SIZE - (HASH_BUFFER_SIZE >> 2)
+function hash_within(body, x::T, hash::CachedHash, context) where T
+    isprimitivetype(T) && return body(hash)
+    if hash.caching
+        if !isnothing(get(hash.cache, x, nothing)) 
+            return update_hash!(hash, hash.cache[x])
+        end
+
+        # cache object id's that are above a size limit or
+        # that have been marked as being above the size limit, post-hoc
+        if sizeof(x) > CACHE_CAP || get(hash.object_cost, x, 0) > CACHE_CAP
+            new_buffered = BufferedHash(hash.buffered.hash)
+            result = body(CachedHash(new_buffered, false))
+            hash.cache[x] = compute_hash!(result)
+            return update_hash!(hash, hash.cache[x])
+        end
+    end
+
+    bytebefore = hash.bytecount
+    result = body(hash)
+
+
+    return result
+end
+
+#####
 ##### ================ Hash Traits ================
 #####
 
