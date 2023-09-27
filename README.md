@@ -24,7 +24,7 @@ end
 StableHashTraits.stable_hash(::MyType) = FnHash(x -> x.data) 
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
-stable_hash(a; version=3) == stable_hash(b; version=3) # true
+stable_hash(a; version=4) == stable_hash(b; version=4) # true
 ```
 
 ## Why use `stable_hash` instead of `Base.hash`?
@@ -43,9 +43,9 @@ You compute hashes using `stable_hash`. This is called on the object you want to
 (optionally) a second argument called the context. The context you use affects how hashing
 occurs (it defaults to `HashVersion{1}()`), see the final section below for details on
 how you can implement your own contexts. It is generally recommended that you avoid
-`HashVerison{1}()`, and favor the latest version, `HashVersion{3}()` as it include substantial speed
+`HashVerison{1}()`, and favor the latest version, `HashVersion{4}()` as it include substantial speed
 improvements. When you do not need to include a custom context, a short-hand for specifying
-`HashVersion{3}()` is to call `stable_hash(x; version=3)`.
+`HashVersion{4}()` is to call `stable_hash(x; version=4)`.
 
 These standard contexts (`HashVersion{V}`) aim to ensure that if two values are
 different, the input to the hash algorithm will differ. 
@@ -97,6 +97,17 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 <!-- END_HASH_TRAITS -->
 
 ## Breaking changes
+
+### In 1.3
+
+This release introduces yet another new hash context. It implements a selective caching
+feature that can avoid re-computing hashes for repeated instances of the same object
+in some cases.
+
+- **Feature** `HashVersion{4}` will cache the hash result of `StructHash` and `IterateHash`
+  for the follow objects
+    - any object whose `sizeof(x)` is large, relative to the size of the internal buffer used when hashing 
+    - any object that is seen more than twice.
 
 ### In 1.2
 

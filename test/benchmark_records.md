@@ -2,7 +2,7 @@
 
 A record of benchmarks from various versions of `stable_hash`
 
-# Version 1.0
+## Version 1.0
 
 ```
 12×5 DataFrame
@@ -23,7 +23,7 @@ A record of benchmarks from various versions of `stable_hash`
    12 │ strings     sha256     4.085 ms    21.856 ms      5.34987
 ```
 
-# With Buffering
+## With Buffering
 
 In `dfl/hash-buffer` hash computations are delayed and data is stored in an intermediate
 buffer and only hashed when enough data has been written to the buffer. This addresses
@@ -50,7 +50,7 @@ remains quite slow.
   12 │ numbers     sha256     270.916 μs  374.417 μs    1.38204
 ```
 
-# Version 1.1:
+## Version 1.1
 
 With the addition of `dfl/compiled-type-labels` we compute more quantities at compile time:
 
@@ -75,13 +75,17 @@ using `@generated` functions to guarantee that their hashes are computed at comp
   10 │ strings     sha256     1.388 ms    2.239 ms     1.61243
   11 │ dataframes  sha256     533.500 μs  716.209 μs   1.34247
   12 │ numbers     sha256     271.125 μs  355.625 μs   1.31166
+```
 
-# Version 1.2
+## Version 1.2
 
 Version 1.2 introduces `HashVersion{3}`. This reduces the number of hash collisions by
 hashing the type of all primitive types. To avoid substantial slow-downs it elides these
 types in cases where the struct type or element type is concrete. (so `Any[1, 2]` would
 encode the type of each element but `[1, 2]` would only encode the type of the array). 
+
+We define a new benchmark here `vnumbers` which uses the `ViewsEq` context, so that
+we ensure this context benefits from the optimizations introduces in 1.2.
 
 ```
 28×6 DataFrame
@@ -116,4 +120,69 @@ encode the type of each element but `[1, 2]` would only encode the type of the a
   26 │ 3          numbers     sha256     271.250 μs  372.958 μs   1.37496
   27 │ 3          vnumbers    sha256     271.250 μs  357.625 μs   1.31843
   28 │ 3          strings     sha256     1.382 ms    1.078 ms     0.780118
+```
+## Version 1.3
+
+Version 1.3 introduces `HashVersion{4}`, which selectively caches some of the hash
+computations to avoid repeatedly hashing large objects. Any `object(id)` that has
+been previosuly hashed in the same context, with the same hash method will be hashed
+in isolation the second time, and stored as a single integer value. Furthermore,
+any object whose `sizeof` is sufficiently large (relative to the size of the hash buffer)
+will be immediately hashed in isolation and stored for later.
+
+We define a new benchmark that is a tuple of the same array repeated three times, to verify that this caching trick actually improves performance where expected.
+
+```
+48×6 DataFrame
+ Row │ version    benchmark   hash       base        trait       ratio     
+     │ SubStrin…  SubStrin…   SubStrin…  String      String      Float64   
+─────┼─────────────────────────────────────────────────────────────────────
+   1 │ 2          structs     crc        70.292 μs   1.351 ms    19.2151
+   2 │ 2          tuples      crc        70.000 μs   1.154 ms    16.4875
+   3 │ 2          repeated    crc        35.875 μs   438.042 μs  12.2102
+   4 │ 2          dataframes  crc        71.292 μs   223.166 μs   3.13031
+   5 │ 2          numbers     crc        35.875 μs   109.917 μs   3.06389
+   6 │ 2          vnumbers    crc        35.500 μs   108.334 μs   3.05166
+   7 │ 2          strings     crc        550.583 μs  793.584 μs   1.44135
+   8 │ 2          symbols     crc        569.792 μs  644.584 μs   1.13126
+   9 │ 2          structs     sha256     536.958 μs  3.281 ms     6.11035
+  10 │ 2          tuples      sha256     547.084 μs  2.883 ms     5.26983
+  11 │ 2          symbols     sha256     1.369 ms    2.501 ms     1.82722
+  12 │ 2          strings     sha256     1.379 ms    2.417 ms     1.75312
+  13 │ 2          dataframes  sha256     547.417 μs  739.708 μs   1.35127
+  14 │ 2          repeated    sha256     272.959 μs  365.833 μs   1.34025
+  15 │ 2          numbers     sha256     267.917 μs  354.917 μs   1.32473
+  16 │ 2          vnumbers    sha256     272.958 μs  361.541 μs   1.32453
+  17 │ 3          structs     crc        71.500 μs   1.006 ms    14.067
+  18 │ 3          repeated    crc        35.833 μs   438.542 μs  12.2385
+  19 │ 3          tuples      crc        70.125 μs   589.125 μs   8.40107
+  20 │ 3          dataframes  crc        70.083 μs   220.083 μs   3.14032
+  21 │ 3          vnumbers    crc        35.208 μs   109.667 μs   3.11483
+  22 │ 3          numbers     crc        35.167 μs   108.000 μs   3.07106
+  23 │ 3          symbols     crc        554.000 μs  908.791 μs   1.64042
+  24 │ 3          strings     crc        556.292 μs  154.958 μs   0.278555
+  25 │ 3          structs     sha256     536.958 μs  2.181 ms     4.06146
+  26 │ 3          tuples      sha256     537.000 μs  1.583 ms     2.94801
+  27 │ 3          symbols     sha256     1.364 ms    2.501 ms     1.83352
+  28 │ 3          vnumbers    sha256     268.042 μs  363.333 μs   1.35551
+  29 │ 3          repeated    sha256     267.916 μs  359.292 μs   1.34106
+  30 │ 3          dataframes  sha256     536.958 μs  715.458 μs   1.33243
+  31 │ 3          numbers     sha256     267.834 μs  354.583 μs   1.32389
+  32 │ 3          strings     sha256     1.365 ms    1.064 ms     0.779104
+  33 │ 4          structs     crc        70.250 μs   970.250 μs  13.8114
+  34 │ 4          tuples      crc        70.000 μs   585.792 μs   8.36846
+  35 │ 4          vnumbers    crc        36.083 μs   119.041 μs   3.29909
+  36 │ 4          dataframes  crc        70.125 μs   231.083 μs   3.2953
+  37 │ 4          repeated    crc        35.208 μs   112.625 μs   3.19885
+  38 │ 4          numbers     crc        36.125 μs   113.500 μs   3.14187
+  39 │ 4          symbols     crc        545.000 μs  870.042 μs   1.59641
+  40 │ 4          strings     crc        556.958 μs  161.750 μs   0.290417
+  41 │ 4          structs     sha256     537.000 μs  2.177 ms     4.05408
+  42 │ 4          tuples      sha256     547.167 μs  1.584 ms     2.89537
+  43 │ 4          symbols     sha256     1.366 ms    2.499 ms     1.8297
+  44 │ 4          repeated    sha256     267.834 μs  358.833 μs   1.33976
+  45 │ 4          dataframes  sha256     536.833 μs  714.916 μs   1.33173
+  46 │ 4          vnumbers    sha256     268.041 μs  356.625 μs   1.33049
+  47 │ 4          numbers     sha256     272.917 μs  361.084 μs   1.32305
+  48 │ 4          strings     sha256     1.367 ms    1.064 ms     0.777988
 ```
