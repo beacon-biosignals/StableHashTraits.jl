@@ -196,6 +196,9 @@ include("setup_tests.jl")
                 @test_deprecated(UseSize(UseIterate()))
                 @test_deprecated(UseTable())
             end
+
+            # TODO: test that changing the buffer size doesn't change the hash
+            # we can pass `HashState` to `alg` to get this working
         end
     end
 end

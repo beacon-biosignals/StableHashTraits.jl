@@ -166,7 +166,7 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
         # but we make them satisfy the same interface below
         @eval function HashState(::typeof(SHA.$(fn)), context)
             root_version(context) < 2 && return SHA.$(CTX)()
-            return BufferedHashState(SHA.$(CTX)())
+            return BufferedHashState(SHA.$(CTX)(), SHA.$(CTX)())
         end
     end
 end
@@ -183,6 +183,7 @@ function end_nested_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
     return hash_state
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
+HashState(x::SHA.SHA_CTX, ctx) = x
 
 #####
 ##### RecursiveHashState: handles a function of the form hash(bytes, [old_hash]) 
@@ -190,7 +191,7 @@ compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 
 function HashState(fn::Function, context)
     root_version(context) < 2 && return RecursiveHashState(fn)
-    return BufferedHashState(RecursiveHashState(fn))
+    return BufferedHashState(RecursiveHashState(fn), RecursiveHashState(fn))
 end
 
 struct RecursiveHashState{F,T} <: HashState
@@ -210,70 +211,52 @@ function end_nested_hash!(fn::RecursiveHashState, nested::RecursiveHashState)
     return update_hash!(fn, reinterpret(UInt8, [nested.val]))
 end
 compute_hash!(x::RecursiveHashState) = x.val
+HashState(x::RecursiveHashState) = x
 
 #####
 ##### BufferedHashState: wrapper that buffers bytes before passing them to the hash algorithm 
 #####
 
 mutable struct BufferedHashState{T} <: HashState
-    hasher::T
+    content_hash_state::T
+    delimiter_hash_state::T
+    total_bytes_hashed::Int
     bytes::Vector{UInt8} # tye bytes that back `io`
-    starts::Vector{Int} # delimits the start of nested structures (for `start_nested_hash!`)
+    delimiters::Vector{Int} # delimits the start of nested structures (for `start_nested_hash!`), non-negative is start, negative is stop
     stops::Vector{Int} # delimits the end of nested structures (for `end_nested_hash!`)
     limit::Int # the preferred limit on the size of `io`'s buffer
     io::IOBuffer
 end
 const HASH_BUFFER_SIZE = 2^14
-function BufferedHashState(hasher, size=HASH_BUFFER_SIZE)
+function BufferedHashState(content_state, delimeter_state, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
     starts = sizehint!(Vector{Int}(), size)
     stops = sizehint!(Vector{Int}(), size)
     io = IOBuffer(bytes; write=true, read=false)
-    return BufferedHashState(hasher, bytes, starts, stops, size, io)
+    return BufferedHashState(content_state, delimeter_state, 0, bytes, starts, stops, size, io)
 end
 
 # flush bytes that are stored internally to the underlying hasher
 function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
     # the default `limit` tries to flush before the allocated buffer increases in size
     if position(x.io) ≥ limit
-        content_size = position(x.io)
+        x.content_hash_state = update_hash!(x.content_hash_state, @view x.bytes[1:position(x.io)])
+        x.delimiter_hash_state = update_hash!(x.delimiter_hash_state, reinterpret(UInt8, x.delimiters))
 
-        # NOTE: we now write a block of meta-data that represents the start/stop delimeters
-        # for nested elements. We mark the number of bytes of user-hashed content it covers,
-        # and the number of delimeters represented, so that there is no way to have content
-        # replicate the exact metadata block used to represent a given byte sequence
-        # (including any such block would change the nubmer of bytes the metadata block
-        # indexes). We can verify that this is the cases by imagining that we're scanning
-        # the bytes from end to start; given the information in the metadata block (and
-        # given that we know the last thing written is metadata) we can easily scan in this
-        # direction to correctly distinguish all metadata from all user-hashed content
-
-        # write out the delimeters
-        Base.write(x.io, x.starts)
-        Base.write(x.io, x.stops)
-        empty!(x.starts)
-        empty!(x.stops)
-
-        # write out user and metadata content size
-        @assert x.starts == x.stops
-        Base.write(x.io, length(x.starts))
-        Base.write(x.io, content_size)
-
-        # hash both user data and the data block above
-        x.hasher = update_hash!(x.hasher, @view x.bytes[1:position(x.io)])
-
+        empty!(x.delimiters)
+        x.total_bytes_hashed += position(x.io) # tack total number of bytes that have been hashed
         seek(x.io, 0)
     end
     return x
 end
 
 function start_nested_hash!(x::BufferedHashState)
-    push!(x.starts, position(x.io))
+    push!(x.delimiter, position(x.io) + x.total_bytes_hashed)
     return x
 end
 
 function end_nested_hash!(root::BufferedHashState, x::BufferedHashState)
-    push!(x.stops, position(x.io))
+    push!(x.delimiter, -(position(x.io) + x.total_bytes_hashed))
     return x
 end
 
@@ -284,8 +267,14 @@ function update_hash!(hasher::BufferedHashState, obj, context)
 end
 
 function compute_hash!(x::BufferedHashState)
-    return compute_hash!(flush_bytes!(x, 0).hasher)
+    # at the very end, recursively hash the delimiter hash into the content hash
+    flush_bytes!(x, 0)
+    delimiter = compute_hash!(x.delimeter_hash_state)
+    update_hash(x.content_hash_state, reinterpret(UInt8, [delimiter]))
+
+    return compute_hash!(x.content_hash_state)
 end
+HashState(x::BufferedHashState, ctx) = x
 
 #####
 ##### ================ Hash Traits ================
