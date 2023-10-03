@@ -19,8 +19,8 @@ these fallback methods will not change even if new fallbacks are defined.
 struct HashVersion{V}
     function HashVersion{V}() where {V}
         V == 1 && Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in " *
-                     "all cases where backwards compatible hash values are not " *
-                     "required.", :HashVersion)
+                               "all cases where backwards compatible hash values are not " *
+                               "required.", :HashVersion)
         return new{V}()
     end
 end
@@ -174,7 +174,7 @@ end
 # NOTE: while BufferedHashState is a faster implementation of `start/end_nested_hash!`
 # we still need a recursive hash implementation to implement `HashVersion{1}()`
 start_nested_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
-function update_hash!(sha::SHA.SHA_CTX, bytes::AbstractVector{UInt8}) 
+function update_hash!(sha::SHA.SHA_CTX, bytes::AbstractVector{UInt8})
     SHA.update!(sha, bytes)
     return sha
 end
@@ -315,7 +315,7 @@ write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
 
 function stable_hash_helper(x, hash_state, context, ::WriteHash)
-    update_hash!(hash_state, x, context)
+    return update_hash!(hash_state, x, context)
 end
 
 #####

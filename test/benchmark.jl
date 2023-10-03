@@ -21,7 +21,7 @@ function str_to_data(strs)
     for str in strings
         write(io, str)
     end
-    take!(io)
+    return take!(io)
 end
 
 const N = 10_000
@@ -51,7 +51,8 @@ for hashfn in (crc, sha256)
         if name in ("strings", "symbols")
             suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(str_to_data($a))
         else
-            suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
+            suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8,
+                                                                                  $a))
         end
         suite["$(name)_$hstr"]["trait"] = @benchmarkable $(stable_hash)($b,
                                                                         HashVersion{2}();
