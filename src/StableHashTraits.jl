@@ -10,7 +10,7 @@ using SHA: SHA, sha256
 
 The default `hash_context` used by `stable_hash`. There are currently two versions
 (1 and 2). Version 2 is far more optimized than 1 and should generally be used in newly 
-written code. Version 1 is the default version, so as to changing the hash computed
+written code. Version 1 is the default version, so as to avoid changing the hash computed
 by existing code.
 
 By explicitly passing this hash version in `stable_hash` you ensure that hash values for 
@@ -47,7 +47,7 @@ third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(x, context=HashVersion{1}(); alg=sha256)
-    return compute_hash!(stable_hash_helper(x, setup_hash_state(alg, context), context,
+    return compute_hash!(stable_hash_helper(x, HashState(alg, context), context,
                                             hash_method(x, context)))
 end
 
@@ -80,7 +80,7 @@ hash_method(x, context) = hash_method(x, parent_context(context))
 # user
 hash_method(x, ::Nothing) = hash_method(x)
 # we signal that a method specific to a type is not available using `NotImplemented`; we
-# need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext{1}) where T`
+# need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext) where T
 # below for details
 struct NotImplemented end
 hash_method(_) = NotImplemented()
@@ -104,56 +104,56 @@ end
 ##### ================ Hash Algorithms ================
 #####
 """
-    update_hash!(state, bytes)
+    update_hash!(state::HashState, bytes)
 
 Returns the updated hash state given a set of bytes (either a tuple or array of UInt8
 values).
 
-    update_hash!(state, obj, context)
+    update_hash!(state::HashState, obj, context)
 
-Returns the update hash, given an object and some context. The object will
+Returns the updated hash, given an object and some context. The object will
 be written to some bytes using `StableHashTraits.write(io, obj, context)`.
 """
 function update_hash! end
 
 # when a hasher has no internal buffer, we allocate one for each call to `update_hash!`
-function update_hash!(hasher, x, context) 
+function update_hash!(hasher, x, context)
     io = IOBuffer()
     write(io, x, context)
     return update_hash!(hasher, take!(io))
 end
 
 """
-    setup_hash_state(alg, context)
+    HashState(alg, context)
 
 Given a function that specifies the hash algorithm to use and the current hash context,
 setup the necessary state to track updates to hashing as we traverse an object's structure
 and return it.
 """
-function setup_hash_state end
+abstract type HashState end
 
 """
-    compute_hash!(state)
+    compute_hash!(state::HashState)
 
 Return the final hash value to return for `state`
 """
 function compute_hash! end
 
 """
-    start_hash!(state)
+    start_nested_hash!(state::HashState)
 
 Return an updated state that delimits hashing of a nested structure; calls made to
-`update_hash!` after start_hash! will be handled as nested elements up until `stop_hash!` is
-called.
+`update_hash!` after start_nested_hash! will be handled as nested elements up until
+`end_nested_hash!` is called.
 """
-function start_hash! end
+function start_nested_hash! end
 
 """
-    stop_hash!(state)
+    end_nested_hash!(state::HashState)
 
 Return an updated state that delimints the end of a nested structure.
 """
-function stop_hash! end
+function end_nested_hash! end
 
 #####
 ##### SHA Hashing: support use of `sha256` and related hash functions
@@ -162,76 +162,78 @@ function stop_hash! end
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
     if CTX in names(SHA)
-        @eval function setup_hash_state(::typeof(SHA.$(fn)), context)
+        # we cheat a little here, technically `SHA_CTX` and friends are not `HashState`
+        # but we make them satisfy the same interface below
+        @eval function HashState(::typeof(SHA.$(fn)), context)
             root_version(context) < 2 && return SHA.$(CTX)()
-            return BufferedHasher(SHA.$(CTX)())
+            return BufferedHashState(SHA.$(CTX)())
         end
     end
 end
 
-# NOTE: while BufferedHasher is a faster implementation of `start/stop_hash!`
+# NOTE: while BufferedHashState is a faster implementation of `start/end_nested_hash!`
 # we still need a recursive hash implementation to implement `HashVersion{1}()`
-start_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
+start_nested_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
 function update_hash!(sha::SHA.SHA_CTX, bytes::AbstractVector{UInt8}) 
     SHA.update!(sha, bytes)
     return sha
 end
-function stop_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
+function end_nested_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
     SHA.update!(hash_state, SHA.digest!(nested_hash_state))
     return hash_state
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 
 #####
-##### RecursiveHasher: handles a function of the form hash(bytes, [old_hash]) 
+##### RecursiveHashState: handles a function of the form hash(bytes, [old_hash]) 
 #####
 
-function setup_hash_state(fn::Function, context)
-    root_version(context) < 2 && return RecursiveHasher(fn)
-    return BufferedHasher(RecursiveHasher(fn))
+function HashState(fn::Function, context)
+    root_version(context) < 2 && return RecursiveHashState(fn)
+    return BufferedHashState(RecursiveHashState(fn))
 end
 
-struct RecursiveHasher{F,T}
+struct RecursiveHashState{F,T} <: HashState
     fn::F
     val::T
     init::T
 end
-function RecursiveHasher(fn)
+function RecursiveHashState(fn)
     hash = fn(UInt8[])
-    return RecursiveHasher(fn, hash, hash)
+    return RecursiveHashState(fn, hash, hash)
 end
-start_hash!(x::RecursiveHasher) = RecursiveHasher(x.fn, x.init, x.init)
-function update_hash!(hasher::RecursiveHasher, bytes::AbstractVector{UInt8})
-    return RecursiveHasher(hasher.fn, hasher.fn(bytes, hasher.val), hasher.init)
+start_nested_hash!(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
+function update_hash!(hasher::RecursiveHashState, bytes::AbstractVector{UInt8})
+    return RecursiveHashState(hasher.fn, hasher.fn(bytes, hasher.val), hasher.init)
 end
-function stop_hash!(fn::RecursiveHasher, nested::RecursiveHasher)
+function end_nested_hash!(fn::RecursiveHashState, nested::RecursiveHashState)
     return update_hash!(fn, reinterpret(UInt8, [nested.val]))
 end
-compute_hash!(x::RecursiveHasher) = x.val
+compute_hash!(x::RecursiveHashState) = x.val
 
 #####
-##### BufferedHasher: wrapper that buffers bytes before passing them to the hash algorithm 
+##### BufferedHashState: wrapper that buffers bytes before passing them to the hash algorithm 
 #####
 
-mutable struct BufferedHasher{T}
+mutable struct BufferedHashState{T} <: HashState
     hasher::T
     bytes::Vector{UInt8} # tye bytes that back `io`
-    starts::Vector{Int} # delimits the start of nested structures (for `start_hash!`)
-    stops::Vector{Int} # delimits the end of nested structures (for `stop_hash!`)
+    starts::Vector{Int} # delimits the start of nested structures (for `start_nested_hash!`)
+    stops::Vector{Int} # delimits the end of nested structures (for `end_nested_hash!`)
     limit::Int # the preferred limit on the size of `io`'s buffer
     io::IOBuffer
 end
 const HASH_BUFFER_SIZE = 2^14
-function BufferedHasher(hasher, size=HASH_BUFFER_SIZE)
+function BufferedHashState(hasher, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
     starts = sizehint!(Vector{Int}(), size)
     stops = sizehint!(Vector{Int}(), size)
     io = IOBuffer(bytes; write=true, read=false)
-    return BufferedHasher(hasher, bytes, starts, stops, size, io)
+    return BufferedHashState(hasher, bytes, starts, stops, size, io)
 end
 
 # flush bytes that are stored internally to the underlying hasher
-function flush_bytes!(x::BufferedHasher, limit=x.limit - (x.limit >> 2))
+function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
     # the default `limit` tries to flush before the allocated buffer increases in size
     if position(x.io) ≥ limit
         content_size = position(x.io)
@@ -265,23 +267,23 @@ function flush_bytes!(x::BufferedHasher, limit=x.limit - (x.limit >> 2))
     return x
 end
 
-function start_hash!(x::BufferedHasher)
+function start_nested_hash!(x::BufferedHashState)
     push!(x.starts, position(x.io))
     return x
 end
 
-function stop_hash!(root::BufferedHasher, x::BufferedHasher)
+function end_nested_hash!(root::BufferedHashState, x::BufferedHashState)
     push!(x.stops, position(x.io))
     return x
 end
 
-function update_hash!(hasher::BufferedHasher, obj, context)
+function update_hash!(hasher::BufferedHashState, obj, context)
     write(hasher.io, obj, context)
     flush_bytes!(hasher)
     return hasher
 end
 
-function compute_hash!(x::BufferedHasher)
+function compute_hash!(x::BufferedHashState)
     return compute_hash!(flush_bytes!(x, 0).hasher)
 end
 
@@ -335,20 +337,20 @@ end
 function hash_foreach_old(fn, hash_state, context, xs)
     for x in xs
         f_x, method = fn(x)
-        inner_state = start_hash!(hash_state)
+        inner_state = start_nested_hash!(hash_state)
         inner_state = stable_hash_helper(f_x, inner_state, context, method)
-        hash_state = stop_hash!(hash_state, inner_state)
+        hash_state = end_nested_hash!(hash_state, inner_state)
     end
     return hash_state
 end
 
 function hash_foreach_new(fn, hash_state, context, xs)
-    inner_state = start_hash!(hash_state)
+    inner_state = start_nested_hash!(hash_state)
     for x in xs
         f_x, method = fn(x)
         inner_state = stable_hash_helper(f_x, inner_state, context, method)
     end
-    hash_state = stop_hash!(hash_state, inner_state)
+    hash_state = end_nested_hash!(hash_state, inner_state)
     return hash_state
 end
 
