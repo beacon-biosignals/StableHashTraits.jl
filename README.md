@@ -81,7 +81,7 @@ following values, typically based only on the *type* of its input.
     - `stable_type_id`: Get the qualified name and type parameters of a type, e.g.
        `Base.Vector{Int}`, and return a 64 bit hash of this string.
 5. `@ConstantHash(x)`: at compile time, hash the literal string or number using `sha256`
-  and include the first 64 bytes as a constant number that is recursively hashed
+  and include the first 64 bits as a constant number that is recursively hashed
   using the `WriteHash` method.
 6. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
     results. For example: `(@ConstantHash("header"), StructHash())` would compute a hash for
