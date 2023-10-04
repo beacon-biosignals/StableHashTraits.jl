@@ -60,19 +60,19 @@ using `@generated` functions to guarantee that their hashes are computed at comp
 
 ```
 12×5 DataFrame
- Row │ benchmark   hash       base        trait       ratio    
-     │ SubStrin…   SubStrin…  String      String      Float64  
-─────┼─────────────────────────────────────────────────────────
-   1 │ structs     crc        70.209 μs   1.095 ms    15.5993
-   2 │ tuples      crc        71.792 μs   887.083 μs  12.3563
-   3 │ dataframes  crc        71.542 μs   221.666 μs   3.0984
-   4 │ numbers     crc        35.166 μs   107.834 μs   3.06643
-   5 │ symbols     crc        551.750 μs  673.708 μs   1.22104
-   6 │ strings     crc        551.209 μs  595.833 μs   1.08096
-   7 │ structs     sha256     549.291 μs  3.066 ms     5.5825
-   8 │ tuples      sha256     543.459 μs  2.602 ms     4.78777
-   9 │ symbols     sha256     1.375 ms    2.275 ms     1.65423
-  10 │ strings     sha256     1.388 ms    2.239 ms     1.61243
-  11 │ dataframes  sha256     533.500 μs  716.209 μs   1.34247
-  12 │ numbers     sha256     271.125 μs  355.625 μs   1.31166
-  ```
+ Row │ benchmark   hash       base        trait       ratio     
+     │ SubStrin…   SubStrin…  String      String      Float64   
+─────┼──────────────────────────────────────────────────────────
+   1 │ structs     crc        71.542 μs   1.116 ms    15.6027
+   2 │ tuples      crc        71.459 μs   918.917 μs  12.8594
+   3 │ dataframes  crc        71.458 μs   257.166 μs   3.59884
+   4 │ numbers     crc        35.916 μs   126.666 μs   3.52673
+   5 │ symbols     crc        635.875 μs  629.000 μs   0.989188
+   6 │ strings     crc        655.500 μs  561.292 μs   0.856281
+   7 │ structs     sha256     543.166 μs  3.045 ms     5.60525
+   8 │ tuples      sha256     543.125 μs  2.594 ms     4.77668
+   9 │ symbols     sha256     1.494 ms    2.264 ms     1.51544
+  10 │ strings     sha256     1.484 ms    2.196 ms     1.47992
+  11 │ dataframes  sha256     543.125 μs  749.125 μs   1.37929
+  12 │ numbers     sha256     270.958 μs  371.833 μs   1.37229
+```
