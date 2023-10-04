@@ -126,7 +126,7 @@ end
 """
     HashState(alg, context)
 
-Given a function that specifies the hash algorithm to use and the current hash context,
+Given a function that implements the hash algorithm to use and the current hash context,
 setup the necessary state to track updates to hashing as we traverse an object's structure
 and return it.
 """
@@ -155,6 +155,14 @@ Return an updated state that delimints the end of a nested structure.
 """
 function end_nested_hash! end
 
+"""
+    similar_hash_state(state::HashState)
+
+Akin to `similar` for arrays, this constructs a new object of the same concrete type
+as `state`
+"""
+function similar_hash_state end
+
 #####
 ##### SHA Hashing: support use of `sha256` and related hash functions
 #####
@@ -166,7 +174,7 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
         # but we make them satisfy the same interface below
         @eval function HashState(::typeof(SHA.$(fn)), context)
             root_version(context) < 2 && return SHA.$(CTX)()
-            return BufferedHashState(SHA.$(CTX)(), SHA.$(CTX)())
+            return BufferedHashState(SHA.$(CTX)())
         end
     end
 end
@@ -184,6 +192,7 @@ function end_nested_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 HashState(x::SHA.SHA_CTX, ctx) = x
+similar_hash_state(::T) where T <: SHA.SHA_CTX = T()
 
 #####
 ##### RecursiveHashState: handles a function of the form hash(bytes, [old_hash]) 
@@ -191,7 +200,7 @@ HashState(x::SHA.SHA_CTX, ctx) = x
 
 function HashState(fn::Function, context)
     root_version(context) < 2 && return RecursiveHashState(fn)
-    return BufferedHashState(RecursiveHashState(fn), RecursiveHashState(fn))
+    return BufferedHashState(RecursiveHashState(fn))
 end
 
 struct RecursiveHashState{F,T} <: HashState
@@ -212,6 +221,7 @@ function end_nested_hash!(fn::RecursiveHashState, nested::RecursiveHashState)
 end
 compute_hash!(x::RecursiveHashState) = x.val
 HashState(x::RecursiveHashState) = x
+similar_hash_state(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
 
 #####
 ##### BufferedHashState: wrapper that buffers bytes before passing them to the hash algorithm 
@@ -222,26 +232,29 @@ mutable struct BufferedHashState{T} <: HashState
     delimiter_hash_state::T
     total_bytes_hashed::Int
     bytes::Vector{UInt8} # tye bytes that back `io`
-    delimiters::Vector{Int} # delimits the start of nested structures (for `start_nested_hash!`), non-negative is start, negative is stop
+    delimiters::Vector{Int} # delimits the start of nested structures (for `start_nested_hash!`), positive is start, negative is stop
     stops::Vector{Int} # delimits the end of nested structures (for `end_nested_hash!`)
     limit::Int # the preferred limit on the size of `io`'s buffer
     io::IOBuffer
 end
 const HASH_BUFFER_SIZE = 2^14
-function BufferedHashState(content_state, delimeter_state, size=HASH_BUFFER_SIZE)
+function BufferedHashState(state, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
     starts = sizehint!(Vector{Int}(), size)
     stops = sizehint!(Vector{Int}(), size)
     io = IOBuffer(bytes; write=true, read=false)
-    return BufferedHashState(content_state, delimeter_state, 0, bytes, starts, stops, size, io)
+    return BufferedHashState(state, similar_hash_state(state), 0, bytes, starts, stops,
+                             size, io)
 end
 
 # flush bytes that are stored internally to the underlying hasher
 function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
     # the default `limit` tries to flush before the allocated buffer increases in size
     if position(x.io) ≥ limit
-        x.content_hash_state = update_hash!(x.content_hash_state, @view x.bytes[1:position(x.io)])
-        x.delimiter_hash_state = update_hash!(x.delimiter_hash_state, reinterpret(UInt8, x.delimiters))
+        x.content_hash_state = update_hash!(x.content_hash_state,
+                                            @view x.bytes[1:position(x.io)])
+        x.delimiter_hash_state = update_hash!(x.delimiter_hash_state,
+                                              reinterpret(UInt8, x.delimiters))
 
         empty!(x.delimiters)
         x.total_bytes_hashed += position(x.io) # tack total number of bytes that have been hashed
@@ -251,12 +264,12 @@ function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
 end
 
 function start_nested_hash!(x::BufferedHashState)
-    push!(x.delimiter, position(x.io) + x.total_bytes_hashed)
+    push!(x.delimiters, position(x.io) + x.total_bytes_hashed + 1) # position can be zero
     return x
 end
 
 function end_nested_hash!(root::BufferedHashState, x::BufferedHashState)
-    push!(x.delimiter, -(position(x.io) + x.total_bytes_hashed))
+    push!(x.delimiters, -(position(x.io) + x.total_bytes_hashed + 1))
     return x
 end
 
@@ -267,14 +280,17 @@ function update_hash!(hasher::BufferedHashState, obj, context)
 end
 
 function compute_hash!(x::BufferedHashState)
-    # at the very end, recursively hash the delimiter hash into the content hash
     flush_bytes!(x, 0)
-    delimiter = compute_hash!(x.delimeter_hash_state)
-    update_hash(x.content_hash_state, reinterpret(UInt8, [delimiter]))
+    # recursively hash the delimiter hash state into the content hash
+    delimiter_hash = compute_hash!(x.delimiter_hash_state)
+    state = update_hash!(x.content_hash_state, reinterpret(UInt8, [delimiter_hash;]))
 
-    return compute_hash!(x.content_hash_state)
+    return compute_hash!(state)
 end
 HashState(x::BufferedHashState, ctx) = x
+function similar_hash_state(x::BufferedHashState)
+    return BufferedHashState(similar_hash_state(x.content_hash_state), x.limit)
+end
 
 #####
 ##### ================ Hash Traits ================
