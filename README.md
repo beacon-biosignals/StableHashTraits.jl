@@ -121,7 +121,11 @@ This release includes speed improvements of about 100 fold.
   where backwards compatibility is not required.  
 - **Deprecation**: `qualified_name` and `qualified_type` have been deprected, in favor of
   `stable_typename_id` and `stable_type_id`.
-- **Deprecation**: `ConstantHash` has been deprecated in favor of the more efficient `@ConstantHash`.
+- **Deprecation**: `ConstantHash` has been deprecated in favor of the more efficient
+  `@ConstantHash`. Note that if the argument to `ConstantHash` was an expression rather than
+  a compile time constant you would need to replace `ConstantHash(exp)` with `FnHash(_ ->
+  exp)` (but this is probably a code smell, since `hash_method` values should normally only
+  depend on the type of their arguments).
 
 ### In 1.0:
 
