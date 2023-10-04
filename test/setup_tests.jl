@@ -103,3 +103,28 @@ StableHashTraits.hash_method(::BadHashMethod) = "garbage"
 struct BadRootContext end
 StableHashTraits.parent_context(::BadRootContext) = nothing
 StableHashTraits.hash_method(::Int, ::BadRootContext) = WriteHash()
+
+mutable struct CountedBufferState
+    state::StableHashTraits.BufferedHashState
+    positions::Vector{Int}
+end
+CountedBufferState(x::StableHashTraits.BufferedHashState) = CountedBufferState(x, Int[])
+StableHashTraits.HashState(x::CountedBufferState, ctx) = x
+
+function StableHashTraits.update_hash!(x::CountedBufferState, args...)
+    x.state = StableHashTraits.update_hash!(x.state, args...)
+    push!(x.positions, position(x.state.io))
+    return x
+end
+
+function StableHashTraits.compute_hash!(x::CountedBufferState)
+    return StableHashTraits.compute_hash!(x.state)
+end
+function StableHashTraits.start_nested_hash!(x::CountedBufferState)
+    x.state = StableHashTraits.start_nested_hash!(x.state)
+    return x
+end
+function StableHashTraits.end_nested_hash!(x::CountedBufferState, n)
+    x.state = StableHashTraits.end_nested_hash!(x.state, n.state)
+    return x
+end

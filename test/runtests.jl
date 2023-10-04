@@ -186,22 +186,40 @@ include("setup_tests.jl")
                 @test_throws ArgumentError test_hash(BadHashMethod())
             end
 
-            @testset "Deprecations" begin
-                @test (@test_deprecated(r"`parent_context`",
-                                        test_hash([1, 2], MyOldContext()))) !=
-                      test_hash([1, 2])
-                @test (@test_deprecated(r"`parent_context`",
-                                        test_hash("12", MyOldContext()))) ==
-                      test_hash("12", HashVersion{1}())
-                @test_deprecated(UseProperties(:ByName))
-                @test_deprecated(UseQualifiedName())
-                @test_deprecated(UseSize(UseIterate()))
-                @test_deprecated(ConstantHash("foo"))
-                @test_deprecated(UseTable())
+            if V > 2 && hashfn == sha256
+                @testset "Hash-invariance to buffer size" begin
+                    data = (rand(Int8, 2), rand(Int8, 2))
+                    wrapped1 = StableHashTraits.HashState(sha256, HashVersion{1}())
+                    alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1,
+                                                                                      sizeof(qualified_name(Int8[]))))
+                    wrapped2 = StableHashTraits.HashState(sha256, HashVersion{1}())
+                    alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2,
+                                                                                      2sizeof(qualified_name(Int8[]))))
+                    # verify that the hashes are the same...
+                    @test stable_hash(data, ctx; alg=alg_small) ==
+                          stable_hash(data, ctx; alg=alg_large)
+                    # ...and that the distinct buffer sizes actually lead to a distinct set of
+                    # buffer sizes while updating the hash state...
+                    @test alg_small.positions != alg_large.positions
+                end
             end
-        end
+        end # @testset
+    end # for
+
+    @testset "Deprecations" begin
+        @test (@test_deprecated(r"`parent_context`",
+                                stable_hash([1, 2], MyOldContext()))) !=
+              stable_hash([1, 2])
+        @test (@test_deprecated(r"`parent_context`",
+                                stable_hash("12", MyOldContext()))) ==
+              stable_hash("12", HashVersion{1}())
+        @test_deprecated(UseProperties(:ByName))
+        @test_deprecated(UseQualifiedName())
+        @test_deprecated(UseSize(UseIterate()))
+        @test_deprecated(ConstantHash("foo"))
+        @test_deprecated(UseTable())
     end
-end
+end # @testset
 
 @testset "Aqua" begin
     Aqua.test_all(StableHashTraits)
