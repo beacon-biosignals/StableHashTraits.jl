@@ -188,11 +188,14 @@ include("setup_tests.jl")
                 @testset "Hash-invariance to buffer size" begin
                     data = (rand(Int8, 2), rand(Int8, 2))
                     wrapped1 = StableHashTraits.HashState(sha256, HashVersion{1}())
-                    alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1, sizeof(qualified_name(Int8[]))))
+                    alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1,
+                                                                                      sizeof(qualified_name(Int8[]))))
                     wrapped2 = StableHashTraits.HashState(sha256, HashVersion{1}())
-                    alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2, 2sizeof(qualified_name(Int8[]))))
+                    alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2,
+                                                                                      2sizeof(qualified_name(Int8[]))))
                     # verify that the hashes are the same...
-                    @test stable_hash(data, ctx; alg=alg_small) == stable_hash(data, ctx; alg=alg_large)
+                    @test stable_hash(data, ctx; alg=alg_small) ==
+                          stable_hash(data, ctx; alg=alg_large)
                     # ...and that the distinct buffer sizes actually lead to a distinct set of
                     # buffer sizes while updating the hash state...
                     @test alg_small.positions != alg_large.positions

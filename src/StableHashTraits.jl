@@ -192,7 +192,7 @@ function end_nested_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 HashState(x::SHA.SHA_CTX, ctx) = x
-similar_hash_state(::T) where T <: SHA.SHA_CTX = T()
+similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
 
 #####
 ##### RecursiveHashState: handles a function of the form hash(bytes, [old_hash]) 

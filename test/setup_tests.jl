@@ -111,13 +111,15 @@ end
 CountedBufferState(x::StableHashTraits.BufferedHashState) = CountedBufferState(x, Int[])
 StableHashTraits.HashState(x::CountedBufferState, ctx) = x
 
-function StableHashTraits.update_hash!(x::CountedBufferState, args...) 
+function StableHashTraits.update_hash!(x::CountedBufferState, args...)
     x.state = StableHashTraits.update_hash!(x.state, args...)
     push!(x.positions, position(x.state.io))
     return x
 end
 
-StableHashTraits.compute_hash!(x::CountedBufferState) = StableHashTraits.compute_hash!(x.state)
+function StableHashTraits.compute_hash!(x::CountedBufferState)
+    return StableHashTraits.compute_hash!(x.state)
+end
 function StableHashTraits.start_nested_hash!(x::CountedBufferState)
     x.state = StableHashTraits.start_nested_hash!(x.state)
     return x
