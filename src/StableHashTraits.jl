@@ -487,7 +487,7 @@ stable_type_id(x) = stable_id_helper(x, Val(:type))
 """
     stable_typefields_id(x)
 
-Returns a 128bit hash that is the same for a given type so long as the set of field names
+Returns a 64 bit hash that is the same for a given type so long as the set of field names
 remains unchanged.
 """
 stable_typefields_id(::Type{T}) where {T} = hash_field_str(T)
