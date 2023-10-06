@@ -56,7 +56,7 @@ for V in (2, 3)
                 @benchmarkable $(hashfn)(reinterpret(UInt8, $a))
             end
             suite["$(name)_$(hstr)_$(V)"]["base"] = a_run
-            
+
             b_run = if name == "vnumbers"
                 @benchmarkable $(stable_hash)($b, ViewsEq(HashVersion{$V}()); alg=$(hashfn))
             else
