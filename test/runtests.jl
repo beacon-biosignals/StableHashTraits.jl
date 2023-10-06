@@ -87,9 +87,11 @@ include("setup_tests.jl")
             # dictionary like
             @testset "Associative Data" begin
                 if V > 1
-                    @test test_hash(Dict{Symbol, Any}(:a => 1)) != test_hash(Dict{Symbol, Any}(:a => UInt(1)))
+                    @test test_hash(Dict{Symbol,Any}(:a => 1)) !=
+                          test_hash(Dict{Symbol,Any}(:a => UInt(1)))
                 else
-                    @test test_hash(Dict{Symbol, Any}(:a => 1)) == test_hash(Dict{Symbol, Any}(:a => UInt(1)))
+                    @test test_hash(Dict{Symbol,Any}(:a => 1)) ==
+                          test_hash(Dict{Symbol,Any}(:a => UInt(1)))
                 end
 
                 @test test_hash(Dict(:a => 1, :b => 2)) == test_hash(Dict(:b => 2, :a => 1))
@@ -128,11 +130,11 @@ include("setup_tests.jl")
             @testset "Sequences" begin
                 if V > 2
                     @test test_hash(Any[1, 2]) != test_hash(Any[UInt(1), UInt(2)])
-                    @test test_hash(Any[1, 2], ViewsEq(HashVersion{V}())) != 
+                    @test test_hash(Any[1, 2], ViewsEq(HashVersion{V}())) !=
                           test_hash(Any[UInt(1), UInt(2)], ViewsEq(HashVersion{V}()))
                 else
                     @test test_hash(Any[1, 2]) == test_hash(Any[UInt(1), UInt(2)])
-                    @test test_hash(Any[1, 2], ViewsEq(HashVersion{V}())) == 
+                    @test test_hash(Any[1, 2], ViewsEq(HashVersion{V}())) ==
                           test_hash(Any[UInt(1), UInt(2)], ViewsEq(HashVersion{V}()))
                 end
 
@@ -142,8 +144,10 @@ include("setup_tests.jl")
                 # TODO: setup some tests for eltype elision in ViewsEq (also add benchmark)
                 @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) !=
                       test_hash(vec([1 2; 3 4]), ViewsEq(HashVersion{V}()))
-                @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) == test_hash([1 3; 2 4]', ViewsEq(HashVersion{V}()))
-                @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) != test_hash([1 3; 2 4], ViewsEq(HashVersion{V}()))
+                @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) ==
+                      test_hash([1 3; 2 4]', ViewsEq(HashVersion{V}()))
+                @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) !=
+                      test_hash([1 3; 2 4], ViewsEq(HashVersion{V}()))
                 @test test_hash(reshape(1:10, 2, 5)) != test_hash(reshape(1:10, 5, 2))
                 @test test_hash(view(collect(1:5), 1:2)) != test_hash([1, 2])
                 @test test_hash(view(collect(1:5), 1:2), ViewsEq(HashVersion{V}())) ==
@@ -190,9 +194,11 @@ include("setup_tests.jl")
 
             @testset "Structs" begin
                 if V > 2
-                    @test test_hash(TestAnyField(1, 2)) != test_hash(TestAnyField(1, UInt(2)))
+                    @test test_hash(TestAnyField(1, 2)) !=
+                          test_hash(TestAnyField(1, UInt(2)))
                 else
-                    @test test_hash(TestAnyField(1, 2)) == test_hash(TestAnyField(1, UInt(2)))
+                    @test test_hash(TestAnyField(1, 2)) ==
+                          test_hash(TestAnyField(1, UInt(2)))
                 end
             end
 

@@ -19,9 +19,10 @@ these fallback methods will not change even if new fallbacks are defined.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
-        V < 3 && Base.depwarn("HashVersion{V} with V < 2 is deprecated, favor `HashVersion{3}` in " *
-                               "all cases where backwards compatible hash values are not " *
-                               "required.", :HashVersion)
+        V < 3 &&
+            Base.depwarn("HashVersion{V} with V < 2 is deprecated, favor `HashVersion{3}` in " *
+                         "all cases where backwards compatible hash values are not " *
+                         "required.", :HashVersion)
         return new{V}()
     end
 end
@@ -54,7 +55,7 @@ third argument to [`StableHashTraits.write`](@ref)
 stable_hash(x; alg=sha256, version=1) = return stable_hash(x, HashVersion{version}(); alg)
 function stable_hash(x, context; alg=sha256)
     return compute_hash!(stable_hash_helper(x, HashState(alg, context), context,
-                                            Val(root_version(context)), 
+                                            Val(root_version(context)),
                                             hash_method(x, context)))
 end
 
@@ -419,12 +420,11 @@ eltype_(x, ::Base.HasEltype) = eltype(x)
 
 struct IterateHash end
 function stable_hash_helper(xs, hash_state, context, root, ::IterateHash)
-    if !(root isa Union{Val{1}, Val{2}}) &&
-       context isa ElideType && 
+    if !(root isa Union{Val{1},Val{2}}) &&
+       context isa ElideType &&
        (isdispatchtuple(typeof(xs)) || isdispatchtuple(Tuple{eltype_(xs)}))
-       
         return hash_foreach(hash_state, root, xs) do x
-            x, elide_type(hash_method(x, context)), ignore_elision(context)
+            return x, elide_type(hash_method(x, context)), ignore_elision(context)
         end
     else
         return hash_foreach(hash_state, root, xs) do x
@@ -618,12 +618,15 @@ end
 #####
 
 # detecting when we can elide struct and element types
-elideable(fn::F, methods) where F = any(x -> x isa FnHash{F} || x isa ElidedTypeHash, methods)
+function elideable(fn::F, methods) where {F}
+    return any(x -> x isa FnHash{F} || x isa ElidedTypeHash, methods)
+end
 has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
 has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
 
 function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
-    if (elideable(stable_type_id, methods) && (has_iterate_type(methods) || has_struct_type(methods)))
+    if (elideable(stable_type_id, methods) &&
+        (has_iterate_type(methods) || has_struct_type(methods)))
         return tuple_hash_helper(x, hash_state, ElideType(context), root, methods)
     elseif (elideable(stable_eltype_id, methods) && has_iterate_type(methods))
         return tuple_hash_helper(x, hash_state, ElideType(context), root, methods)
@@ -636,13 +639,13 @@ function tuple_hash_helper(x, hash_state, context, root, methods::Tuple{<:Elided
     return hash_state
 end
 
-function tuple_hash_helper(x, hash_state, context, root, 
-                           methods::Tuple{<:ElidedTypeHash, <:Any})
+function tuple_hash_helper(x, hash_state, context, root,
+                           methods::Tuple{<:ElidedTypeHash,<:Any})
     return stable_hash_helper(x, hash_state, context, root, methods[2])
 end
 
-function tuple_hash_helper(x, hash_state, context, root, 
-                           methods::Tuple{<:ElidedTypeHash, <:Any, Vararg{<:Any}})
+function tuple_hash_helper(x, hash_state, context, root,
+                           methods::Tuple{<:ElidedTypeHash,<:Any,Vararg{<:Any}})
     _, rest... = methods
     return hash_foreach(hash_state, root, rest) do method
         return x, method, context
@@ -655,7 +658,8 @@ function tuple_hash_helper(x, hash_state, context, root, methods)
     end
 end
 
-function stable_hash_helper(x, hash_state, context, root::Union{Val{1}, Val{2}}, methods::Tuple)
+function stable_hash_helper(x, hash_state, context, root::Union{Val{1},Val{2}},
+                            methods::Tuple)
     return hash_foreach(hash_state, root, methods) do method
         return x, method, context
     end
@@ -793,7 +797,7 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # arguments.
     default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
     is_implemented(default_method) && return default_method
-    if Base.isprimitivetype(T) 
+    if Base.isprimitivetype(T)
         V < 3 && return WriteHash()
         return (TypeHash(c), WriteHash())
     end
@@ -814,13 +818,13 @@ end
 function hash_method(::AbstractArray, c::HashVersion)
     return (TypeNameHash(c), FnHash(size), IterateHash())
 end
-function hash_method(::AbstractString, c::HashVersion{V}) where V
+function hash_method(::AbstractString, c::HashVersion{V}) where {V}
     return (FnHash(V > 1 ? stable_type_id : qualified_name, WriteHash()),
             WriteHash())
 end
 hash_method(::Symbol, ::HashVersion{1}) = (PrivateConstantHash(":"), WriteHash())
 hash_method(::Symbol, ::HashVersion) = (@ConstantHash(":"), WriteHash())
-function hash_method(::AbstractDict, c::HashVersion{V}) where V
+function hash_method(::AbstractDict, c::HashVersion{V}) where {V}
     return (V < 2 ? FnHash(qualified_name_) :
             FnHash(stable_typename_id, WriteHash()),
             StructHash(keys => getindex, :ByName))
@@ -885,15 +889,15 @@ end
 ViewsEq() = ViewsEq(HashVersion{1}())
 parent_context(x::ViewsEq) = x.parent
 function hash_method(::AbstractArray, c::ViewsEq)
-    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractArray") : 
-                                  ConstantHash("Base.AbstractArray"), 
+    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractArray") :
+            ConstantHash("Base.AbstractArray"),
             (root_version(c) > 2 ? (FnHash(stable_eltype_id),) : ())...,
-            FnHash(size), 
+            FnHash(size),
             IterateHash())
 end
 function hash_method(::AbstractString, c::ViewsEq)
-    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractString") : 
-                                  ConstantHash("Base.AbstractString", WriteHash()), 
+    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractString") :
+            ConstantHash("Base.AbstractString", WriteHash()),
             WriteHash())
 end
 
