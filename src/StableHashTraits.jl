@@ -71,6 +71,8 @@ function __init__()
 
     $contexts
     """ hash_method
+
+    return nothing
 end
 
 function hash_method end
