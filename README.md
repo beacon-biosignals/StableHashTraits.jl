@@ -81,7 +81,7 @@ following values, typically based only on the *type* of its input.
     - `stable_type_id`: Get the qualified name and type parameters of a type, e.g.
        `Base.Vector{Int}`, and return a 64 bit hash of this string.
 5. `@ConstantHash(x)`: at compile time, hash the literal string or number using `sha256`
-  and include the first 64 bytes as a constant number that is recursively hashed
+  and include the first 64 bits as a constant number that is recursively hashed
   using the `WriteHash` method.
 6. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
     results. For example: `(@ConstantHash("header"), StructHash())` would compute a hash for
@@ -129,7 +129,11 @@ This release includes speed improvements of about 100 fold.
   where backwards compatibility is not required.  
 - **Deprecation**: `qualified_name` and `qualified_type` have been deprected, in favor of
   `stable_typename_id` and `stable_type_id`.
-- **Deprecation**: `ConstantHash` has been deprecated in favor of the more efficient `@ConstantHash`.
+- **Deprecation**: `ConstantHash` has been deprecated in favor of the more efficient
+  `@ConstantHash`. Note that if the argument to `ConstantHash` was an expression rather than
+  a compile time constant you would need to replace `ConstantHash(exp)` with `FnHash(_ ->
+  exp)` (but this is probably a code smell, since `hash_method` values should normally only
+  depend on the type of their arguments).
 
 ### In 1.0:
 

@@ -21,7 +21,7 @@ function str_to_data(strs)
     for str in strings
         write(io, str)
     end
-    take!(io)
+    return take!(io)
 end
 
 const N = 10_000
