@@ -52,7 +52,7 @@ function stable_hash(x, context=HashVersion{1}(); alg=sha256)
 end
 
 # extract contents of README so we can insert it into the some of the docstrings
-const HASH_TRAITS_DOCS, HASH_CONTEXT_DOCS = let
+function __init__()
     readme = read(joinpath(pkgdir(StableHashTraits), "README.md"), String)
     traits = match(r"START_HASH_TRAITS -->(.*)<!-- END_HASH_TRAITS"s, readme).captures[1]
     contexts = match(r"START_CONTEXTS -->(.*)<!-- END_CONTEXTS"s, readme).captures[1]
@@ -60,18 +60,19 @@ const HASH_TRAITS_DOCS, HASH_CONTEXT_DOCS = let
     # links to symbols here
 
     traits, contexts
-end
 
-"""
+    @doc """
     hash_method(x, [context])
 
-Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
-You should return one of the following values.
+    Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
+    You should return one of the following values.
 
-$HASH_TRAITS_DOCS
+    $traits
 
-$HASH_CONTEXT_DOCS
-"""
+    $contexts
+    """ hash_method
+end
+
 function hash_method end
 
 # recurse up to the parent until a method is defined or we hit the root (with parent `nothing`)
