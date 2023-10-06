@@ -27,6 +27,10 @@ b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 stable_hash(a) == stable_hash(b) # true
 ```
 
+StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking
+versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an
+object's hash in this case would be considered a bug.
+
 ## Why use `stable_hash` instead of `Base.hash`?
 
 This package can be useful any time one of the following holds:
