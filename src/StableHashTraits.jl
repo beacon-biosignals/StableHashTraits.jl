@@ -445,7 +445,7 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-function simple_struct_hash(x, hash_state, context, use)
+function simple_struct_hash(x, hash_state, context, root, use)
     fieldsfn, getfieldfn = use.fnpair
     return hash_foreach(hash_state, root, orderfields(use, fieldsfn(x))) do k
         pair = k => getfieldfn(x, k)
@@ -454,11 +454,15 @@ function simple_struct_hash(x, hash_state, context, use)
 end
 
 function stable_hash_helper(x, hash_state, context, root, use::StructHash)
-    return simple_struct_hash(x, hash_state, context, use)
+    return simple_struct_hash(x, hash_state, context, root, use)
 end
 
 function stable_hash_helper(x, hash_state, context, root::Val{1}, use::FieldStructHash)
-    return simple_struct_hash(x, hash_state, context, use)
+    return simple_struct_hash(x, hash_state, context, root, use)
+end
+
+function stable_hash_helper(x, hash_state, context, root::Val{1}, use::FieldStructHash{typeof(getfield)})
+    return simple_struct_hash(x, hash_state, context, root, use)
 end
 
 function hash_fieldtypes(x, hash_state, context, root, use::FieldStructHash{<:Any, S}) where {S}
@@ -492,7 +496,7 @@ function stable_hash_helper(x, hash_state, context, root, use::FieldStructHash{t
     hash_foreach(hash_state, root, fields) do k
         val = getfield(x, k)
         # is the type of this field concrete?
-        if isdispatchtuple(Tuple{fieldtype(T, k)})
+        if isdispatchtuple(Tuple{fieldtype(typeof(x), k)})
             # if it is, we can elide the type of this field
             return val, elide_type(hash_method(val, context)),
                    ignore_elision(context)
