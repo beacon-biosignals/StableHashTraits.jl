@@ -388,7 +388,8 @@ end
 ##### Type Elision 
 #####
 
-# Type elision strips a hash method of type-based identifiers of an object
+# Type elision is a context that strips a hash method of type-based identifiers of an object
+# (e.g. `stable_type_id`)
 
 struct ElideType{P}
     parent::P
@@ -397,6 +398,8 @@ parent_context(x::ElideType) = x.parent
 ignore_elision(x) = x
 ignore_elision(x::ElideType) = parent_context(x)
 
+# ElidedTypeHash is a hash method that replaces the type identifier, at method-eval time it
+# is a no-op, but it exists so that we can recursively propagate elisions
 struct ElidedTypeHash end
 
 elide_type(trait) = trait
@@ -418,11 +421,19 @@ eltype_(xs) = eltype_(xs, Base.IteratorEltype(xs))
 eltype_(_, _) = Any
 eltype_(x, ::Base.HasEltype) = eltype(x)
 
+iterate_can_elide_type(xs, root, context) = false
+iterate_can_elide_type(xs, root::Val{1}, ::ElideType) = false
+iterate_can_elide_type(xs, root::Val{2}, ::ElideType) = false
+function iterate_can_elide_type(xs, root, context::ElideType)
+    # `isdispatchtuple`: determine if T is a tuple of "leaf types"
+    # meaning it has no subtypes that could appear in a method call
+    # i.e. a concrete type
+    return (isdispatchtuple(typeof(xs)) || isdispatchtuple(Tuple{eltype_(xs)}))
+end
+
 struct IterateHash end
 function stable_hash_helper(xs, hash_state, context, root, ::IterateHash)
-    if !(root isa Union{Val{1},Val{2}}) &&
-       context isa ElideType &&
-       (isdispatchtuple(typeof(xs)) || isdispatchtuple(Tuple{eltype_(xs)}))
+    if iterate_can_elide_type(xs, root, context)
         return hash_foreach(hash_state, root, xs) do x
             return x, elide_type(hash_method(x, context)), ignore_elision(context)
         end
@@ -464,7 +475,7 @@ fieldnames_(::T) where {T} = fieldnames(T)
 function StructHash(sort::Symbol)
     return StructHash(fieldnames_ => getfield, sort)
 end
-const FieldStructHash = StructHash{<:Pair{<:typeof(fieldnames_),<:Any}}
+const FieldStructHash{G, S} = StructHash{<:Pair{<:typeof(fieldnames_),G}, S}
 function StructHash(fnpair::Pair=fieldnames_ => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return StructHash{typeof(fnpair),by}(fnpair)
@@ -478,35 +489,57 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-function stable_hash_helper(x::T, hash_state, context, root,
-                            use::StructHash{<:Any,S}) where {T,S}
+function simple_struct_hash(x, hash_state, context)
     fieldsfn, getfieldfn = use.fnpair
-    if !(root isa Val{1}) && fieldsfn isa typeof(fieldnames_)
-        # NOTE: hashes the field names at compile time if possible (~x10 speed up)
-        hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
-                                        root, WriteHash())
-        # NOTE: sort fields at compile time if possible (~x1.33 speed up)
-        fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
-        if !(root isa Val{2}) && getfieldfn isa typeof(getfield)
-            return hash_foreach(hash_state, root, fields) do k
-                val = getfield(x, k)
-                if isdispatchtuple(Tuple{fieldtype(T, k)})
-                    return val, elide_type(hash_method(val, context)),
-                           ignore_elision(context)
-                else
-                    return val, hash_method(val, context), ignore_elision(context)
-                end
-            end
+    return hash_foreach(hash_state, root, orderfields(use, fieldsfn(x))) do k
+        pair = k => getfieldfn(x, k)
+        return pair, hash_method(pair, context), context
+    end
+end
+
+function stable_hash_helper(x, hash_state, context, root, use::StructHash)
+    return simple_struct_hash(x, hash_state, context)
+end
+
+function stable_hash_helper(x, hash_state, context, root::Val{1}, use::FieldStructHash)
+    return simple_struct_hash(x, hash_state, context)
+end
+
+function hash_fieldtypes(x, hash_state, context, root, use::FieldStructHash{<:Any, S}) where {S}
+    # NOTE: hashes the field names at compile time if possible (~x10 speed up)
+    hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
+                                    root, WriteHash())
+    # NOTE: sort fields at compile time if possible (~x1.33 speed up)
+    fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
+    return hash_state, fields
+end
+
+function compile_time_field_struct_hash(x, hash_state, context, root, use)
+    _, getfieldfn = use.fnpair
+    hash_state, fields = hash_fieldtypes(x, hash_state, context, root, use)
+    return hash_foreach(hash_state, root, fields) do k
+        val = getfieldfn(x, k)
+        return val, hash_method(val, context), context
+    end
+end
+
+function stable_hash_helper(x, hash_state, context, root::Val{2}, use::FieldStructHash)
+    compile_time_field_struct_hash(x, hash_state, context, root, use)
+end
+
+function stable_hash_helper(x, hash_state, context, root::Val{2}, use::FieldStructHash{typeof(getfield)})
+    compile_time_field_struct_hash(x, hash_state, context, root, use)
+end
+
+function stable_hash_helper(x, hash_state, context, root, use::FieldStructHash{typeof(getfield)})
+    hash_state, fields = hash_fieldtypes(x, hash_state, context, root, use)
+    hash_foreach(hash_state, root, fields) do k
+        val = getfield(x, k)
+        if isdispatchtuple(Tuple{fieldtype(T, k)})
+            return val, elide_type(hash_method(val, context)),
+                   ignore_elision(context)
         else
-            return hash_foreach(hash_state, root, fields) do k
-                val = getfieldfn(x, k)
-                return val, hash_method(val, context), context
-            end
-        end
-    else
-        return hash_foreach(hash_state, root, orderfields(use, fieldsfn(x))) do k
-            pair = k => getfieldfn(x, k)
-            return pair, hash_method(pair, context), context
+            return val, hash_method(val, context), ignore_elision(context)
         end
     end
 end
