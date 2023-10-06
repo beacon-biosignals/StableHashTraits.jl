@@ -40,9 +40,7 @@ end
 
 StableHashTraits.hash_method(::TestType) = StructHash()
 StableHashTraits.hash_method(::TestType2) = FnHash(qualified_name), StructHash()
-function StableHashTraits.hash_method(::TestType3)
-    return StructHash(propertynames => getproperty, :ByName)
-end
+StableHashTraits.hash_method(::TestType3) = StructHash(:ByName)
 StableHashTraits.hash_method(::TestType4) = StructHash(propertynames => getproperty)
 StableHashTraits.hash_method(::TypeType) = StructHash()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
@@ -105,3 +103,28 @@ StableHashTraits.hash_method(::BadHashMethod) = "garbage"
 struct BadRootContext end
 StableHashTraits.parent_context(::BadRootContext) = nothing
 StableHashTraits.hash_method(::Int, ::BadRootContext) = WriteHash()
+
+mutable struct CountedBufferState
+    state::StableHashTraits.BufferedHashState
+    positions::Vector{Int}
+end
+CountedBufferState(x::StableHashTraits.BufferedHashState) = CountedBufferState(x, Int[])
+StableHashTraits.HashState(x::CountedBufferState, ctx) = x
+
+function StableHashTraits.update_hash!(x::CountedBufferState, args...)
+    x.state = StableHashTraits.update_hash!(x.state, args...)
+    push!(x.positions, position(x.state.io))
+    return x
+end
+
+function StableHashTraits.compute_hash!(x::CountedBufferState)
+    return StableHashTraits.compute_hash!(x.state)
+end
+function StableHashTraits.start_nested_hash!(x::CountedBufferState)
+    x.state = StableHashTraits.start_nested_hash!(x.state)
+    return x
+end
+function StableHashTraits.end_nested_hash!(x::CountedBufferState, n)
+    x.state = StableHashTraits.end_nested_hash!(x.state, n.state)
+    return x
+end

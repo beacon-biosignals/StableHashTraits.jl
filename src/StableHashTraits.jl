@@ -6,42 +6,53 @@ using TupleTools, Tables, Compat
 using SHA: SHA, sha256
 
 """
-    HashVersion{1}()
+    HashVersion{V}()
 
-The default `hash_context` used by `stable_hash`. There is currently only one version (`1`)
-and it is the default context. By explicitly passing this context to `stable_hash` you
-ensure that hash values for these fallback methods will not change even if new fallbacks are
-defined. This is a "root" context, meaning that `parent_context(::HashVersion) = nothing`.
+The default `hash_context` used by `stable_hash`. There are currently two versions
+(1 and 2). Version 2 is far more optimized than 1 and should generally be used in newly 
+written code. Version 1 is the default version, so as to avoid changing the hash computed
+by existing code.
+
+By explicitly passing this hash version in `stable_hash` you ensure that hash values for 
+these fallback methods will not change even if new fallbacks are defined. 
 """
-struct HashVersion{V} end
+struct HashVersion{V}
+    function HashVersion{V}() where {V}
+        V == 1 && Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in " *
+                               "all cases where backwards compatible hash values are not " *
+                               "required.", :HashVersion)
+        return new{V}()
+    end
+end
 
 """
     stable_hash(x, context=HashVersion{1}(); alg=sha256)
 
 Create a stable hash of the given objects. As long as the context remains the same, this is
-intended to remain unchanged across julia verisons. How each object is hashed is determined
+intended to remain unchanged across julia versions. How each object is hashed is determined
 by [`hash_method`](@ref), which aims to have sensible fallbacks.
 
-To ensure the greattest stability, explicitly pass the context object. Even if the fallback
-methods change in a future release, the hash you get by passing an explicit `HashVersin{N}`
-should *not* change. (Note that the number in `HashVersion` may not necessarily match the
-package verison of `StableHashTraits`).
+To ensure the greatest stability, you should explicitly pass the context object. It is also
+best to pass an explicit version, since `HashVersion{2}` is generally faster than
+`HashVersion{1}`. If the fallback methods change in a future release, the hash you get
+by passing an explicit `HashVersion{N}` should *not* change. (Note that the number in
+`HashVersion` does not necessarily match the package version of `StableHashTraits`).
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
-[old_hash])`.
+[old_hash])`. 
 
 The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
 third argument to [`StableHashTraits.write`](@ref)
 
 """
 function stable_hash(x, context=HashVersion{1}(); alg=sha256)
-    return digest!(stable_hash_helper(x, setup_hash_state(alg), context,
-                                      hash_method(x, context)))
+    return compute_hash!(stable_hash_helper(x, HashState(alg, context), context,
+                                            hash_method(x, context)))
 end
 
 # extract contents of README so we can insert it into the some of the docstrings
-const HASH_TRAITS_DOCS, HASH_CONTEXT_DOCS = let
+function __init__()
     readme = read(joinpath(pkgdir(StableHashTraits), "README.md"), String)
     traits = match(r"START_HASH_TRAITS -->(.*)<!-- END_HASH_TRAITS"s, readme).captures[1]
     contexts = match(r"START_CONTEXTS -->(.*)<!-- END_CONTEXTS"s, readme).captures[1]
@@ -49,18 +60,21 @@ const HASH_TRAITS_DOCS, HASH_CONTEXT_DOCS = let
     # links to symbols here
 
     traits, contexts
-end
 
-"""
+    @doc """
     hash_method(x, [context])
 
-Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
-You should return one of the following values.
+    Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
+    You should return one of the following values.
 
-$HASH_TRAITS_DOCS
+    $traits
 
-$HASH_CONTEXT_DOCS
-"""
+    $contexts
+    """ hash_method
+
+    return nothing
+end
+
 function hash_method end
 
 # recurse up to the parent until a method is defined or we hit the root (with parent `nothing`)
@@ -69,7 +83,7 @@ hash_method(x, context) = hash_method(x, parent_context(context))
 # user
 hash_method(x, ::Nothing) = hash_method(x)
 # we signal that a method specific to a type is not available using `NotImplemented`; we
-# need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext{1}) where T`
+# need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext) where T
 # below for details
 struct NotImplemented end
 hash_method(_) = NotImplemented()
@@ -83,64 +97,214 @@ function stable_hash_helper(x, hash_state, context, method::NotImplemented)
 end
 
 function stable_hash_helper(x, hash_state, context, method)
-    throw(ArgumentError("Unreconized hash method of type `$(typeof(method))` when " *
+    throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *
                         "hashing object $x. The implementation of `hash_method` for this " *
                         "object is invalid."))
     return nothing
 end
 
 #####
-##### Hash Function API 
+##### ================ Hash Algorithms ================
+#####
+"""
+    update_hash!(state::HashState, bytes)
+
+Returns the updated hash state given a set of bytes (either a tuple or array of UInt8
+values).
+
+    update_hash!(state::HashState, obj, context)
+
+Returns the updated hash, given an object and some context. The object will
+be written to some bytes using `StableHashTraits.write(io, obj, context)`.
+"""
+function update_hash! end
+
+# when a hasher has no internal buffer, we allocate one for each call to `update_hash!`
+function update_hash!(hasher, x, context)
+    io = IOBuffer()
+    write(io, x, context)
+    return update_hash!(hasher, take!(io))
+end
+
+"""
+    HashState(alg, context)
+
+Given a function that implements the hash algorithm to use and the current hash context,
+setup the necessary state to track updates to hashing as we traverse an object's structure
+and return it.
+"""
+abstract type HashState end
+
+"""
+    compute_hash!(state::HashState)
+
+Return the final hash value to return for `state`
+"""
+function compute_hash! end
+
+"""
+    start_nested_hash!(state::HashState)
+
+Return an updated state that delimits hashing of a nested structure; calls made to
+`update_hash!` after start_nested_hash! will be handled as nested elements up until
+`end_nested_hash!` is called.
+"""
+function start_nested_hash! end
+
+"""
+    end_nested_hash!(state::HashState)
+
+Return an updated state that delimints the end of a nested structure.
+"""
+function end_nested_hash! end
+
+"""
+    similar_hash_state(state::HashState)
+
+Akin to `similar` for arrays, this constructs a new object of the same concrete type
+as `state`
+"""
+function similar_hash_state end
+
+#####
+##### SHA Hashing: support use of `sha256` and related hash functions
 #####
 
-# setup_hash_state: given a function that identifies the hash, setup up the state used for hashing
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
     if CTX in names(SHA)
-        @eval setup_hash_state(::typeof(SHA.$(fn))) = SHA.$(CTX)()
+        # we cheat a little here, technically `SHA_CTX` and friends are not `HashState`
+        # but we make them satisfy the same interface below
+        @eval function HashState(::typeof(SHA.$(fn)), context)
+            root_version(context) < 2 && return SHA.$(CTX)()
+            return BufferedHashState(SHA.$(CTX)())
+        end
     end
 end
-# similar_hash_state: setup up a new hasher, given some existing state created by `setup_hash_state`
-similar_hash_state(ctx::SHA.SHA_CTX) = typeof(ctx)()
-# update!: update the hash state with some new data to hash
-update!(sha::SHA.SHA_CTX, bytes) = SHA.update!(sha, bytes)
-# digest!: convert the hash state to the final hashed value
-digest!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 
-# convert a function of the form `new_hash = hasher(x, [old_hash])`, to conform to the API
-# above that uses `setup_hash_state`, `similar_hash_state`, `update!` and `digest!`
-mutable struct GenericFunHash{F,T}
-    hasher::F
-    hash::Union{T,Nothing}
-    function GenericFunHash(fn)
-        hash = fn(UInt8[])
-        return new{typeof(fn),typeof(hash)}(fn, hash)
+# NOTE: while BufferedHashState is a faster implementation of `start/end_nested_hash!`
+# we still need a recursive hash implementation to implement `HashVersion{1}()`
+start_nested_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
+function update_hash!(sha::SHA.SHA_CTX, bytes::AbstractVector{UInt8})
+    SHA.update!(sha, bytes)
+    return sha
+end
+function end_nested_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
+    SHA.update!(hash_state, SHA.digest!(nested_hash_state))
+    return hash_state
+end
+compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
+HashState(x::SHA.SHA_CTX, ctx) = x
+similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
+
+#####
+##### RecursiveHashState: handles a function of the form hash(bytes, [old_hash]) 
+#####
+
+function HashState(fn::Function, context)
+    root_version(context) < 2 && return RecursiveHashState(fn)
+    return BufferedHashState(RecursiveHashState(fn))
+end
+
+struct RecursiveHashState{F,T} <: HashState
+    fn::F
+    val::T
+    init::T
+end
+function RecursiveHashState(fn)
+    hash = fn(UInt8[])
+    return RecursiveHashState(fn, hash, hash)
+end
+start_nested_hash!(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
+function update_hash!(hasher::RecursiveHashState, bytes::AbstractVector{UInt8})
+    return RecursiveHashState(hasher.fn, hasher.fn(bytes, hasher.val), hasher.init)
+end
+function end_nested_hash!(fn::RecursiveHashState, nested::RecursiveHashState)
+    return update_hash!(fn, reinterpret(UInt8, [nested.val]))
+end
+compute_hash!(x::RecursiveHashState) = x.val
+HashState(x::RecursiveHashState) = x
+similar_hash_state(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
+
+#####
+##### BufferedHashState: wrapper that buffers bytes before passing them to the hash algorithm 
+#####
+
+mutable struct BufferedHashState{T} <: HashState
+    content_hash_state::T
+    delimiter_hash_state::T
+    total_bytes_hashed::Int
+    bytes::Vector{UInt8} # tye bytes that back `io`
+    delimiters::Vector{Int} # delimits the start of nested structures (for `start_nested_hash!`), positive is start, negative is stop
+    stops::Vector{Int} # delimits the end of nested structures (for `end_nested_hash!`)
+    limit::Int # the preferred limit on the size of `io`'s buffer
+    io::IOBuffer
+end
+const HASH_BUFFER_SIZE = 2^14
+function BufferedHashState(state, size=HASH_BUFFER_SIZE)
+    bytes = Vector{UInt8}(undef, size)
+    starts = sizehint!(Vector{Int}(), size)
+    stops = sizehint!(Vector{Int}(), size)
+    io = IOBuffer(bytes; write=true, read=false)
+    return BufferedHashState(state, similar_hash_state(state), 0, bytes, starts, stops,
+                             size, io)
+end
+
+# flush bytes that are stored internally to the underlying hasher
+function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
+    # the default `limit` tries to flush before the allocated buffer increases in size
+    if position(x.io) ≥ limit
+        x.content_hash_state = update_hash!(x.content_hash_state,
+                                            @view x.bytes[1:position(x.io)])
+        x.delimiter_hash_state = update_hash!(x.delimiter_hash_state,
+                                              reinterpret(UInt8, x.delimiters))
+
+        empty!(x.delimiters)
+        x.total_bytes_hashed += position(x.io) # tack total number of bytes that have been hashed
+        seek(x.io, 0)
     end
+    return x
 end
-setup_hash_state(fn) = GenericFunHash(fn)
-function update!(fn::GenericFunHash, bytes)
-    return fn.hash = isnothing(fn.hash) ? fn.hasher(bytes) : fn.hasher(bytes, fn.hash)
+
+function start_nested_hash!(x::BufferedHashState)
+    push!(x.delimiters, position(x.io) + x.total_bytes_hashed + 1) # position can be zero
+    return x
 end
-digest!(fn::GenericFunHash) = fn.hash
-similar_hash_state(fn::GenericFunHash) = GenericFunHash(fn.hasher)
+
+function end_nested_hash!(root::BufferedHashState, x::BufferedHashState)
+    push!(x.delimiters, -(position(x.io) + x.total_bytes_hashed + 1))
+    return x
+end
+
+function update_hash!(hasher::BufferedHashState, obj, context)
+    write(hasher.io, obj, context)
+    flush_bytes!(hasher)
+    return hasher
+end
+
+function compute_hash!(x::BufferedHashState)
+    flush_bytes!(x, 0)
+    # recursively hash the delimiter hash state into the content hash
+    delimiter_hash = compute_hash!(x.delimiter_hash_state)
+    state = update_hash!(x.content_hash_state, reinterpret(UInt8, [delimiter_hash;]))
+
+    return compute_hash!(state)
+end
+HashState(x::BufferedHashState, ctx) = x
+function similar_hash_state(x::BufferedHashState)
+    return BufferedHashState(similar_hash_state(x.content_hash_state), x.limit)
+end
 
 #####
-##### Hash Traits
+##### ================ Hash Traits ================
 #####
 
-# deprecations
-@deprecate UseWrite() WriteHash()
-@deprecate UseIterate() IterateHash()
-@deprecate UseProperties(order) StructHash(propertynames => getproperty, order)
-@deprecate UseProperties() StructHash(propertynames => getproperty)
-@deprecate UseQualifiedName(method) (FnHash(qualified_name, WriteHash()), method)
-@deprecate UseQualifiedName() FnHash(qualified_name, WriteHash())
-@deprecate UseSize(method) (FnHash(size), method)
-@deprecate UseTable() FnHash(Tables.columns,
-                             StructHash(Tables.columnnames => Tables.getcolumn))
-# These are the various methods to compute a hash from an object
+#####
+##### WriteHash 
+#####
 
 struct WriteHash end
+
 """
     StableHashTraits.write(io, x, [context])
 
@@ -157,38 +321,56 @@ See also: [`StableHashTraits.hash_method`](@ref).
 """
 write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
+
 function stable_hash_helper(x, hash_state, context, ::WriteHash)
-    io = IOBuffer()
-    write(io, x, context)
-    update!(hash_state, take!(io))
-    return hash_state
+    return update_hash!(hash_state, x, context)
 end
 
-function recursive_hash!(hash_state, nested_hash_state)
-    nested_hash = digest!(nested_hash_state)
-    update!(hash_state, reinterpret(UInt8, vcat(nested_hash)))
-    return hash_state
-end
+#####
+##### IterateHash 
+#####
 
 struct IterateHash end
-function stable_hash_helper(x, hash_state, context, ::IterateHash)
-    return hash_foreach(identity, hash_state, context, x)
+function stable_hash_helper(xs, hash_state, context, ::IterateHash)
+    return hash_foreach(hash_state, context, xs) do x
+        return x, hash_method(x, context)
+    end
 end
+
 function hash_foreach(fn, hash_state, context, xs)
+    root_version(context) > 1 && return hash_foreach_new(fn, hash_state, context, xs)
+    return hash_foreach_old(fn, hash_state, context, xs)
+end
+
+function hash_foreach_old(fn, hash_state, context, xs)
     for x in xs
-        f_x = fn(x)
-        val = stable_hash_helper(f_x, similar_hash_state(hash_state), context,
-                                 hash_method(f_x, context))
-        recursive_hash!(hash_state, val)
+        f_x, method = fn(x)
+        inner_state = start_nested_hash!(hash_state)
+        inner_state = stable_hash_helper(f_x, inner_state, context, method)
+        hash_state = end_nested_hash!(hash_state, inner_state)
     end
     return hash_state
 end
 
+function hash_foreach_new(fn, hash_state, context, xs)
+    inner_state = start_nested_hash!(hash_state)
+    for x in xs
+        f_x, method = fn(x)
+        inner_state = stable_hash_helper(f_x, inner_state, context, method)
+    end
+    hash_state = end_nested_hash!(hash_state, inner_state)
+    return hash_state
+end
+
+#####
+##### StructHash 
+#####
+
 struct StructHash{P,S}
     fnpair::P
 end
-StructHash(x::Symbol) = StructHash((fieldnames ∘ typeof) => getfield, x)
-function StructHash(fnpair::Pair=(fieldnames ∘ typeof) => getfield, by::Symbol=:ByOrder)
+StructHash(sort::Symbol) = StructHash(fieldnames ∘ typeof => getfield, sort)
+function StructHash(fnpair::Pair=fieldnames ∘ typeof => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return StructHash{typeof(fnpair),by}(fnpair)
 end
@@ -200,9 +382,14 @@ sort_(x) = sort(x; by=string)
 function stable_hash_helper(x, hash_state, context, use::StructHash)
     fieldsfn, getfieldfn = use.fnpair
     return hash_foreach(hash_state, context, orderfields(use, fieldsfn(x))) do k
-        return k => getfieldfn(x, k)
+        pair = k => getfieldfn(x, k)
+        return pair, hash_method(pair, context)
     end
 end
+
+#####
+##### Stable values for types
+#####
 
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
 qualified_name(fn::Function) = qname_(fn, nameof)
@@ -224,6 +411,10 @@ function validate_name(str)
     end
     return str
 end
+
+#####
+##### FnHash 
+#####
 
 struct FnHash{F,H}
     fn::F
@@ -254,14 +445,19 @@ function stable_hash_helper(x, hash_state, context, method::Union{FnHash,Constan
     return stable_hash_helper(y, hash_state, context, new_method)
 end
 
-function stable_hash_helper(x, hash_state, context, methods::Tuple)
-    for method in methods
-        val = stable_hash_helper(x, similar_hash_state(hash_state), context, method)
-        recursive_hash!(hash_state, val)
-    end
+#####
+##### Tuples 
+#####
 
-    return hash_state
+function stable_hash_helper(x, hash_state, context, methods::Tuple)
+    return hash_foreach(hash_state, context, methods) do method
+        return x, method
+    end
 end
+
+#####
+##### HashAndContext 
+#####
 
 """
 
@@ -300,7 +496,22 @@ function stable_hash_helper(x, hash_state, context, method::HashAndContext)
 end
 
 #####
-##### Contexts
+##### Deprecations 
+#####
+
+# deprecations
+@deprecate UseWrite() WriteHash()
+@deprecate UseIterate() IterateHash()
+@deprecate UseProperties(order) StructHash(propertynames => getproperty, order)
+@deprecate UseProperties() StructHash(propertynames => getproperty)
+@deprecate UseQualifiedName(method) (FnHash(qualified_name, WriteHash()), method)
+@deprecate UseQualifiedName() FnHash(qualified_name, WriteHash())
+@deprecate UseSize(method) (FnHash(size), method)
+@deprecate UseTable() FnHash(Tables.columns,
+                             StructHash(Tables.columnnames => Tables.getcolumn))
+
+#####
+##### ================ Hash Contexts ================
 #####
 
 """
@@ -313,9 +524,9 @@ define this method.
 
 This is normally all that you need to know to implement a new context. However, if your
 context is expected to be the root context—one that does not fallback to any parent (akin to
-`HashVersion{1}`)—then there may be a bit more work invovled. In this case, `parent_context`
+`HashVersion`)—then there may be a bit more work invovled. In this case, `parent_context`
 should return `nothing` so that the single argument fallback for `hash_method` can be
-called. 
+called. You will also need to define [`StableHashTraits.root_version`](@ref).
 
 Furthermore, if you implement a root context and want to implement `hash_method` over `Any`
 you will instead have to manually manage the fallback mechanism as follows:
@@ -343,13 +554,35 @@ function parent_context(x::Any)
     return HashVersion{1}()
 end
 
-function hash_method(x::T, c::HashVersion{1}) where {T}
+"""
+    StableHashTraits.root_version(context)
+
+Return the verison of the root context: an integer in the range (1, 2). The default
+fallback method value returns 1. 
+
+In almost all cases, a root hash context should return 2. The optimizations used in
+HashVersion{2} include a number of changes to the hash-trait implementations that do not
+alter the documented behavior but do change the actual hash value returned because of how
+and when elements get hashed. 
+
+"""
+root_version(x::Nothing) = 1
+root_version(x) = root_version(parent_context(x))
+
+#####
+##### HashVersion{V} (root contexts)
+#####
+
+parent_context(::HashVersion) = nothing
+root_version(::HashVersion{V}) where {V} = V
+
+function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # we need to find `default_method` here because `hash_method(x::MyType, ::Any)` is less
     # specific than the current method, but if we have something defined for a specific type
     # as the first argument, we want that to be used, rather than this fallback (as if it
     # were defined as `hash_method(::Any)`). Note that changing this method to be x::Any,
     # and using T = typeof(x) would just lead to method ambiguities when trying to decide
-    # between `hash_method(::Any, ::HashVersion{1})` vs. `hash_method(::MyType, ::Any)`.
+    # between `hash_method(::Any, ::HashVersion{V})` vs. `hash_method(::MyType, ::Any)`.
     # Furthermore, this would would require the user to define `hash_method` with two
     # arguments.
     default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
@@ -359,31 +592,38 @@ function hash_method(x::T, c::HashVersion{1}) where {T}
     # should not change the hash
     return (FnHash(qualified_type), StructHash(:ByName))
 end
-hash_method(::NamedTuple, ::HashVersion{1}) = (FnHash(qualified_name), StructHash())
-function hash_method(::AbstractRange, ::HashVersion{1})
+
+function hash_method(::NamedTuple, ::HashVersion)
+    return (FnHash(qualified_name), StructHash())
+end
+function hash_method(::AbstractRange, ::HashVersion)
     return (FnHash(qualified_name), StructHash(:ByName))
 end
-function hash_method(::AbstractArray, ::HashVersion{1})
+function hash_method(::AbstractArray, ::HashVersion)
     return (FnHash(qualified_name), FnHash(size), IterateHash())
 end
-function hash_method(::AbstractString, ::HashVersion{1})
+function hash_method(::AbstractString, ::HashVersion)
     return (FnHash(qualified_name, WriteHash()), WriteHash())
 end
-hash_method(::Symbol, ::HashVersion{1}) = (ConstantHash(":"), WriteHash())
-function hash_method(::AbstractDict, ::HashVersion{1})
+hash_method(::Symbol, ::HashVersion) = (ConstantHash(":"), WriteHash())
+function hash_method(::AbstractDict, ::HashVersion)
     return (FnHash(qualified_name), StructHash(keys => getindex, :ByName))
 end
-hash_method(::Tuple, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
-hash_method(::Pair, ::HashVersion{1}) = (FnHash(qualified_name), IterateHash())
-function hash_method(::Type, ::HashVersion{1})
+hash_method(::Tuple, ::HashVersion) = (FnHash(qualified_name), IterateHash())
+hash_method(::Pair, ::HashVersion) = (FnHash(qualified_name), IterateHash())
+function hash_method(::Type, ::HashVersion)
     return (ConstantHash("Base.DataType"), FnHash(qualified_type))
 end
-function hash_method(::Function, ::HashVersion{1})
+function hash_method(::Function, ::HashVersion)
     return (ConstantHash("Base.Function"), FnHash(qualified_name))
 end
-function hash_method(::AbstractSet, ::HashVersion{1})
+function hash_method(::AbstractSet, ::HashVersion)
     return (FnHash(qualified_name), FnHash(sort! ∘ collect))
 end
+
+#####
+##### TablesEq 
+#####
 
 """
     TablesEq(parent_context)
@@ -396,14 +636,18 @@ struct TablesEq{T}
     parent::T
 end
 TablesEq() = TablesEq(HashVersion{1}())
-StableHashTraits.parent_context(x::TablesEq) = x.parent
-function StableHashTraits.hash_method(x::T, m::TablesEq) where {T}
+parent_context(x::TablesEq) = x.parent
+function hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
         return (ConstantHash("Tables.istable"),
                 FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn)))
     end
-    return StableHashTraits.hash_method(x, parent_context(m))
+    return hash_method(x, parent_context(m))
 end
+
+#####
+##### ViewsEq 
+#####
 
 """
     ViewsEq(parent_context)
@@ -416,14 +660,12 @@ struct ViewsEq{T}
     parent::T
 end
 ViewsEq() = ViewsEq(HashVersion{1}())
-StableHashTraits.parent_context(x::ViewsEq) = x.parent
-function StableHashTraits.hash_method(::AbstractArray, ::ViewsEq)
+parent_context(x::ViewsEq) = x.parent
+function hash_method(::AbstractArray, ::ViewsEq)
     return (ConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
 end
-function StableHashTraits.hash_method(::AbstractString, ::ViewsEq)
+function hash_method(::AbstractString, ::ViewsEq)
     return (ConstantHash("Base.AbstractString", WriteHash()), WriteHash())
 end
-
-parent_context(::HashVersion) = nothing
 
 end

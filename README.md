@@ -27,6 +27,10 @@ b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 stable_hash(a) == stable_hash(b) # true
 ```
 
+StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking
+versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an
+object's hash in this case would be considered a bug.
+
 ## Why use `stable_hash` instead of `Base.hash`?
 
 This package can be useful any time one of the following holds:
@@ -93,6 +97,25 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 <!-- END_HASH_TRAITS -->
 
 ## Breaking changes
+
+### In 1.1
+
+This release includes speed improvements.
+
+- `HashVersion{1}` benefits from some limited speed improvements.
+- `HashVersion{2}` is a new hash context that can be faster (~x100) than
+  `HashVersion{1}`; favor it over `HashVersion{1}` in all cases. Since this version changes
+  the hash values of some objects, `HashVersion{1}` is still the default to avoid breaking
+  existing code. 
+- The requirements for `HashVersion{2}` on the passed hash function have been relaxed, such
+that `alg=crc32` should again work (no need to call `alg=(x,s=UInt32(0)) ->
+crc32c(copy(x),s)`).
+- `root_version`: Most users can safely ignore this function. You only need to define
+`root_version` if you are implementing a context that defines 
+`parent_context(x::MyContext) = nothing` (see `parent_context` details on root contexts). It
+indicates what version of the trait implementations to use (1 or 2). It defaults to 1 to
+avoid changing the hash values of exisitng root contexts, but should be defined to return 2
+to make use of the more optimizied implementationsa. 
 
 ### In 1.0:
 
