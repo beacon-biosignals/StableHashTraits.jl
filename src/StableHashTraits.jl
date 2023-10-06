@@ -304,11 +304,24 @@ end
 ##### ================ Hash Traits ================
 #####
 
+# predefine the traits, since they get references in various
+
+struct WriteHash end
+
+struct IterateHash end
+
+struct StructHash{P,S}
+    fnpair::P
+end
+
+struct FnHash{F,H}
+    fn::F
+    result_method::H # if non-nothing, apply to result of `fn`
+end
+
 #####
 ##### WriteHash 
 #####
-
-struct WriteHash end
 
 """
     StableHashTraits.write(io, x, [context])
@@ -329,59 +342,6 @@ write(io, x) = Base.write(io, x)
 
 function stable_hash_helper(x, hash_state, context, root, ::WriteHash)
     return update_hash!(hash_state, x, context)
-end
-
-#####
-##### FnHash 
-#####
-
-struct FnHash{F,H}
-    fn::F
-    result_method::H # if non-nothing, apply to result of `fn`
-end
-FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
-get_value_(x, method::FnHash) = method.fn(x)
-
-struct PrivateConstantHash{T,H}
-    constant::T
-    result_method::H # if non-nothing, apply to value `constant`
-end
-PrivateConstantHash(val) = PrivateConstantHash{typeof(val),Nothing}(val, nothing)
-get_value_(x, method::PrivateConstantHash) = method.constant
-
-function ConstantHash(constant, method=nothing)
-    Base.depwarn("`ConstantHash` has been deprecated, favor `@ConstantHash`.",
-                 :ConstantHash)
-    return PrivateConstantHash(constant, method)
-end
-macro ConstantHash(constant)
-    if constant isa Symbol || constant isa String
-        return PrivateConstantHash(first(reinterpret(UInt64,
-                                                     sha256(codeunits(String(constant))))),
-                                   WriteHash())
-    elseif constant isa Number
-        return PrivateConstantHash(first(reinterpret(UInt64,
-                                                     sha256(reinterpret(UInt8, [constant])))),
-                                   WriteHash())
-    else
-        error("Unexpected expression: `$constant`")
-    end
-end
-
-function stable_hash_helper(x, hash_state, context, root,
-                            method::Union{FnHash,PrivateConstantHash})
-    y = get_value_(x, method)
-    new_method = @something(method.result_method, hash_method(y, context))
-    if typeof(x) == typeof(y) && method == new_method
-        methodstr = nameof(typeof(method))
-        msg = """`$methodstr` is incorrectly called inside 
-              `hash_method(::$(typeof(x)), ::$(typeof(context))). Applying
-              it would lead to infinite recursion. This can usually be
-              fixed by passing a second argument to `$methodstr`."""
-        throw(ArgumentError(replace(msg, r"\s+" => " ")))
-    end
-
-    return stable_hash_helper(y, hash_state, context, root, new_method)
 end
 
 #####
@@ -431,7 +391,6 @@ function iterate_can_elide_type(xs, root, context::ElideType)
     return (isdispatchtuple(typeof(xs)) || isdispatchtuple(Tuple{eltype_(xs)}))
 end
 
-struct IterateHash end
 function stable_hash_helper(xs, hash_state, context, root, ::IterateHash)
     if iterate_can_elide_type(xs, root, context)
         return hash_foreach(hash_state, root, xs) do x
@@ -468,9 +427,6 @@ end
 ##### StructHash 
 #####
 
-struct StructHash{P,S}
-    fnpair::P
-end
 fieldnames_(::T) where {T} = fieldnames(T)
 function StructHash(sort::Symbol)
     return StructHash(fieldnames_ => getfield, sort)
@@ -489,7 +445,7 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-function simple_struct_hash(x, hash_state, context)
+function simple_struct_hash(x, hash_state, context, use)
     fieldsfn, getfieldfn = use.fnpair
     return hash_foreach(hash_state, root, orderfields(use, fieldsfn(x))) do k
         pair = k => getfieldfn(x, k)
@@ -498,11 +454,11 @@ function simple_struct_hash(x, hash_state, context)
 end
 
 function stable_hash_helper(x, hash_state, context, root, use::StructHash)
-    return simple_struct_hash(x, hash_state, context)
+    return simple_struct_hash(x, hash_state, context, use)
 end
 
 function stable_hash_helper(x, hash_state, context, root::Val{1}, use::FieldStructHash)
-    return simple_struct_hash(x, hash_state, context)
+    return simple_struct_hash(x, hash_state, context, use)
 end
 
 function hash_fieldtypes(x, hash_state, context, root, use::FieldStructHash{<:Any, S}) where {S}
@@ -535,7 +491,9 @@ function stable_hash_helper(x, hash_state, context, root, use::FieldStructHash{t
     hash_state, fields = hash_fieldtypes(x, hash_state, context, root, use)
     hash_foreach(hash_state, root, fields) do k
         val = getfield(x, k)
+        # is the type of this field concrete?
         if isdispatchtuple(Tuple{fieldtype(T, k)})
+            # if it is, we can elide the type of this field
             return val, elide_type(hash_method(val, context)),
                    ignore_elision(context)
         else
@@ -647,8 +605,64 @@ function validate_name(str)
 end
 
 #####
+##### FnHash 
+#####
+
+FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
+get_value_(x, method::FnHash) = method.fn(x)
+
+struct PrivateConstantHash{T,H}
+    constant::T
+    result_method::H # if non-nothing, apply to value `constant`
+end
+PrivateConstantHash(val) = PrivateConstantHash{typeof(val),Nothing}(val, nothing)
+get_value_(x, method::PrivateConstantHash) = method.constant
+
+function ConstantHash(constant, method=nothing)
+    Base.depwarn("`ConstantHash` has been deprecated, favor `@ConstantHash`.",
+                 :ConstantHash)
+    return PrivateConstantHash(constant, method)
+end
+macro ConstantHash(constant)
+    if constant isa Symbol || constant isa String
+        return PrivateConstantHash(first(reinterpret(UInt64,
+                                                     sha256(codeunits(String(constant))))),
+                                   WriteHash())
+    elseif constant isa Number
+        return PrivateConstantHash(first(reinterpret(UInt64,
+                                                     sha256(reinterpret(UInt8, [constant])))),
+                                   WriteHash())
+    else
+        error("Unexpected expression: `$constant`")
+    end
+end
+
+function stable_hash_helper(x, hash_state, context, root,
+                            method::Union{FnHash,PrivateConstantHash})
+    y = get_value_(x, method)
+    new_method = @something(method.result_method, hash_method(y, context))
+    if typeof(x) == typeof(y) && method == new_method
+        methodstr = nameof(typeof(method))
+        msg = """`$methodstr` is incorrectly called inside 
+              `hash_method(::$(typeof(x)), ::$(typeof(context))). Applying
+              it would lead to infinite recursion. This can usually be
+              fixed by passing a second argument to `$methodstr`."""
+        throw(ArgumentError(replace(msg, r"\s+" => " ")))
+    end
+
+    return stable_hash_helper(y, hash_state, context, root, new_method)
+end
+
+#####
 ##### Tuples 
 #####
+
+function stable_hash_helper(x, hash_state, context, root::Union{Val{1},Val{2}},
+                            methods::Tuple)
+    return hash_foreach(hash_state, root, methods) do method
+        return x, method, context
+    end
+end
 
 # detecting when we can elide struct and element types
 function elideable(fn::F, methods) where {F}
@@ -657,6 +671,7 @@ end
 has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
 has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
 
+# tuple hashing when we can elide types (root >= 3)
 function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
     if (elideable(stable_type_id, methods) &&
         (has_iterate_type(methods) || has_struct_type(methods)))
@@ -668,6 +683,7 @@ function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
     end
 end
 
+# helpers
 function tuple_hash_helper(x, hash_state, context, root, methods::Tuple{<:ElidedTypeHash})
     return hash_state
 end
@@ -686,13 +702,6 @@ function tuple_hash_helper(x, hash_state, context, root,
 end
 
 function tuple_hash_helper(x, hash_state, context, root, methods)
-    return hash_foreach(hash_state, root, methods) do method
-        return x, method, context
-    end
-end
-
-function stable_hash_helper(x, hash_state, context, root::Union{Val{1},Val{2}},
-                            methods::Tuple)
     return hash_foreach(hash_state, root, methods) do method
         return x, method, context
     end
