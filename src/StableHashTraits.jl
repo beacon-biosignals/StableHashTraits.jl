@@ -502,6 +502,10 @@ function cleanup_name(str)
     # https://discourse.julialang.org/t/difference-between-base-and-core/37426
     str = replace(str, r"^Core\." => "Base.")
     str = replace(str, ", " => ",") # spacing in type names vary across minor julia versions
+    # in 1.6 and older AbstractVector and AbstractMatrix types get a `where` clause, but in
+    # later versions of julia, they do not
+    str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
+    str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
     return str
 end
 function validate_name(str)
