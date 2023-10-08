@@ -458,7 +458,7 @@ fieldnames_(::T) where {T} = fieldnames(T)
 function StructHash(sort::Symbol)
     return StructHash(fieldnames_ => getfield, sort)
 end
-const FieldStructHash{G, S} = StructHash{<:Pair{<:typeof(fieldnames_),G}, S}
+const FieldStructHash{G,S} = StructHash{<:Pair{<:typeof(fieldnames_),G},S}
 function StructHash(fnpair::Pair=fieldnames_ => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return StructHash{typeof(fnpair),by}(fnpair)
@@ -488,11 +488,13 @@ function stable_hash_helper(x, hash_state, context, root::Val{1}, use::FieldStru
     return simple_struct_hash(x, hash_state, context, root, use)
 end
 
-function stable_hash_helper(x, hash_state, context, root::Val{1}, use::FieldStructHash{typeof(getfield)})
+function stable_hash_helper(x, hash_state, context, root::Val{1},
+                            use::FieldStructHash{typeof(getfield)})
     return simple_struct_hash(x, hash_state, context, root, use)
 end
 
-function hash_fieldtypes(x, hash_state, context, root, use::FieldStructHash{<:Any, S}) where {S}
+function hash_fieldtypes(x, hash_state, context, root,
+                         use::FieldStructHash{<:Any,S}) where {S}
     # NOTE: hashes the field names at compile time if possible (~x10 speed up)
     hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
                                     root, WriteHash())
@@ -511,18 +513,20 @@ function compile_time_field_struct_hash(x, hash_state, context, root, use)
 end
 
 function stable_hash_helper(x, hash_state, context, root::Val{2}, use::FieldStructHash)
-    compile_time_field_struct_hash(x, hash_state, context, root, use)
+    return compile_time_field_struct_hash(x, hash_state, context, root, use)
 end
 
-function stable_hash_helper(x, hash_state, context, root::Val{2}, use::FieldStructHash{typeof(getfield)})
-    compile_time_field_struct_hash(x, hash_state, context, root, use)
+function stable_hash_helper(x, hash_state, context, root::Val{2},
+                            use::FieldStructHash{typeof(getfield)})
+    return compile_time_field_struct_hash(x, hash_state, context, root, use)
 end
 
 function struct_can_elide_type(x, k)
     return isdispatchtuple(Tuple{fieldtype(typeof(x), k)})
 end
 
-function stable_hash_helper(x, hash_state, context, root, use::FieldStructHash{typeof(getfield)})
+function stable_hash_helper(x, hash_state, context, root,
+                            use::FieldStructHash{typeof(getfield)})
     hash_state, fields = hash_fieldtypes(x, hash_state, context, root, use)
     hash_foreach(hash_state, root, fields) do k
         val = getfield(x, k)
