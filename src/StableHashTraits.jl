@@ -348,7 +348,7 @@ end
 ##### Type Elision 
 #####
 
-# Type elision is a context that strips a hash method of type-based identifiers of an object
+# Type elision is a hash context that strips a hash method of type-based identifiers of an object
 # (e.g. `stable_type_id`)
 
 struct ElideType{P}
@@ -358,8 +358,9 @@ parent_context(x::ElideType) = x.parent
 ignore_elision(x) = x
 ignore_elision(x::ElideType) = parent_context(x)
 
-# ElidedTypeHash is a hash method that replaces the type identifier, at method-eval time it
-# is a no-op, but it exists so that we can recursively propagate elisions
+# ElidedTypeHash is a hash method that replaces the type identifier, when
+# actually computing a hash, it is a no-op, but it exists so that we can recursively 
+# propagate elisions while determining what hash method to use.
 struct ElidedTypeHash end
 
 elide_type(trait) = trait
@@ -491,12 +492,16 @@ function stable_hash_helper(x, hash_state, context, root::Val{2}, use::FieldStru
     compile_time_field_struct_hash(x, hash_state, context, root, use)
 end
 
+function struct_can_elide_type(x, k)
+    return isdispatchtuple(Tuple{fieldtype(typeof(x), k)})
+end
+
 function stable_hash_helper(x, hash_state, context, root, use::FieldStructHash{typeof(getfield)})
     hash_state, fields = hash_fieldtypes(x, hash_state, context, root, use)
     hash_foreach(hash_state, root, fields) do k
         val = getfield(x, k)
         # is the type of this field concrete?
-        if isdispatchtuple(Tuple{fieldtype(typeof(x), k)})
+        if struct_can_elide_type(x, k)
             # if it is, we can elide the type of this field
             return val, elide_type(hash_method(val, context)),
                    ignore_elision(context)
@@ -674,13 +679,18 @@ function elideable(fn::F, methods) where {F}
 end
 has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
 has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
+function methods_permit_elision(methods)
+    if elideable(stable_type_id, methods)
+        return has_iterate_type(methods) || has_struct_type(methods)
+    elseif elideable(stable_eltype_id, methods)
+        return has_iterate_type(methods)
+    end
+    return false
+end
 
 # tuple hashing when we can elide types (root >= 3)
 function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
-    if (elideable(stable_type_id, methods) &&
-        (has_iterate_type(methods) || has_struct_type(methods)))
-        return tuple_hash_helper(x, hash_state, ElideType(context), root, methods)
-    elseif (elideable(stable_eltype_id, methods) && has_iterate_type(methods))
+    if methods_permit_elision(methods)
         return tuple_hash_helper(x, hash_state, ElideType(context), root, methods)
     else
         return tuple_hash_helper(x, hash_state, context, root, methods)
