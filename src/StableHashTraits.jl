@@ -349,20 +349,28 @@ end
 #####
 
 # Type elision is a hash context that strips a hash method of type-based identifiers of an object
-# (e.g. `stable_type_id`)
-
+# (e.g. `stable_type_id`), `ElideType` indicates that, when possible, this elision should
+# be performed
 struct ElideType{P}
     parent::P
 end
 parent_context(x::ElideType) = x.parent
+
+# as we traverse nested objects, we must check at each level whether elision is possible, so
+# we have to remove the `ElideType` context to indicate that we have yet to check that it is
+# possible (otherwise, all nested objects would have `stable_type_id` calls removed
+# regardless of whether our checks passed)
 ignore_elision(x) = x
 ignore_elision(x::ElideType) = parent_context(x)
 
-# ElidedTypeHash is a hash method that replaces the type identifier, when
-# actually computing a hash, it is a no-op, but it exists so that we can recursively 
-# propagate elisions while determining what hash method to use.
+# ElidedTypeHash is a hash method that replaces FnHash(stable_hash_id); when actually
+# computing a hash, it is a no-op, but it exists so that we can treat it as if it were
+# `FnHash(stable_type_id)`, for purposes of determining if elision is possible at the next
+# level of object nesting
 struct ElidedTypeHash end
 
+# to elide the type from a set of hash methods is to remove all
+# calls to `FnHash(stable_type_id)`
 elide_type(trait) = trait
 elide_type(trait::Tuple{}) = ()
 function elide_type(trait::Tuple)
@@ -385,11 +393,13 @@ eltype_(x, ::Base.HasEltype) = eltype(x)
 iterate_can_elide_type(xs, root, context) = false
 iterate_can_elide_type(xs, root::Val{1}, ::ElideType) = false
 iterate_can_elide_type(xs, root::Val{2}, ::ElideType) = false
+# to check of ellission is possible for `IterateHash`
+# we determine if the eltype is concrete
 function iterate_can_elide_type(xs, root, context::ElideType)
     # `isdispatchtuple`: determine if T is a tuple of "leaf types"
     # meaning it has no subtypes that could appear in a method call
     # i.e. a concrete type
-    return (isdispatchtuple(typeof(xs)) || isdispatchtuple(Tuple{eltype_(xs)}))
+    return isdispatchtuple(Tuple{eltype_(xs)}) || isdispatchtuple(typeof(xs))
 end
 
 function stable_hash_helper(xs, hash_state, context, root, ::IterateHash)
@@ -422,6 +432,19 @@ function hash_foreach(fn, hash_state, root, xs)
     end
     hash_state = end_nested_hash!(hash_state, inner_state)
     return hash_state
+end
+
+# if one of the hash methods is `ElidedTypeHash` while iterating over a tuple,
+# we simply skip `ElidedTypeHash`, as if it weren't there at all
+hash_foreach(fn, hash_state, root::Val{3}, xs::Tuple{<:ElidedTypeHash}) = hash_state
+function hash_foreach(fn, hash_state, root::Val{3}, xs::Tuple{<:ElidedTypeHash,<:Any})
+    f_x, method, context = fn(xs[2])
+    return stable_hash_helper(f_x, hash_state, context, root, method)
+end
+function hash_foreach(fn, hash_state, root::Val{3},
+                      xs::Tuple{<:ElidedTypeHash,<:Any,Vararg{<:Any}})
+    _, rest... = xs
+    return hash_foreach(fn, hash_state, root, rest)
 end
 
 #####
@@ -691,33 +714,13 @@ end
 # tuple hashing when we can elide types (root >= 3)
 function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
     if methods_permit_elision(methods)
-        return tuple_hash_helper(x, hash_state, ElideType(context), root, methods)
+        return hash_foreach(hash_state, root, methods) do method
+            return x, method, ElideType(context)
+        end
     else
-        return tuple_hash_helper(x, hash_state, context, root, methods)
-    end
-end
-
-# helpers
-function tuple_hash_helper(x, hash_state, context, root, methods::Tuple{<:ElidedTypeHash})
-    return hash_state
-end
-
-function tuple_hash_helper(x, hash_state, context, root,
-                           methods::Tuple{<:ElidedTypeHash,<:Any})
-    return stable_hash_helper(x, hash_state, context, root, methods[2])
-end
-
-function tuple_hash_helper(x, hash_state, context, root,
-                           methods::Tuple{<:ElidedTypeHash,<:Any,Vararg{<:Any}})
-    _, rest... = methods
-    return hash_foreach(hash_state, root, rest) do method
-        return x, method, context
-    end
-end
-
-function tuple_hash_helper(x, hash_state, context, root, methods)
-    return hash_foreach(hash_state, root, methods) do method
-        return x, method, context
+        return hash_foreach(hash_state, root, methods) do method
+            return x, method, context
+        end
     end
 end
 
