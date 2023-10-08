@@ -241,18 +241,15 @@ mutable struct BufferedHashState{T} <: HashState
     total_bytes_hashed::Int
     bytes::Vector{UInt8} # tye bytes that back `io`
     delimiters::Vector{Int} # delimits the start of nested structures (for `start_nested_hash!`), positive is start, negative is stop
-    stops::Vector{Int} # delimits the end of nested structures (for `end_nested_hash!`)
     limit::Int # the preferred limit on the size of `io`'s buffer
     io::IOBuffer
 end
 const HASH_BUFFER_SIZE = 2^14
 function BufferedHashState(state, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
-    starts = sizehint!(Vector{Int}(), size)
-    stops = sizehint!(Vector{Int}(), size)
+    delimiters = sizehint!(Vector{Int}(), 2size)
     io = IOBuffer(bytes; write=true, read=false)
-    return BufferedHashState(state, similar_hash_state(state), 0, bytes, starts, stops,
-                             size, io)
+    return BufferedHashState(state, similar_hash_state(state), 0, bytes, delimiters, size, io)
 end
 
 # flush bytes that are stored internally to the underlying hasher
