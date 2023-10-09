@@ -249,7 +249,8 @@ function BufferedHashState(state, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
     delimiters = sizehint!(Vector{Int}(), 2size)
     io = IOBuffer(bytes; write=true, read=false)
-    return BufferedHashState(state, similar_hash_state(state), 0, bytes, delimiters, size, io)
+    return BufferedHashState(state, similar_hash_state(state), 0, bytes, delimiters, size,
+                             io)
 end
 
 # flush bytes that are stored internally to the underlying hasher
