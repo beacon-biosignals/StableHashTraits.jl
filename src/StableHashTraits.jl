@@ -225,7 +225,7 @@ function update_hash!(hasher::RecursiveHashState, bytes::AbstractVector{UInt8})
     return RecursiveHashState(hasher.fn, hasher.fn(bytes, hasher.val), hasher.init)
 end
 function end_nested_hash!(fn::RecursiveHashState, nested::RecursiveHashState)
-    return update_hash!(fn, reinterpret(UInt8, [nested.val]))
+    return update_hash!(fn, reinterpret(UInt8, [nested.val;]))
 end
 compute_hash!(x::RecursiveHashState) = x.val
 HashState(x::RecursiveHashState) = x
@@ -239,7 +239,7 @@ mutable struct BufferedHashState{T} <: HashState
     content_hash_state::T
     delimiter_hash_state::T
     total_bytes_hashed::Int
-    bytes::Vector{UInt8} # tye bytes that back `io`
+    bytes::Vector{UInt8} # the bytes that back `io`
     delimiters::Vector{Int} # delimits the start of nested structures (for `start_nested_hash!`), positive is start, negative is stop
     limit::Int # the preferred limit on the size of `io`'s buffer
     io::IOBuffer
