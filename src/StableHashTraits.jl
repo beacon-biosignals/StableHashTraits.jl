@@ -305,6 +305,11 @@ hash_type(x::BufferedHasher) = hash_type(x.hasher)
 ##### CachedHasher: cache hashed values where appropriate 
 #####
 
+# TODO: change of course; pre-traverse all objects to find which ones repeat. Most of the
+# time in hashing is spent writing to the buffer and since we can skip this step,
+# pre-traversal is probably negligible in over all cost and will improve performance and
+# predictability of hashing results.
+
 const CacheKey = Tuple{UInt,UInt,UInt}
 mutable struct CachedHasher{T,H}
     buffered::BufferedHasher{T}
