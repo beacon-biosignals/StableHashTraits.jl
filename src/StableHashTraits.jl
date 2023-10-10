@@ -54,7 +54,9 @@ third argument to [`StableHashTraits.write`](@ref)
 """
 stable_hash(x; alg=sha256, version=1) = return stable_hash(x, HashVersion{version}(); alg)
 function stable_hash(x, context; alg=sha256)
-    return compute_hash!(stable_hash_helper(x, HashState(alg, context), context,
+    hash_state = HashState(alg, context)
+    hash_state = hash_state_preprocess!(x, hash_state, context, hash_method(context))
+    return compute_hash!(stable_hash_helper(x, hash_state, context,
                                             Val(root_version(context)),
                                             hash_method(x, context)))
 end
@@ -109,6 +111,24 @@ function stable_hash_helper(x, hash_state, context, root, method)
                         "hashing object $x. The implementation of `hash_method` for this " *
                         "object is invalid."))
     return nothing
+end
+
+## initial hash trait defintion (implementation below)
+
+
+# predefine the traits, since they get references in various
+
+struct WriteHash end
+
+struct IterateHash end
+
+struct StructHash{P,S}
+    fnpair::P
+end
+
+struct FnHash{F,H}
+    fn::F
+    result_method::H # if non-nothing, apply to result of `fn`
 end
 
 #####
@@ -173,6 +193,16 @@ Akin to `similar` for arrays, this constructs a new object of the same concrete 
 as `state`
 """
 function similar_hash_state end
+
+"""
+    hash_state_preprocess!(x, hash_state, context, method)
+
+Perform any required initial scan of the nesting structure of `x` before computing the hash.
+Returning the state of `hash_state` after preprocessing.
+"""
+function hash_state_preprocess!(x, hash_state, context, method)
+    return hash_state # by default, no preprocessing is performed
+end
 
 #####
 ##### SHA Hashing: support use of `sha256` and related hash functions
@@ -307,74 +337,14 @@ end
 hash_type(x::BufferedHashState) = hash_type(x.hasher)
 
 #####
-##### CachedHasher: cache hashed values where appropriate 
-#####
-
-# TODO: change of course; pre-traverse all objects to find which ones repeat. Most of the
-# time in hashing is spent writing to the buffer and since we can skip this step,
-# pre-traversal is probably negligible in over all cost and will improve performance and
-# predictability of hashing results.
-
-const CacheKey = Tuple{UInt,UInt,UInt}
-mutable struct CachedHasher{T,H}
-    buffered::BufferedHasher{T}
-    cache::Dict{CacheKey,H}
-    seen::Set{CacheKey}
-    nested::Bool
-end
-function CachedHasher(buffered)
-    return CachedHasher(buffered, Dict{CacheKey,hash_type(buffered)}(),
-                        Set{CacheKey}(), false)
-end
-
-cached_stable_hash(x, hash, context, root, method) = stable_hash_helper(x, hash, context, root, method)
-const CACHE_MIN_SIZE = 2^10
-
-# ensure this occurs at compile time
-@generated function dont_cache_me(T)
-    T <: Tuple && return :(true)
-    T <: DataType && return :(true)
-    isprimitivetype(T) && return :(true)
-    isbitstype(T) && sizeof(T) < CACHE_MIN_SIZE && return :(true)
-    return :(false)
-end
-
-function start_hash!(x::CachedHasher) 
-    x.buffered = start_hash!(x.buffered)
-    return x
-end
-
-function update_hash!(x::CachedHasher, obj, context)
-    x.buffered = update_hash!(x.buffered, obj, context)
-    return x
-end
-
-function stop_hash!(x::CachedHasher, nested::CachedHasher)
-    x.buffered = stop_hash!(x.buffered, nested.buffered)
-    return x
-end
-
-function compute_hash!(x::CachedHasher)
-    return compute_hash!(x.buffered)
-end
-
-hash_type(x::CachedHashState) = hash_type(x.buffered)
-
-#####
 ##### CachedHashState: cache hashed values where appropriate 
 #####
 
-# TODO: change of course; pre-traverse all objects to find which ones repeat. Most of the
-# time in hashing is spent writing to the buffer and since we can skip this step,
-# pre-traversal is probably negligible in over all cost and will improve performance and
-# predictability of hashing results.
-
 const CacheKey = Tuple{UInt,UInt,UInt}
 mutable struct CachedHashState{T,H}
-    buffered::BufferedHasher{T}
+    buffered::BufferedHashState{T}
     cache::Dict{CacheKey,H}
-    seen::Set{CacheKey}
-    nested::Bool
+    repeated::Dict{CacheKey,Bool}
 end
 function CachedHashState(buffered)
     return CachedHashState(buffered, Dict{CacheKey,hash_type(buffered)}(),
@@ -414,24 +384,69 @@ end
 
 hash_type(x::CachedHashState) = hash_type(x.buffered)
 
+function track_object!(body, x, hash::CachedHashState, context, method)
+    key = (objectid(x), method, context)
+    if get(hash, repeated, false)
+        hash.repeated[key] = haskey(hash.repeated, key)
+        return body(hash)
+    else
+        return hash
+    end
+end
+
+function hash_state_preprocess!(xs, hash::CachedHashState, context, method::IterateHash)
+    return track_object!(xs, hash, context, method) do hash
+        for x in xs
+            hash = hash_state_preprocess!(xs, hash, context, hash_method(x, context))
+        end
+        return hash
+    end
+end
+
+function hash_state_preprocess!(x, hash::CachedHashState, context, method::StructHash)
+    return track_object!(x, hash, context, method) do hash
+        fields, getfield = method.fnpair
+        for key in fields(x)
+            val = getfield(x, key)
+            hash = hash_state_preprocess!(val, hash, context, hash_method(val, context))
+        end
+        return hash
+    end
+end
+
+function hash_state_preprocess!(x, hash::CachedHashState, context, method::Union{PrivateConstantHash, FnHash})
+    return track_object!(x, hash, context, method) do hash
+        val = get_value_(x, method)
+        new_method = find_hash_method(x, val, method)
+        return hash_state_preprocess!(val, hash, context, new_method)
+    end
+end
+
+function cached_stable_hash(x, hash::CachedHashState, context, root, method::Union{StructHash, IterateHash})
+    dont_cache_me(x) && return stable_hash_helper(x, hash, context, root, method)
+
+    key = (objectid(x), objectid(method), objectid(context))
+
+    if haskey(hash.cache, key)
+        return update_hash!(hash, hash.cache[key], context)
+    end
+
+    if get(hash.repeated, key, false)
+        value = get!(hash.cache, key) do 
+            new_buffered = BufferedHashState(start_hash!(hash.buffered.hasher))
+            new_hash = CachedHashState(new_buffered, hash.cache, hash.seen, true)
+            return compute_hash!(stable_hash_helper(x, new_hash, context, root, method))
+        end
+
+        return update_hash!(hash, value, context)
+    end
+
+    return stable_hash_helper(x, hash, context, root, method)
+end
+
 #####
 ##### ================ Hash Traits ================
 #####
-
-# predefine the traits, since they get references in various
-
-struct WriteHash end
-
-struct IterateHash end
-
-struct StructHash{P,S}
-    fnpair::P
-end
-
-struct FnHash{F,H}
-    fn::F
-    result_method::H # if non-nothing, apply to result of `fn`
-end
 
 #####
 ##### WriteHash 
@@ -652,64 +667,6 @@ function stable_hash_helper(x, hash_state, context, root,
     end
 end
 
-# TODO: move this somewhere better
-function cached_stable_hash(x, hash::CachedHashState, context, root, method::Union{StructHash, IterateHash})
-    dont_cache_me(x) && return stable_hash_helper(x, hash, context, root, method)
-
-    key = (objectid(x), objectid(method), objectid(context))
-
-    if haskey(hash.cache, key)
-        return update_hash!(hash, hash.cache[key], context)
-    end
-
-    if sizeof(x) > (hash.buffered.limit << 2) || (key ∈ hash.seen && !hash.nested)
-        # NOTE: this is "inefficient" in that we can end up recomputing the hash of objects
-        # twice: once, when it is first seen and a second time, when it is seen but not yet
-        # in the cache. However, it is not clear to me, in practice, what would be better
-        # solution that is not overly complicated
-        value = get!(hash.cache, key) do 
-            new_buffered = BufferedHasher(start_hash!(hash.buffered.hasher))
-            new_hash = CachedHashState(new_buffered, hash.cache, hash.seen, true)
-            return compute_hash!(stable_hash_helper(x, new_hash, context, root, method))
-        end
-
-        return update_hash!(hash, value, context)
-    else
-        push!(hash.seen, key)
-    end
-
-    return stable_hash_helper(x, hash, context, root, method)
-end
-
-# TODO: move this somewhere better
-function cached_stable_hash(x, hash::CachedHasher, context, root, method::Union{StructHash, IterateHash})
-    dont_cache_me(x) && return stable_hash_helper(x, hash, context, root, method)
-
-    key = (objectid(x), objectid(method), objectid(context))
-
-    if haskey(hash.cache, key)
-        return update_hash!(hash, hash.cache[key], context)
-    end
-
-    if sizeof(x) > (hash.buffered.limit << 2) || (key ∈ hash.seen && !hash.nested)
-        # NOTE: this is "inefficient" in that we can end up recomputing the hash of objects
-        # twice: once, when it is first seen and a second time, when it is seen but not yet
-        # in the cache. However, it is not clear to me, in practice, what would be better
-        # solution that is not overly complicated
-        value = get!(hash.cache, key) do 
-            new_buffered = BufferedHasher(start_hash!(hash.buffered.hasher))
-            new_hash = CachedHasher(new_buffered, hash.cache, hash.seen, true)
-            return compute_hash!(stable_hash_helper(x, new_hash, context, root, method))
-        end
-
-        return update_hash!(hash, value, context)
-    else
-        push!(hash.seen, key)
-    end
-
-    return stable_hash_helper(x, hash, context, root, method)
-end
-
 #####
 ##### Stable values for types
 #####
@@ -849,9 +806,7 @@ macro ConstantHash(constant)
     end
 end
 
-function stable_hash_helper(x, hash_state, context, root,
-                            method::Union{FnHash,PrivateConstantHash})
-    y = get_value_(x, method)
+find_hash_method(x, y, method)
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method
         methodstr = nameof(typeof(method))
@@ -861,7 +816,13 @@ function stable_hash_helper(x, hash_state, context, root,
               fixed by passing a second argument to `$methodstr`."""
         throw(ArgumentError(replace(msg, r"\s+" => " ")))
     end
+    return new_method
+end
 
+function stable_hash_helper(x, hash_state, context, root,
+                            method::Union{FnHash,PrivateConstantHash})
+    y = get_value_(x, method)
+    new_method = find_hash_method(x, y, method)
     return stable_hash_helper(y, hash_state, context, root, new_method)
 end
 
