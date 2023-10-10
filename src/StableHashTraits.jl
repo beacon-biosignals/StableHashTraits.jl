@@ -19,9 +19,10 @@ these fallback methods will not change even if new fallbacks are defined.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
-        V < 3 && Base.depwarn("HashVersion{V} with V < 2 is deprecated, favor `HashVersion{3}` in " *
-                               "all cases where backwards compatible hash values are not " *
-                               "required.", :HashVersion)
+        V < 3 &&
+            Base.depwarn("HashVersion{V} with V < 2 is deprecated, favor `HashVersion{3}` in " *
+                         "all cases where backwards compatible hash values are not " *
+                         "required.", :HashVersion)
         return new{V}()
     end
 end
@@ -53,13 +54,13 @@ third argument to [`StableHashTraits.write`](@ref)
 """
 stable_hash(x; alg=sha256, version=1) = return stable_hash(x, HashVersion{version}(); alg)
 function stable_hash(x, context; alg=sha256)
-    return compute_hash!(stable_hash_helper(x, setup_hash_state(alg, context), context,
-                                            Val(root_version(context)), 
+    return compute_hash!(stable_hash_helper(x, HashState(alg, context), context,
+                                            Val(root_version(context)),
                                             hash_method(x, context)))
 end
 
 # extract contents of README so we can insert it into the some of the docstrings
-const HASH_TRAITS_DOCS, HASH_CONTEXT_DOCS = let
+function __init__()
     readme = read(joinpath(pkgdir(StableHashTraits), "README.md"), String)
     traits = match(r"START_HASH_TRAITS -->(.*)<!-- END_HASH_TRAITS"s, readme).captures[1]
     contexts = match(r"START_CONTEXTS -->(.*)<!-- END_CONTEXTS"s, readme).captures[1]
@@ -67,18 +68,21 @@ const HASH_TRAITS_DOCS, HASH_CONTEXT_DOCS = let
     # links to symbols here
 
     traits, contexts
-end
 
-"""
+    @doc """
     hash_method(x, [context])
 
-Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
-You should return one of the following values.
+    Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
+    You should return one of the following values.
 
-$HASH_TRAITS_DOCS
+    $traits
 
-$HASH_CONTEXT_DOCS
-"""
+    $contexts
+    """ hash_method
+
+    return nothing
+end
+
 function hash_method end
 
 # recurse up to the parent until a method is defined or we hit the root (with parent `nothing`)
@@ -87,7 +91,7 @@ hash_method(x, context) = hash_method(x, parent_context(context))
 # user
 hash_method(x, ::Nothing) = hash_method(x)
 # we signal that a method specific to a type is not available using `NotImplemented`; we
-# need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext{1}) where T`
+# need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext) where T
 # below for details
 struct NotImplemented end
 hash_method(_) = NotImplemented()
@@ -111,56 +115,64 @@ end
 ##### ================ Hash Algorithms ================
 #####
 """
-    update_hash!(state, bytes)
+    update_hash!(state::HashState, bytes)
 
 Returns the updated hash state given a set of bytes (either a tuple or array of UInt8
 values).
 
-    update_hash!(state, obj, context)
+    update_hash!(state::HashState, obj, context)
 
-Returns the update hash, given an object and some context. The object will
+Returns the updated hash, given an object and some context. The object will
 be written to some bytes using `StableHashTraits.write(io, obj, context)`.
 """
 function update_hash! end
 
 # when a hasher has no internal buffer, we allocate one for each call to `update_hash!`
-function update_hash!(hasher, x, context) 
+function update_hash!(hasher, x, context)
     io = IOBuffer()
     write(io, x, context)
     return update_hash!(hasher, take!(io))
 end
 
 """
-    setup_hash_state(alg, context)
+    HashState(alg, context)
 
-Given a function that specifies the hash algorithm to use and the current hash context,
+Given a function that implements the hash algorithm to use and the current hash context,
 setup the necessary state to track updates to hashing as we traverse an object's structure
 and return it.
 """
-function setup_hash_state end
+abstract type HashState end
 
 """
-    compute_hash!(state)
+    compute_hash!(state::HashState)
 
 Return the final hash value to return for `state`
 """
 function compute_hash! end
 
 """
-    start_hash!(state)
+    start_nested_hash!(state::HashState)
 
 Return an updated state that delimits hashing of a nested structure; calls made to
-`update_hash!` after start_hash! will be handled as nested elements up until `stop_hash!` is
-called.
+`update_hash!` after start_nested_hash! will be handled as nested elements up until
+`end_nested_hash!` is called.
 """
-function start_hash! end
+function start_nested_hash! end
 
 """
-    stop_hash!(state)
+    end_nested_hash!(state::HashState)
 
 Return an updated state that delimints the end of a nested structure.
 """
-function stop_hash! end
+function end_nested_hash! end
+
+"""
+    similar_hash_state(state::HashState)
+
+Akin to `similar` for arrays, this constructs a new object of the same concrete type
+as `state`
+"""
+function similar_hash_state end
 
 #####
 ##### SHA Hashing: support use of `sha256` and related hash functions
@@ -169,137 +181,130 @@ function stop_hash! end
 for fn in filter(startswith("sha") ∘ string, names(SHA))
     CTX = Symbol(uppercase(string(fn)), :_CTX)
     if CTX in names(SHA)
-        @eval function setup_hash_state(::typeof(SHA.$(fn)), context)
+        # we cheat a little here, technically `SHA_CTX` and friends are not `HashState`
+        # but we make them satisfy the same interface below
+        @eval function HashState(::typeof(SHA.$(fn)), context)
             root_version(context) < 2 && return SHA.$(CTX)()
-            root_version(context) < 4 && BufferedHasher(SHA.$(CTX)())
-            return CachedHasher(BufferedHasher(SHA.$(CTX)()))
+            root_version(context) < 4 && BufferedHashState(SHA.$(CTX)())
+            return CachedHashState(BufferedHashState(SHA.$(CTX)()))
         end
     end
 end
 
-# NOTE: while BufferedHasher is a faster implementation of `start/stop_hash!`
+# NOTE: while BufferedHashState is a faster implementation of `start/end_nested_hash!`
 # we still need a recursive hash implementation to implement `HashVersion{1}()`
-start_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
-function update_hash!(sha::SHA.SHA_CTX, bytes::AbstractVector{UInt8}) 
+start_nested_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
+function update_hash!(sha::SHA.SHA_CTX, bytes::AbstractVector{UInt8})
     SHA.update!(sha, bytes)
     return sha
 end
-function stop_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
+function end_nested_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
     SHA.update!(hash_state, SHA.digest!(nested_hash_state))
     return hash_state
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
-
+HashState(x::SHA.SHA_CTX, ctx) = x
+similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
 hash_type(::SHA.SHA_CTX) = Vector{UInt}
 
 #####
-##### RecursiveHasher: handles a function of the form hash(bytes, [old_hash]) 
+##### RecursiveHashState: handles a function of the form hash(bytes, [old_hash]) 
 #####
 
-function setup_hash_state(fn::Function, context)
-    root_version(context) < 2 && return RecursiveHasher(fn)
-    root_version(context) < 4 && return BufferedHasher(RecursiveHasher(fn))
-    return CachedHasher(BufferedHasher(RecursiveHasher(fn)))
+function HashState(fn::Function, context)
+    root_version(context) < 2 && return RecursiveHashState(fn)
+    root_version(context) < 4 && return BufferedHashState(RecursiveHashState(fn))
+    return CachedHashState(BufferedHashState(RecursiveHashState(fn)))
 end
 
-struct RecursiveHasher{F,T}
+struct RecursiveHashState{F,T} <: HashState
     fn::F
     val::T
     init::T
 end
-function RecursiveHasher(fn)
+function RecursiveHashState(fn)
     hash = fn(UInt8[])
-    return RecursiveHasher(fn, hash, hash)
+    return RecursiveHashState(fn, hash, hash)
 end
-start_hash!(x::RecursiveHasher) = RecursiveHasher(x.fn, x.init, x.init)
-function update_hash!(hasher::RecursiveHasher, bytes::AbstractVector{UInt8})
-    return RecursiveHasher(hasher.fn, hasher.fn(bytes, hasher.val), hasher.init)
+start_nested_hash!(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
+function update_hash!(hasher::RecursiveHashState, bytes::AbstractVector{UInt8})
+    return RecursiveHashState(hasher.fn, hasher.fn(bytes, hasher.val), hasher.init)
 end
-function stop_hash!(fn::RecursiveHasher, nested::RecursiveHasher)
-    return update_hash!(fn, reinterpret(UInt8, [nested.val]))
+function end_nested_hash!(fn::RecursiveHashState, nested::RecursiveHashState)
+    return update_hash!(fn, reinterpret(UInt8, [nested.val;]))
 end
-compute_hash!(x::RecursiveHasher) = x.val
-
-hash_type(x::RecursiveHasher{<:Any,T}) where T = T
+compute_hash!(x::RecursiveHashState) = x.val
+HashState(x::RecursiveHashState) = x
+similar_hash_state(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
+hash_type(x::RecursiveHashState{<:Any,T}) where T = T
 
 #####
-##### BufferedHasher: wrapper that buffers bytes before passing them to the hash algorithm 
+##### BufferedHashState: wrapper that buffers bytes before passing them to the hash algorithm 
 #####
 
-mutable struct BufferedHasher{T}
-    hasher::T
-    bytes::Vector{UInt8} # tye bytes that back `io`
-    starts::Vector{Int} # delimits the start of nested structures (for `start_hash!`)
-    stops::Vector{Int} # delimits the end of nested structures (for `stop_hash!`)
+mutable struct BufferedHashState{T} <: HashState
+    content_hash_state::T
+    delimiter_hash_state::T
+    total_bytes_hashed::Int
+    bytes::Vector{UInt8} # the bytes that back `io`
+    delimiters::Vector{Int} # delimits the start of nested structures (for `start_nested_hash!`), positive is start, negative is stop
     limit::Int # the preferred limit on the size of `io`'s buffer
     io::IOBuffer
 end
 const HASH_BUFFER_SIZE = 2^14
-function BufferedHasher(hasher, size=HASH_BUFFER_SIZE)
+function BufferedHashState(state, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
-    starts = sizehint!(Vector{Int}(), size)
-    stops = sizehint!(Vector{Int}(), size)
+    delimiters = sizehint!(Vector{Int}(), 2size)
     io = IOBuffer(bytes; write=true, read=false)
-    return BufferedHasher(hasher, bytes, starts, stops, size, io)
+    return BufferedHashState(state, similar_hash_state(state), 0, bytes, delimiters, size,
+                             io)
 end
 
 # flush bytes that are stored internally to the underlying hasher
-function flush_bytes!(x::BufferedHasher, limit=x.limit - (x.limit >> 2))
+function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
     # the default `limit` tries to flush before the allocated buffer increases in size
     if position(x.io) ≥ limit
-        content_size = position(x.io)
+        x.content_hash_state = update_hash!(x.content_hash_state,
+                                            @view x.bytes[1:position(x.io)])
+        x.delimiter_hash_state = update_hash!(x.delimiter_hash_state,
+                                              reinterpret(UInt8, x.delimiters))
 
-        # NOTE: we now write a block of meta-data that represents the start/stop delimeters
-        # for nested elements. We mark the number of bytes of user-hashed content it covers,
-        # and the number of delimeters represented, so that there is no way to have content
-        # replicate the exact metadata block used to represent a given byte sequence
-        # (including any such block would change the nubmer of bytes the metadata block
-        # indexes). We can verify that this is the cases by imagining that we're scanning
-        # the bytes from end to start; given the information in the metadata block (and
-        # given that we know the last thing written is metadata) we can easily scan in this
-        # direction to correctly distinguish all metadata from all user-hashed content
-
-        # write out the delimeters
-        Base.write(x.io, x.starts)
-        Base.write(x.io, x.stops)
-        empty!(x.starts)
-        empty!(x.stops)
-
-        # write out user and metadata content size
-        @assert x.starts == x.stops
-        Base.write(x.io, length(x.starts))
-        Base.write(x.io, content_size)
-
-        # hash both user data and the data block above
-        x.hasher = update_hash!(x.hasher, @view x.bytes[1:position(x.io)])
-
+        empty!(x.delimiters)
+        x.total_bytes_hashed += position(x.io) # tack total number of bytes that have been hashed
         seek(x.io, 0)
     end
     return x
 end
 
-function start_hash!(x::BufferedHasher)
-    push!(x.starts, position(x.io))
+function start_nested_hash!(x::BufferedHashState)
+    push!(x.delimiters, position(x.io) + x.total_bytes_hashed + 1) # position can be zero
     return x
 end
 
-function stop_hash!(root::BufferedHasher, x::BufferedHasher)
-    push!(x.stops, position(x.io))
+function end_nested_hash!(root::BufferedHashState, x::BufferedHashState)
+    push!(x.delimiters, -(position(x.io) + x.total_bytes_hashed + 1))
     return x
 end
 
-function update_hash!(hasher::BufferedHasher, obj, context)
-    # @show obj
+function update_hash!(hasher::BufferedHashState, obj, context)
     write(hasher.io, obj, context)
     flush_bytes!(hasher)
     return hasher
 end
 
-function compute_hash!(x::BufferedHasher)
-    return compute_hash!(flush_bytes!(x, 0).hasher)
-end
+function compute_hash!(x::BufferedHashState)
+    flush_bytes!(x, 0)
+    # recursively hash the delimiter hash state into the content hash
+    delimiter_hash = compute_hash!(x.delimiter_hash_state)
+    state = update_hash!(x.content_hash_state, reinterpret(UInt8, [delimiter_hash;]))
 
-hash_type(x::BufferedHasher) = hash_type(x.hasher)
+    return compute_hash!(state)
+end
+HashState(x::BufferedHashState, ctx) = x
+function similar_hash_state(x::BufferedHashState)
+    return BufferedHashState(similar_hash_state(x.content_hash_state), x.limit)
+end
+hash_type(x::BufferedHashState) = hash_type(x.hasher)
 
 #####
 ##### CachedHasher: cache hashed values where appropriate 
@@ -353,17 +358,84 @@ function compute_hash!(x::CachedHasher)
     return compute_hash!(x.buffered)
 end
 
-hash_type(x::CachedHasher) = hash_type(x.buffered)
+hash_type(x::CachedHashState) = hash_type(x.buffered)
+
+#####
+##### CachedHashState: cache hashed values where appropriate 
+#####
+
+# TODO: change of course; pre-traverse all objects to find which ones repeat. Most of the
+# time in hashing is spent writing to the buffer and since we can skip this step,
+# pre-traversal is probably negligible in over all cost and will improve performance and
+# predictability of hashing results.
+
+const CacheKey = Tuple{UInt,UInt,UInt}
+mutable struct CachedHashState{T,H}
+    buffered::BufferedHasher{T}
+    cache::Dict{CacheKey,H}
+    seen::Set{CacheKey}
+    nested::Bool
+end
+function CachedHashState(buffered)
+    return CachedHashState(buffered, Dict{CacheKey,hash_type(buffered)}(),
+                        Set{CacheKey}(), false)
+end
+
+cached_stable_hash(x, hash, context, root, method) = stable_hash_helper(x, hash, context, root, method)
+const CACHE_MIN_SIZE = 2^10
+
+# ensure this occurs at compile time
+@generated function dont_cache_me(T)
+    T <: Tuple && return :(true)
+    T <: DataType && return :(true)
+    isprimitivetype(T) && return :(true)
+    isbitstype(T) && sizeof(T) < CACHE_MIN_SIZE && return :(true)
+    return :(false)
+end
+
+function start_hash!(x::CachedHashState) 
+    x.buffered = start_hash!(x.buffered)
+    return x
+end
+
+function update_hash!(x::CachedHashState, obj, context)
+    x.buffered = update_hash!(x.buffered, obj, context)
+    return x
+end
+
+function stop_hash!(x::CachedHashState, nested::CachedHashState)
+    x.buffered = stop_hash!(x.buffered, nested.buffered)
+    return x
+end
+
+function compute_hash!(x::CachedHashState)
+    return compute_hash!(x.buffered)
+end
+
+hash_type(x::CachedHashState) = hash_type(x.buffered)
 
 #####
 ##### ================ Hash Traits ================
 #####
 
+# predefine the traits, since they get references in various
+
+struct WriteHash end
+
+struct IterateHash end
+
+struct StructHash{P,S}
+    fnpair::P
+end
+
+struct FnHash{F,H}
+    fn::F
+    result_method::H # if non-nothing, apply to result of `fn`
+end
+
 #####
 ##### WriteHash 
 #####
-
-struct WriteHash end
 
 """
     StableHashTraits.write(io, x, [context])
@@ -383,77 +455,36 @@ write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
 
 function stable_hash_helper(x, hash_state, context, root, ::WriteHash)
-    update_hash!(hash_state, x, context)
-end
-
-#####
-##### FnHash 
-#####
-
-struct FnHash{F,H}
-    fn::F
-    result_method::H # if non-nothing, apply to result of `fn`
-end
-FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
-get_value_(x, method::FnHash) = method.fn(x)
-
-struct PrivateConstantHash{T,H}
-    constant::T
-    result_method::H # if non-nothing, apply to value `constant`
-end
-PrivateConstantHash(val) = PrivateConstantHash{typeof(val),Nothing}(val, nothing)
-get_value_(x, method::PrivateConstantHash) = method.constant
-
-function ConstantHash(constant, method=nothing)
-    Base.depwarn("`ConstantHash` has been deprecated, favor `@ConstantHash`.",
-                 :ConstantHash)
-    return PrivateConstantHash(constant, method)
-end
-macro ConstantHash(constant)
-    if constant isa Symbol || constant isa String
-        return PrivateConstantHash(first(reinterpret(UInt64,
-                                                     sha256(codeunits(String(constant))))),
-                                   WriteHash())
-    elseif constant isa Number
-        return PrivateConstantHash(first(reinterpret(UInt64,
-                                                     sha256(reinterpret(UInt8, [constant])))),
-                                   WriteHash())
-    else
-        error("Unexpected expression: `$constant`")
-    end
-end
-
-function stable_hash_helper(x, hash_state, context, root,
-                            method::Union{FnHash,PrivateConstantHash})
-    y = get_value_(x, method)
-    new_method = @something(method.result_method, hash_method(y, context))
-    if typeof(x) == typeof(y) && method == new_method
-        methodstr = nameof(typeof(method))
-        msg = """`$methodstr` is incorrectly called inside 
-              `hash_method(::$(typeof(x)), ::$(typeof(context))). Applying
-              it would lead to infinite recursion. This can usually be
-              fixed by passing a second argument to `$methodstr`."""
-        throw(ArgumentError(replace(msg, r"\s+" => " ")))
-    end
-
-    return stable_hash_helper(y, hash_state, context, root, new_method)
+    return update_hash!(hash_state, x, context)
 end
 
 #####
 ##### Type Elision 
 #####
 
-# Type elision strips a hash method of type-based identifiers of an object
-
+# Type elision is a hash context that strips a hash method of type-based identifiers of an object
+# (e.g. `stable_type_id`), `ElideType` indicates that, when possible, this elision should
+# be performed
 struct ElideType{P}
     parent::P
 end
 parent_context(x::ElideType) = x.parent
+
+# as we traverse nested objects, we must check at each level whether elision is possible, so
+# we have to remove the `ElideType` context to indicate that we have yet to check that it is
+# possible (otherwise, all nested objects would have `stable_type_id` calls removed
+# regardless of whether our checks passed)
 ignore_elision(x) = x
 ignore_elision(x::ElideType) = parent_context(x)
 
+# ElidedTypeHash is a hash method that replaces FnHash(stable_hash_id); when actually
+# computing a hash, it is a no-op, but it exists so that we can treat it as if it were
+# `FnHash(stable_type_id)`, for purposes of determining if elision is possible at the next
+# level of object nesting
 struct ElidedTypeHash end
 
+# to elide the type from a set of hash methods is to remove all
+# calls to `FnHash(stable_type_id)`
 elide_type(trait) = trait
 elide_type(trait::Tuple{}) = ()
 function elide_type(trait::Tuple)
@@ -473,14 +504,22 @@ eltype_(xs) = eltype_(xs, Base.IteratorEltype(xs))
 eltype_(_, _) = Any
 eltype_(x, ::Base.HasEltype) = eltype(x)
 
-struct IterateHash end
+iterate_can_elide_type(xs, root, context) = false
+iterate_can_elide_type(xs, root::Val{1}, ::ElideType) = false
+iterate_can_elide_type(xs, root::Val{2}, ::ElideType) = false
+# to check of ellission is possible for `IterateHash`
+# we determine if the eltype is concrete
+function iterate_can_elide_type(xs, root, context::ElideType)
+    # `isdispatchtuple`: determine if T is a tuple of "leaf types"
+    # meaning it has no subtypes that could appear in a method call
+    # i.e. a concrete type
+    return isdispatchtuple(Tuple{eltype_(xs)}) || isdispatchtuple(typeof(xs))
+end
+
 function stable_hash_helper(xs, hash_state, context, root, ::IterateHash)
-    if !(root isa Union{Val{1}, Val{2}}) &&
-       context isa ElideType && 
-       (isdispatchtuple(typeof(xs)) || isdispatchtuple(Tuple{eltype_(xs)}))
-       
+    if iterate_can_elide_type(xs, root, context)
         return hash_foreach(hash_state, root, xs) do x
-            x, elide_type(hash_method(x, context)), ignore_elision(context)
+            return x, elide_type(hash_method(x, context)), ignore_elision(context)
         end
     else
         return hash_foreach(hash_state, root, xs) do x
@@ -492,35 +531,45 @@ end
 function hash_foreach(fn, hash_state, root::Val{1}, xs)
     for x in xs
         f_x, method, context = fn(x)
-        inner_state = start_hash!(hash_state)
+        inner_state = start_nested_hash!(hash_state)
         inner_state = stable_hash_helper(f_x, inner_state, context, root, method)
-        hash_state = stop_hash!(hash_state, inner_state)
+        hash_state = end_nested_hash!(hash_state, inner_state)
     end
     return hash_state
 end
 
 function hash_foreach(fn, hash_state, root, xs)
-    inner_state = start_hash!(hash_state)
+    inner_state = start_nested_hash!(hash_state)
     for x in xs
         f_x, method, context = fn(x)
         inner_state = cached_stable_hash(f_x, inner_state, context, root, method)
     end
-    hash_state = stop_hash!(hash_state, inner_state)
+    hash_state = end_nested_hash!(hash_state, inner_state)
     return hash_state
+end
+
+# if one of the hash methods is `ElidedTypeHash` while iterating over a tuple,
+# we simply skip `ElidedTypeHash`, as if it weren't there at all
+hash_foreach(fn, hash_state, root::Val{3}, xs::Tuple{<:ElidedTypeHash}) = hash_state
+function hash_foreach(fn, hash_state, root::Val{3}, xs::Tuple{<:ElidedTypeHash,<:Any})
+    f_x, method, context = fn(xs[2])
+    return stable_hash_helper(f_x, hash_state, context, root, method)
+end
+function hash_foreach(fn, hash_state, root::Val{3},
+                      xs::Tuple{<:ElidedTypeHash,<:Any,Vararg{<:Any}})
+    _, rest... = xs
+    return hash_foreach(fn, hash_state, root, rest)
 end
 
 #####
 ##### StructHash 
 #####
 
-struct StructHash{P,S}
-    fnpair::P
-end
 fieldnames_(::T) where {T} = fieldnames(T)
 function StructHash(sort::Symbol)
     return StructHash(fieldnames_ => getfield, sort)
 end
-const FieldStructHash = StructHash{<:Pair{<:typeof(fieldnames_),<:Any}}
+const FieldStructHash{G,S} = StructHash{<:Pair{<:typeof(fieldnames_),G},S}
 function StructHash(fnpair::Pair=fieldnames_ => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return StructHash{typeof(fnpair),by}(fnpair)
@@ -534,37 +583,102 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
-function stable_hash_helper(x::T, hash_state, context, root,
-                            use::StructHash{<:Any,S}) where {T,S}
+function simple_struct_hash(x, hash_state, context, root, use)
     fieldsfn, getfieldfn = use.fnpair
-    if !(root isa Val{1}) && fieldsfn isa typeof(fieldnames_)
-        # NOTE: hashes the field names at compile time if possible (~x10 speed up)
-        hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
-                                        root, WriteHash())
-        # NOTE: sort fields at compile time if possible (~x1.33 speed up)
-        fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
-        if !(root isa Val{2}) && getfieldfn isa typeof(getfield)
-            return hash_foreach(hash_state, root, fields) do k
-                val = getfield(x, k)
-                if isdispatchtuple(Tuple{fieldtype(T, k)})
-                    return val, elide_type(hash_method(val, context)),
-                           ignore_elision(context)
-                else
-                    return val, hash_method(val, context), ignore_elision(context)
-                end
-            end
+    return hash_foreach(hash_state, root, orderfields(use, fieldsfn(x))) do k
+        pair = k => getfieldfn(x, k)
+        return pair, hash_method(pair, context), context
+    end
+end
+
+function stable_hash_helper(x, hash_state, context, root, use::StructHash)
+    return simple_struct_hash(x, hash_state, context, root, use)
+end
+
+function stable_hash_helper(x, hash_state, context, root::Val{1}, use::FieldStructHash)
+    return simple_struct_hash(x, hash_state, context, root, use)
+end
+
+function stable_hash_helper(x, hash_state, context, root::Val{1},
+                            use::FieldStructHash{typeof(getfield)})
+    return simple_struct_hash(x, hash_state, context, root, use)
+end
+
+function hash_fieldtypes(x, hash_state, context, root,
+                         use::FieldStructHash{<:Any,S}) where {S}
+    # NOTE: hashes the field names at compile time if possible (~x10 speed up)
+    hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
+                                    root, WriteHash())
+    # NOTE: sort fields at compile time if possible (~x1.33 speed up)
+    fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
+    return hash_state, fields
+end
+
+function compile_time_field_struct_hash(x, hash_state, context, root, use)
+    _, getfieldfn = use.fnpair
+    hash_state, fields = hash_fieldtypes(x, hash_state, context, root, use)
+    return hash_foreach(hash_state, root, fields) do k
+        val = getfieldfn(x, k)
+        return val, hash_method(val, context), context
+    end
+end
+
+function stable_hash_helper(x, hash_state, context, root::Val{2}, use::FieldStructHash)
+    return compile_time_field_struct_hash(x, hash_state, context, root, use)
+end
+
+function stable_hash_helper(x, hash_state, context, root::Val{2},
+                            use::FieldStructHash{typeof(getfield)})
+    return compile_time_field_struct_hash(x, hash_state, context, root, use)
+end
+
+function struct_can_elide_type(x, k)
+    return isdispatchtuple(Tuple{fieldtype(typeof(x), k)})
+end
+
+function stable_hash_helper(x, hash_state, context, root,
+                            use::FieldStructHash{typeof(getfield)})
+    hash_state, fields = hash_fieldtypes(x, hash_state, context, root, use)
+    hash_foreach(hash_state, root, fields) do k
+        val = getfield(x, k)
+        # is the type of this field concrete?
+        if struct_can_elide_type(x, k)
+            # if it is, we can elide the type of this field
+            return val, elide_type(hash_method(val, context)),
+                   ignore_elision(context)
         else
-            return hash_foreach(hash_state, root, fields) do k
-                val = getfieldfn(x, k)
-                return val, hash_method(val, context), context
-            end
-        end
-    else
-        return hash_foreach(hash_state, root, orderfields(use, fieldsfn(x))) do k
-            pair = k => getfieldfn(x, k)
-            return pair, hash_method(pair, context), context
+            return val, hash_method(val, context), ignore_elision(context)
         end
     end
+end
+
+# TODO: move this somewhere better
+function cached_stable_hash(x, hash::CachedHashState, context, root, method::Union{StructHash, IterateHash})
+    dont_cache_me(x) && return stable_hash_helper(x, hash, context, root, method)
+
+    key = (objectid(x), objectid(method), objectid(context))
+
+    if haskey(hash.cache, key)
+        return update_hash!(hash, hash.cache[key], context)
+    end
+
+    if sizeof(x) > (hash.buffered.limit << 2) || (key ∈ hash.seen && !hash.nested)
+        # NOTE: this is "inefficient" in that we can end up recomputing the hash of objects
+        # twice: once, when it is first seen and a second time, when it is seen but not yet
+        # in the cache. However, it is not clear to me, in practice, what would be better
+        # solution that is not overly complicated
+        value = get!(hash.cache, key) do 
+            new_buffered = BufferedHasher(start_hash!(hash.buffered.hasher))
+            new_hash = CachedHashState(new_buffered, hash.cache, hash.seen, true)
+            return compute_hash!(stable_hash_helper(x, new_hash, context, root, method))
+        end
+
+        return update_hash!(hash, value, context)
+    else
+        push!(hash.seen, key)
+    end
+
+    return stable_hash_helper(x, hash, context, root, method)
 end
 
 # TODO: move this somewhere better
@@ -689,6 +803,10 @@ function cleanup_name(str)
     # https://discourse.julialang.org/t/difference-between-base-and-core/37426
     str = replace(str, r"^Core\." => "Base.")
     str = replace(str, ", " => ",") # spacing in type names vary across minor julia versions
+    # in 1.6 and older AbstractVector and AbstractMatrix types get a `where` clause, but in
+    # later versions of julia, they do not
+    str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
+    str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
     return str
 end
 function validate_name(str)
@@ -699,50 +817,90 @@ function validate_name(str)
 end
 
 #####
+##### FnHash 
+#####
+
+FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
+get_value_(x, method::FnHash) = method.fn(x)
+
+struct PrivateConstantHash{T,H}
+    constant::T
+    result_method::H # if non-nothing, apply to value `constant`
+end
+PrivateConstantHash(val) = PrivateConstantHash{typeof(val),Nothing}(val, nothing)
+get_value_(x, method::PrivateConstantHash) = method.constant
+
+function ConstantHash(constant, method=nothing)
+    Base.depwarn("`ConstantHash` has been deprecated, favor `@ConstantHash`.",
+                 :ConstantHash)
+    return PrivateConstantHash(constant, method)
+end
+macro ConstantHash(constant)
+    if constant isa Symbol || constant isa String
+        return PrivateConstantHash(first(reinterpret(UInt64,
+                                                     sha256(codeunits(String(constant))))),
+                                   WriteHash())
+    elseif constant isa Number
+        return PrivateConstantHash(first(reinterpret(UInt64,
+                                                     sha256(reinterpret(UInt8, [constant])))),
+                                   WriteHash())
+    else
+        error("Unexpected expression: `$constant`")
+    end
+end
+
+function stable_hash_helper(x, hash_state, context, root,
+                            method::Union{FnHash,PrivateConstantHash})
+    y = get_value_(x, method)
+    new_method = @something(method.result_method, hash_method(y, context))
+    if typeof(x) == typeof(y) && method == new_method
+        methodstr = nameof(typeof(method))
+        msg = """`$methodstr` is incorrectly called inside 
+              `hash_method(::$(typeof(x)), ::$(typeof(context))). Applying
+              it would lead to infinite recursion. This can usually be
+              fixed by passing a second argument to `$methodstr`."""
+        throw(ArgumentError(replace(msg, r"\s+" => " ")))
+    end
+
+    return stable_hash_helper(y, hash_state, context, root, new_method)
+end
+
+#####
 ##### Tuples 
 #####
 
+function stable_hash_helper(x, hash_state, context, root::Union{Val{1},Val{2}},
+                            methods::Tuple)
+    return hash_foreach(hash_state, root, methods) do method
+        return x, method, context
+    end
+end
+
 # detecting when we can elide struct and element types
-elideable(fn::F, methods) where F = any(x -> x isa FnHash{F} || x isa ElidedTypeHash, methods)
+function elideable(fn::F, methods) where {F}
+    return any(x -> x isa FnHash{F} || x isa ElidedTypeHash, methods)
+end
 has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
 has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
+function methods_permit_elision(methods)
+    if elideable(stable_type_id, methods)
+        return has_iterate_type(methods) || has_struct_type(methods)
+    elseif elideable(stable_eltype_id, methods)
+        return has_iterate_type(methods)
+    end
+    return false
+end
 
+# tuple hashing when we can elide types (root >= 3)
 function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
-    if (elideable(stable_type_id, methods) && (has_iterate_type(methods) || has_struct_type(methods)))
-        return tuple_hash_helper(x, hash_state, ElideType(context), root, methods)
-    elseif (elideable(stable_eltype_id, methods) && has_iterate_type(methods))
-        return tuple_hash_helper(x, hash_state, ElideType(context), root, methods)
+    if methods_permit_elision(methods)
+        return hash_foreach(hash_state, root, methods) do method
+            return x, method, ElideType(context)
+        end
     else
-        return tuple_hash_helper(x, hash_state, context, root, methods)
-    end
-end
-
-function tuple_hash_helper(x, hash_state, context, root, methods::Tuple{<:ElidedTypeHash})
-    return hash_state
-end
-
-function tuple_hash_helper(x, hash_state, context, root, 
-                           methods::Tuple{<:ElidedTypeHash, <:Any})
-    return stable_hash_helper(x, hash_state, context, root, methods[2])
-end
-
-function tuple_hash_helper(x, hash_state, context, root, 
-                           methods::Tuple{<:ElidedTypeHash, <:Any, Vararg{<:Any}})
-    _, rest... = methods
-    return hash_foreach(hash_state, root, rest) do method
-        return x, method, context
-    end
-end
-
-function tuple_hash_helper(x, hash_state, context, root, methods)
-    return hash_foreach(hash_state, root, methods) do method
-        return x, method, context
-    end
-end
-
-function stable_hash_helper(x, hash_state, context, root::Union{Val{1}, Val{2}}, methods::Tuple)
-    return hash_foreach(hash_state, root, methods) do method
-        return x, method, context
+        return hash_foreach(hash_state, root, methods) do method
+            return x, method, context
+        end
     end
 end
 
@@ -878,7 +1036,7 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # arguments.
     default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
     is_implemented(default_method) && return default_method
-    if Base.isprimitivetype(T) 
+    if Base.isprimitivetype(T)
         V < 3 && return WriteHash()
         return (TypeHash(c), WriteHash())
     end
@@ -899,13 +1057,13 @@ end
 function hash_method(::AbstractArray, c::HashVersion)
     return (TypeNameHash(c), FnHash(size), IterateHash())
 end
-function hash_method(::AbstractString, c::HashVersion{V}) where V
+function hash_method(::AbstractString, c::HashVersion{V}) where {V}
     return (FnHash(V > 1 ? stable_type_id : qualified_name, WriteHash()),
             WriteHash())
 end
 hash_method(::Symbol, ::HashVersion{1}) = (PrivateConstantHash(":"), WriteHash())
 hash_method(::Symbol, ::HashVersion) = (@ConstantHash(":"), WriteHash())
-function hash_method(::AbstractDict, c::HashVersion{V}) where V
+function hash_method(::AbstractDict, c::HashVersion{V}) where {V}
     return (V < 2 ? FnHash(qualified_name_) :
             FnHash(stable_typename_id, WriteHash()),
             StructHash(keys => getindex, :ByName))
@@ -970,15 +1128,15 @@ end
 ViewsEq() = ViewsEq(HashVersion{1}())
 parent_context(x::ViewsEq) = x.parent
 function hash_method(::AbstractArray, c::ViewsEq)
-    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractArray") : 
-                                  ConstantHash("Base.AbstractArray"), 
+    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractArray") :
+            ConstantHash("Base.AbstractArray"),
             (root_version(c) > 2 ? (FnHash(stable_eltype_id),) : ())...,
-            FnHash(size), 
+            FnHash(size),
             IterateHash())
 end
 function hash_method(::AbstractString, c::ViewsEq)
-    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractString") : 
-                                  ConstantHash("Base.AbstractString", WriteHash()), 
+    return (root_version(c) > 1 ? @ConstantHash("Base.AbstractString") :
+            ConstantHash("Base.AbstractString", WriteHash()),
             WriteHash())
 end
 

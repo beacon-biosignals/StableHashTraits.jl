@@ -87,9 +87,11 @@ include("setup_tests.jl")
             # dictionary like
             @testset "Associative Data" begin
                 if V > 1
-                    @test test_hash(Dict{Symbol, Any}(:a => 1)) != test_hash(Dict{Symbol, Any}(:a => UInt(1)))
+                    @test test_hash(Dict{Symbol,Any}(:a => 1)) !=
+                          test_hash(Dict{Symbol,Any}(:a => UInt(1)))
                 else
-                    @test test_hash(Dict{Symbol, Any}(:a => 1)) == test_hash(Dict{Symbol, Any}(:a => UInt(1)))
+                    @test test_hash(Dict{Symbol,Any}(:a => 1)) ==
+                          test_hash(Dict{Symbol,Any}(:a => UInt(1)))
                 end
 
                 @test test_hash(Dict(:a => 1, :b => 2)) == test_hash(Dict(:b => 2, :a => 1))
@@ -128,11 +130,11 @@ include("setup_tests.jl")
             @testset "Sequences" begin
                 if V > 2
                     @test test_hash(Any[1, 2]) != test_hash(Any[UInt(1), UInt(2)])
-                    @test test_hash(Any[1, 2], ViewsEq(HashVersion{V}())) != 
+                    @test test_hash(Any[1, 2], ViewsEq(HashVersion{V}())) !=
                           test_hash(Any[UInt(1), UInt(2)], ViewsEq(HashVersion{V}()))
                 else
                     @test test_hash(Any[1, 2]) == test_hash(Any[UInt(1), UInt(2)])
-                    @test test_hash(Any[1, 2], ViewsEq(HashVersion{V}())) == 
+                    @test test_hash(Any[1, 2], ViewsEq(HashVersion{V}())) ==
                           test_hash(Any[UInt(1), UInt(2)], ViewsEq(HashVersion{V}()))
                 end
 
@@ -142,8 +144,10 @@ include("setup_tests.jl")
                 # TODO: setup some tests for eltype elision in ViewsEq (also add benchmark)
                 @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) !=
                       test_hash(vec([1 2; 3 4]), ViewsEq(HashVersion{V}()))
-                @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) == test_hash([1 3; 2 4]', ViewsEq(HashVersion{V}()))
-                @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) != test_hash([1 3; 2 4], ViewsEq(HashVersion{V}()))
+                @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) ==
+                      test_hash([1 3; 2 4]', ViewsEq(HashVersion{V}()))
+                @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) !=
+                      test_hash([1 3; 2 4], ViewsEq(HashVersion{V}()))
                 @test test_hash(reshape(1:10, 2, 5)) != test_hash(reshape(1:10, 5, 2))
                 @test test_hash(view(collect(1:5), 1:2)) != test_hash([1, 2])
                 @test test_hash(view(collect(1:5), 1:2), ViewsEq(HashVersion{V}())) ==
@@ -190,9 +194,11 @@ include("setup_tests.jl")
 
             @testset "Structs" begin
                 if V > 2
-                    @test test_hash(TestAnyField(1, 2)) != test_hash(TestAnyField(1, UInt(2)))
+                    @test test_hash(TestAnyField(1, 2)) !=
+                          test_hash(TestAnyField(1, UInt(2)))
                 else
-                    @test test_hash(TestAnyField(1, 2)) == test_hash(TestAnyField(1, UInt(2)))
+                    @test test_hash(TestAnyField(1, 2)) ==
+                          test_hash(TestAnyField(1, UInt(2)))
                 end
             end
 
@@ -213,8 +219,27 @@ include("setup_tests.jl")
                 @test test_hash(TestType(1, 2)) != test_hash(TestType4(2, 1))
                 @test_throws ArgumentError test_hash(BadHashMethod())
             end
-        end
-    end
+
+            if V > 2 && hashfn == sha256
+                @testset "Hash-invariance to buffer size" begin
+                    data = (rand(Int8, 2), rand(Int8, 2))
+                    wrapped1 = StableHashTraits.HashState(sha256, HashVersion{1}())
+                    alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1,
+                                                                                      sizeof(qualified_name(Int8[]))))
+                    wrapped2 = StableHashTraits.HashState(sha256, HashVersion{1}())
+                    alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2,
+                                                                                      2sizeof(qualified_name(Int8[]))))
+                    # verify that the hashes are the same...
+                    @test stable_hash(data, ctx; alg=alg_small) ==
+                          stable_hash(data, ctx; alg=alg_large)
+                    # ...and that the distinct buffer sizes actually lead to a distinct set of
+                    # buffer sizes while updating the hash state...
+                    @test alg_small.positions != alg_large.positions
+                end
+            end
+        end # @testset
+    end # for
+
     @testset "Deprecations" begin
         @test (@test_deprecated(r"`parent_context`",
                                 stable_hash([1, 2], MyOldContext()))) !=
@@ -230,7 +255,7 @@ include("setup_tests.jl")
         @test_deprecated(ConstantHash("foo"))
         @test_deprecated(UseTable())
     end
-end
+end # @testset
 
 @testset "Aqua" begin
     Aqua.test_all(StableHashTraits)

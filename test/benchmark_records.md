@@ -59,22 +59,23 @@ a function of the type of objects, not their content. These hashes can be optimi
 using `@generated` functions to guarantee that their hashes are computed at compile time.
 
 ```
+
 12×5 DataFrame
- Row │ benchmark   hash       base        trait       ratio    
-     │ SubStrin…   SubStrin…  String      String      Float64  
-─────┼─────────────────────────────────────────────────────────
-   1 │ structs     crc        70.209 μs   1.095 ms    15.5993
-   2 │ tuples      crc        71.792 μs   887.083 μs  12.3563
-   3 │ dataframes  crc        71.542 μs   221.666 μs   3.0984
-   4 │ numbers     crc        35.166 μs   107.834 μs   3.06643
-   5 │ symbols     crc        551.750 μs  673.708 μs   1.22104
-   6 │ strings     crc        551.209 μs  595.833 μs   1.08096
-   7 │ structs     sha256     549.291 μs  3.066 ms     5.5825
-   8 │ tuples      sha256     543.459 μs  2.602 ms     4.78777
-   9 │ symbols     sha256     1.375 ms    2.275 ms     1.65423
-  10 │ strings     sha256     1.388 ms    2.239 ms     1.61243
-  11 │ dataframes  sha256     533.500 μs  716.209 μs   1.34247
-  12 │ numbers     sha256     271.125 μs  355.625 μs   1.31166
+ Row │ benchmark   hash       base        trait       ratio     
+     │ SubStrin…   SubStrin…  String      String      Float64   
+─────┼──────────────────────────────────────────────────────────
+   1 │ structs     crc        71.542 μs   1.116 ms    15.6027
+   2 │ tuples      crc        71.459 μs   918.917 μs  12.8594
+   3 │ dataframes  crc        71.458 μs   257.166 μs   3.59884
+   4 │ numbers     crc        35.916 μs   126.666 μs   3.52673
+   5 │ symbols     crc        635.875 μs  629.000 μs   0.989188
+   6 │ strings     crc        655.500 μs  561.292 μs   0.856281
+   7 │ structs     sha256     543.166 μs  3.045 ms     5.60525
+   8 │ tuples      sha256     543.125 μs  2.594 ms     4.77668
+   9 │ symbols     sha256     1.494 ms    2.264 ms     1.51544
+  10 │ strings     sha256     1.484 ms    2.196 ms     1.47992
+  11 │ dataframes  sha256     543.125 μs  749.125 μs   1.37929
+  12 │ numbers     sha256     270.958 μs  371.833 μs   1.37229
 ```
 
 ## Version 1.2
@@ -92,34 +93,34 @@ we ensure this context benefits from the optimizations introduces in 1.2.
  Row │ version    benchmark   hash       base        trait       ratio     
      │ SubStrin…  SubStrin…   SubStrin…  String      String      Float64   
 ─────┼─────────────────────────────────────────────────────────────────────
-   1 │ 2          structs     crc        71.459 μs   1.103 ms    15.4331
-   2 │ 2          tuples      crc        71.417 μs   875.667 μs  12.2613
-   3 │ 2          vnumbers    crc        35.209 μs   110.166 μs   3.12892
-   4 │ 2          dataframes  crc        71.416 μs   222.500 μs   3.11555
-   5 │ 2          numbers     crc        35.791 μs   110.000 μs   3.0734
-   6 │ 2          strings     crc        542.208 μs  635.500 μs   1.17206
-   7 │ 2          symbols     crc        564.250 μs  650.750 μs   1.1533
-   8 │ 2          structs     sha256     543.083 μs  3.357 ms     6.18084
-   9 │ 2          tuples      sha256     543.417 μs  2.751 ms     5.06164
-  10 │ 2          strings     sha256     1.380 ms    2.296 ms     1.66424
-  11 │ 2          symbols     sha256     1.399 ms    2.317 ms     1.65705
-  12 │ 2          vnumbers    sha256     266.417 μs  373.166 μs   1.40068
-  13 │ 2          dataframes  sha256     533.416 μs  706.167 μs   1.32386
-  14 │ 2          numbers     sha256     271.208 μs  355.833 μs   1.31203
-  15 │ 3          structs     crc        71.541 μs   1.185 ms    16.5581
-  16 │ 3          tuples      crc        71.375 μs   604.000 μs   8.46235
-  17 │ 3          dataframes  crc        70.625 μs   222.917 μs   3.15635
-  18 │ 3          vnumbers    crc        35.167 μs   110.125 μs   3.13149
-  19 │ 3          numbers     crc        35.167 μs   108.250 μs   3.07817
-  20 │ 3          symbols     crc        542.250 μs  659.584 μs   1.21638
-  21 │ 3          strings     crc        574.209 μs  157.333 μs   0.274
-  22 │ 3          structs     sha256     543.416 μs  2.433 ms     4.478
-  23 │ 3          tuples      sha256     543.417 μs  1.646 ms     3.02891
-  24 │ 3          symbols     sha256     1.380 ms    2.318 ms     1.67946
-  25 │ 3          dataframes  sha256     543.459 μs  750.708 μs   1.38135
-  26 │ 3          numbers     sha256     271.250 μs  372.958 μs   1.37496
-  27 │ 3          vnumbers    sha256     271.250 μs  357.625 μs   1.31843
-  28 │ 3          strings     sha256     1.382 ms    1.078 ms     0.780118
+   1 │ 2          structs     crc        75.833 μs   1.199 ms    15.8133
+   2 │ 2          tuples      crc        75.667 μs   973.292 μs  12.8628
+   3 │ 2          dataframes  crc        81.459 μs   249.625 μs   3.06443
+   4 │ 2          vnumbers    crc        38.084 μs   115.000 μs   3.01964
+   5 │ 2          numbers     crc        41.166 μs   123.834 μs   3.00816
+   6 │ 2          symbols     crc        636.250 μs  716.250 μs   1.12574
+   7 │ 2          strings     crc        644.416 μs  640.500 μs   0.993923
+   8 │ 2          structs     sha256     571.542 μs  3.349 ms     5.85995
+   9 │ 2          tuples      sha256     571.541 μs  2.740 ms     4.79333
+  10 │ 2          symbols     sha256     1.519 ms    2.433 ms     1.60152
+  11 │ 2          strings     sha256     1.531 ms    2.357 ms     1.53977
+  12 │ 2          dataframes  sha256     570.542 μs  751.708 μs   1.31753
+  13 │ 2          numbers     sha256     285.291 μs  375.500 μs   1.3162
+  14 │ 2          vnumbers    sha256     283.875 μs  373.541 μs   1.31586
+  15 │ 3          structs     crc        76.666 μs   1.086 ms    14.1615
+  16 │ 3          tuples      crc        75.541 μs   655.667 μs   8.67962
+  17 │ 3          vnumbers    crc        38.125 μs   116.792 μs   3.0634
+  18 │ 3          dataframes  crc        75.709 μs   231.416 μs   3.05665
+  19 │ 3          numbers     crc        38.292 μs   114.916 μs   3.00104
+  20 │ 3          symbols     crc        639.583 μs  775.959 μs   1.21323
+  21 │ 3          strings     crc        637.709 μs  166.750 μs   0.261483
+  22 │ 3          structs     sha256     571.708 μs  2.406 ms     4.20793
+  23 │ 3          tuples      sha256     571.583 μs  1.993 ms     3.48673
+  24 │ 3          symbols     sha256     1.517 ms    2.434 ms     1.60471
+  25 │ 3          vnumbers    sha256     285.166 μs  376.292 μs   1.31955
+  26 │ 3          dataframes  sha256     570.625 μs  750.625 μs   1.31544
+  27 │ 3          numbers     sha256     285.250 μs  375.167 μs   1.31522
+  28 │ 3          strings     sha256     1.517 ms    1.135 ms     0.748146
 ```
 ## Version 1.3
 
