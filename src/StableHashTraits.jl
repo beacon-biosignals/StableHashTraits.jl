@@ -228,7 +228,7 @@ function update_hash!(hasher::RecursiveHashState, bytes::AbstractVector{UInt8})
     return RecursiveHashState(hasher.fn, hasher.fn(bytes, hasher.val), hasher.init)
 end
 function end_nested_hash!(fn::RecursiveHashState, nested::RecursiveHashState)
-    return update_hash!(fn, reinterpret(UInt8, [nested.val]))
+    return update_hash!(fn, reinterpret(UInt8, [nested.val;]))
 end
 compute_hash!(x::RecursiveHashState) = x.val
 HashState(x::RecursiveHashState) = x
@@ -242,20 +242,18 @@ mutable struct BufferedHashState{T} <: HashState
     content_hash_state::T
     delimiter_hash_state::T
     total_bytes_hashed::Int
-    bytes::Vector{UInt8} # tye bytes that back `io`
+    bytes::Vector{UInt8} # the bytes that back `io`
     delimiters::Vector{Int} # delimits the start of nested structures (for `start_nested_hash!`), positive is start, negative is stop
-    stops::Vector{Int} # delimits the end of nested structures (for `end_nested_hash!`)
     limit::Int # the preferred limit on the size of `io`'s buffer
     io::IOBuffer
 end
 const HASH_BUFFER_SIZE = 2^14
 function BufferedHashState(state, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
-    starts = sizehint!(Vector{Int}(), size)
-    stops = sizehint!(Vector{Int}(), size)
+    delimiters = sizehint!(Vector{Int}(), 2size)
     io = IOBuffer(bytes; write=true, read=false)
-    return BufferedHashState(state, similar_hash_state(state), 0, bytes, starts, stops,
-                             size, io)
+    return BufferedHashState(state, similar_hash_state(state), 0, bytes, delimiters, size,
+                             io)
 end
 
 # flush bytes that are stored internally to the underlying hasher
@@ -634,6 +632,10 @@ function cleanup_name(str)
     # https://discourse.julialang.org/t/difference-between-base-and-core/37426
     str = replace(str, r"^Core\." => "Base.")
     str = replace(str, ", " => ",") # spacing in type names vary across minor julia versions
+    # in 1.6 and older AbstractVector and AbstractMatrix types get a `where` clause, but in
+    # later versions of julia, they do not
+    str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
+    str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
     return str
 end
 function validate_name(str)
