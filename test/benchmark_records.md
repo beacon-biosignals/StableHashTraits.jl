@@ -54,9 +54,9 @@ remains quite slow.
 
 With the addition of `dfl/compiled-type-labels` we compute more quantities at compile time:
 
-There are a number of hash quantities that are, strictly speaking,
-a function of the type of objects, not their content. These hashes can be optimized
-using `@generated` functions to guarantee that their hashes are computed at compile time.
+There are a number of hash quantities that are, strictly speaking, a function of the type of
+objects, not their content. These hashes can be optimized using `@generated` functions and
+macros to guarantee that their hashes are computed at compile time.
 
 ```
 12×5 DataFrame
