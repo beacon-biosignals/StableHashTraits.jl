@@ -55,7 +55,7 @@ third argument to [`StableHashTraits.write`](@ref)
 stable_hash(x; alg=sha256, version=1) = return stable_hash(x, HashVersion{version}(); alg)
 function stable_hash(x, context; alg=sha256)
     hash_state = HashState(alg, context)
-    hash_state = hash_state_preprocess!(x, hash_state, context, hash_method(context))
+    hash_state = hash_state_preprocess!(x, hash_state, context, hash_method(x, context))
     return compute_hash!(stable_hash_helper(x, hash_state, context,
                                             Val(root_version(context)),
                                             hash_method(x, context)))
@@ -129,6 +129,11 @@ end
 struct FnHash{F,H}
     fn::F
     result_method::H # if non-nothing, apply to result of `fn`
+end
+
+struct PrivateConstantHash{T,H}
+    constant::T
+    result_method::H # if non-nothing, apply to value `constant`
 end
 
 #####
@@ -334,37 +339,35 @@ HashState(x::BufferedHashState, ctx) = x
 function similar_hash_state(x::BufferedHashState)
     return BufferedHashState(similar_hash_state(x.content_hash_state), x.limit)
 end
-hash_type(x::BufferedHashState) = hash_type(x.hasher)
+hash_type(x::BufferedHashState) = hash_type(x.content_hash_state)
 
 #####
 ##### CachedHashState: cache hashed values where appropriate 
 #####
 
-const CacheKey = Tuple{UInt,UInt,UInt}
 mutable struct CachedHashState{T,H}
     buffered::BufferedHashState{T}
-    cache::Dict{CacheKey,H}
-    repeated::Dict{CacheKey,Bool}
+    cache::Dict{Tuple,H}
+    repeated::Dict{Tuple,Bool}
 end
-function CachedHashState(buffered)
-    return CachedHashState(buffered, Dict{CacheKey,hash_type(buffered)}(),
-                        Set{CacheKey}(), false)
+function CachedHashState(buffered::BufferedHashState{T}) where T
+    H = hash_type(buffered)
+    return CachedHashState{T,H}(buffered, Dict{Tuple,H}(), Dict{Tuple, Bool}())
 end
 
 cached_stable_hash(x, hash, context, root, method) = stable_hash_helper(x, hash, context, root, method)
-const CACHE_MIN_SIZE = 2^10
 
 # ensure this occurs at compile time
+# TODO: we probably don't need to do this with a generated function
 @generated function dont_cache_me(T)
     T <: Tuple && return :(true)
     T <: DataType && return :(true)
     isprimitivetype(T) && return :(true)
-    isbitstype(T) && sizeof(T) < CACHE_MIN_SIZE && return :(true)
     return :(false)
 end
 
-function start_hash!(x::CachedHashState) 
-    x.buffered = start_hash!(x.buffered)
+function start_nested_hash!(x::CachedHashState) 
+    x.buffered = start_nested_hash!(x.buffered)
     return x
 end
 
@@ -373,8 +376,8 @@ function update_hash!(x::CachedHashState, obj, context)
     return x
 end
 
-function stop_hash!(x::CachedHashState, nested::CachedHashState)
-    x.buffered = stop_hash!(x.buffered, nested.buffered)
+function end_nested_hash!(x::CachedHashState, nested::CachedHashState)
+    x.buffered = end_nested_hash!(x.buffered, nested.buffered)
     return x
 end
 
@@ -386,7 +389,7 @@ hash_type(x::CachedHashState) = hash_type(x.buffered)
 
 function track_object!(body, x, hash::CachedHashState, context, method)
     key = (objectid(x), method, context)
-    if get(hash, repeated, false)
+    if !get(hash.repeated, key, false)
         hash.repeated[key] = haskey(hash.repeated, key)
         return body(hash)
     else
@@ -394,10 +397,17 @@ function track_object!(body, x, hash::CachedHashState, context, method)
     end
 end
 
+function hash_state_preprocess!(xs, hash::CachedHashState, context, method::Tuple)
+    for m in method
+        hash = hash_state_preprocess!(xs, hash, context, m)
+    end
+    return hash
+end
+
 function hash_state_preprocess!(xs, hash::CachedHashState, context, method::IterateHash)
     return track_object!(xs, hash, context, method) do hash
         for x in xs
-            hash = hash_state_preprocess!(xs, hash, context, hash_method(x, context))
+            hash = hash_state_preprocess!(x, hash, context, hash_method(x, context))
         end
         return hash
     end
@@ -415,17 +425,15 @@ function hash_state_preprocess!(x, hash::CachedHashState, context, method::Struc
 end
 
 function hash_state_preprocess!(x, hash::CachedHashState, context, method::Union{PrivateConstantHash, FnHash})
-    return track_object!(x, hash, context, method) do hash
-        val = get_value_(x, method)
-        new_method = find_hash_method(x, val, method)
-        return hash_state_preprocess!(val, hash, context, new_method)
-    end
+    val = get_value_(x, method)
+    new_method = find_hash_method(x, val, method, context)
+    return hash_state_preprocess!(val, hash, context, new_method)
 end
 
 function cached_stable_hash(x, hash::CachedHashState, context, root, method::Union{StructHash, IterateHash})
     dont_cache_me(x) && return stable_hash_helper(x, hash, context, root, method)
 
-    key = (objectid(x), objectid(method), objectid(context))
+    key = (objectid(x), method, ignore_elision(context))
 
     if haskey(hash.cache, key)
         return update_hash!(hash, hash.cache[key], context)
@@ -433,8 +441,8 @@ function cached_stable_hash(x, hash::CachedHashState, context, root, method::Uni
 
     if get(hash.repeated, key, false)
         value = get!(hash.cache, key) do 
-            new_buffered = BufferedHashState(start_hash!(hash.buffered.hasher))
-            new_hash = CachedHashState(new_buffered, hash.cache, hash.seen, true)
+            new_buffered = similar_hash_state(hash.buffered)
+            new_hash = CachedHashState(new_buffered, hash.cache, hash.repeated)
             return compute_hash!(stable_hash_helper(x, new_hash, context, root, method))
         end
 
@@ -565,12 +573,13 @@ end
 
 # if one of the hash methods is `ElidedTypeHash` while iterating over a tuple,
 # we simply skip `ElidedTypeHash`, as if it weren't there at all
-hash_foreach(fn, hash_state, root::Val{3}, xs::Tuple{<:ElidedTypeHash}) = hash_state
-function hash_foreach(fn, hash_state, root::Val{3}, xs::Tuple{<:ElidedTypeHash,<:Any})
+const ElidingRoot = Union{Val{3}, Val{4}}
+hash_foreach(fn, hash_state, root::ElidingRoot, xs::Tuple{<:ElidedTypeHash}) = hash_state
+function hash_foreach(fn, hash_state, root::ElidingRoot, xs::Tuple{<:ElidedTypeHash,<:Any})
     f_x, method, context = fn(xs[2])
     return stable_hash_helper(f_x, hash_state, context, root, method)
 end
-function hash_foreach(fn, hash_state, root::Val{3},
+function hash_foreach(fn, hash_state, root::ElidingRoot,
                       xs::Tuple{<:ElidedTypeHash,<:Any,Vararg{<:Any}})
     _, rest... = xs
     return hash_foreach(fn, hash_state, root, rest)
@@ -780,10 +789,6 @@ end
 FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
 get_value_(x, method::FnHash) = method.fn(x)
 
-struct PrivateConstantHash{T,H}
-    constant::T
-    result_method::H # if non-nothing, apply to value `constant`
-end
 PrivateConstantHash(val) = PrivateConstantHash{typeof(val),Nothing}(val, nothing)
 get_value_(x, method::PrivateConstantHash) = method.constant
 
@@ -806,7 +811,7 @@ macro ConstantHash(constant)
     end
 end
 
-find_hash_method(x, y, method)
+function find_hash_method(x, y, method, context)
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method
         methodstr = nameof(typeof(method))
@@ -822,7 +827,7 @@ end
 function stable_hash_helper(x, hash_state, context, root,
                             method::Union{FnHash,PrivateConstantHash})
     y = get_value_(x, method)
-    new_method = find_hash_method(x, y, method)
+    new_method = find_hash_method(x, y, method, context)
     return stable_hash_helper(y, hash_state, context, root, new_method)
 end
 

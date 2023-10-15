@@ -138,6 +138,8 @@ include("setup_tests.jl")
                           test_hash(Any[UInt(1), UInt(2)], ViewsEq(HashVersion{V}()))
                 end
 
+                x = [1,2,3]
+                @test test_hash((x, x)) != test_hash((x, x, x))
                 @test test_hash([1 2; 3 4]) != test_hash(vec([1 2; 3 4]))
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4]')
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4])
