@@ -192,7 +192,7 @@ changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 You can customize how hashes are computed within a given scope using a context object. This
 is also a very useful way to avoid type piracy. The context can be any object you'd like and
 is passed as the second argument to `stable_hash`. By default it is equal to
-`HashVersion{1}()` and this determines how objects are hashed when a more method specific is not defined.
+`HashVersion{1}()` and this determines how objects are hashed when a more specific method is not defined.
 
 This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
 is the method called for `WriteHash`, and falls back to `Base.write`). Because of the way
@@ -205,7 +205,7 @@ fallback, and return it in an implementation of the method
 `StableHashTraits.parent_context`. 
 
 As an example, here is how we could write a context that treats all named tuples with the
-same keys as equivalent. 
+same keys and values as equivalent. 
 
 ```julia
 struct NamedTuplesEq{T}

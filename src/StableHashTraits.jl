@@ -734,8 +734,7 @@ hash_method(::Symbol, ::HashVersion{1}) = (PrivateConstantHash(":"), WriteHash()
 hash_method(::Symbol, ::HashVersion) = (@ConstantHash(":"), WriteHash())
 function hash_method(::AbstractDict, c::HashVersion)
     return (root_version(c) < 2 ? FnHash(qualified_name_) :
-            FnHash(stable_typename_id, WriteHash()),
-            StructHash(keys => getindex, :ByName))
+            FnHash(stable_typename_id, WriteHash()), StructHash(keys => getindex, :ByName))
 end
 hash_method(::Tuple, c::HashVersion) = (TypeNameHash(c), IterateHash())
 hash_method(::Pair, c::HashVersion) = (TypeNameHash(c), IterateHash())
