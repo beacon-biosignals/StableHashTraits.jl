@@ -27,7 +27,8 @@ struct HashVersion{V}
 end
 
 """
-    stable_hash(x, context=HashVersion{version}(); alg=sha256, version=1)
+    stable_hash(x, context=HashVersion{1}(); alg=sha256)
+    stable_hash(x; alg=sha256, version=1)
 
 Create a stable hash of the given objects. As long as the context remains the same, this is
 intended to remain unchanged across julia versions. How each object is hashed is determined
@@ -356,7 +357,7 @@ function hash_foreach_old(fn, hash_state, context, xs)
 end
 
 function hash_foreach_new(fn, hash_state, context, xs)
-    inner_state = start_nested_hash!(hash_state)
+    inner_state = start_nested_hash!(hash_stae)
     for x in xs
         f_x, method = fn(x)
         inner_state = stable_hash_helper(f_x, inner_state, context, method)
@@ -373,9 +374,7 @@ struct StructHash{P,S}
     fnpair::P
 end
 fieldnames_(::T) where {T} = fieldnames(T)
-function StructHash(sort::Symbol)
-    return StructHash(fieldnames_ => getfield, sort)
-end
+StructHash(sort::Symbol) = StructHash(fieldnames_ => getfield, sort)
 function StructHash(fnpair::Pair=fieldnames_ => getfield, by::Symbol=:ByOrder)
     by ∈ (:ByName, :ByOrder) || error("Expected a valid sort order (:ByName or :ByOrder).")
     return StructHash{typeof(fnpair),by}(fnpair)
@@ -418,6 +417,14 @@ qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_type_(fn::Function) = qname_(fn, string)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
 qualified_type_(x::T) where {T} = qname_(T <: DataType ? x : T, string)
+qualified_(::Type{T}, ::Val{:name}) where {T} = qualified_name_(T)
+qualified_(::Type{T}, ::Val{:type}) where {T} = qualified_type_(T)
+# we need `Type{Val}` methods below because the generated functions that call `qualified_`
+# only have access to the type of a value
+qualified_(::Type{T}, ::Type{Val{:name}}) where {T} = qualified_name_(T)
+qualified_(::Type{T}, ::Type{Val{:type}}) where {T} = qualified_type_(T)
+
+# deprecate external use of `qualified_name/type`
 function qualified_name(x)
     Base.depwarn("`qualified_name` is deprecated, favor `stable_typename_id` in all cases " *
                  "where backwards compatible hash values are not required.",
@@ -431,22 +438,21 @@ function qualified_type(x)
     return qualified_type_(x)
 end
 
-function hash_type_str(str, T)
-    bytes = sha256(codeunits(str))
+bytes_of_val(f) = reinterpret(UInt8, [f;])
+bytes_of_val(f::Symbol) = codeunits(String(f))
+bytes_of_val(f::String) = codeunits(f)
+function hash64(x)
+    bytes = sha256(bytes_of_val(x))
+    # take the first 64 bytes of `bytes`
     return first(reinterpret(UInt64, bytes))
 end
-
-function hash_field_str(T)
+function hash64(values::Tuple)
     sha = SHA.SHA2_256_CTX()
-    for f in sort_(fieldnames(T))
-        if f isa Symbol
-            SHA.update!(sha, codeunits(String(f)))
-        else # e.g. in some weird cases the field names can be numbers ???
-            SHA.update!(sha, reinterpret(UInt8, [f]))
-        end
+    for val in values
+        SHA.update!(sha, bytes_of_val(val))
     end
     bytes = SHA.digest!(sha)
-
+    # take the first 64 bytes of our hash
     return first(reinterpret(UInt64, bytes))
 end
 
@@ -456,18 +462,30 @@ end
     stable_typename_id(x)
 
 Returns a 64 bit hash that is the same for a given type so long as the name and the module
-of the type doesn't change. E.g. `stable_typename_id(Vector) == stable_typename_id(Matrix)`
+of the type doesn't change. 
 
-NOTE: if the module of a type is `Core` it is renamed to `Base` before hashing because the
-location of some types changes between `Core` to `Base` across julia versions
+## Example
+
+```jldoctest
+julia> stable_typename_id([1, 2, 3])
+0x56c6b9ca080a0aa4
+
+julia> stable_typename_id(["a", "b"])
+0x56c6b9ca080a0aa4
+```
+
+!!! note
+    If the module of a type is `Core` it is renamed to `Base` before hashing because the
+    location of some types changes between `Core` to `Base` across julia versions.
+    Likewise, the type names of AbstractArray types are made uniform
+    as their printing changes from Julia 1.6 -> 1.7.
 """
 stable_typename_id(x) = stable_id_helper(x, Val(:name))
-stable_id_helper(::Type{T}, ::Val{:name}) where {T} = hash_type_str(qualified_name_(T), T)
-stable_id_helper(::Type{T}, ::Val{:type}) where {T} = hash_type_str(qualified_type_(T), T)
-@generated function stable_id_helper(x, name)
+stable_id_helper(::Type{T}, of::Val) where {T} = hash64(qualified_(T, of))
+@generated function stable_id_helper(x, of)
     T = x <: Function ? x.instance : x
-    str = name <: Val{:name} ? qualified_name_(T) : qualified_type_(T)
-    number = hash_type_str(str, T)
+    str = qualified_(T, of)
+    number = hash64(str)
     :(return $number)
 end
 
@@ -477,8 +495,21 @@ end
 Returns a 64 bit hash that is the same for a given type so long as the module, and string
 representation of a type is the same (invariant to comma spacing).
 
-NOTE: if the module of a type is `Core` it is renamed to `Base` before hashing because the
-location of some types changes between `Core` to `Base` across julia versions
+## Example
+
+```jldoctest
+julia> stable_type_id([1, 2, 3])
+0xfd5878e59e259648
+
+julia> stable_type_id(["a", "b"])
+0xe191f67c4c8e3370
+```
+
+!!! note
+    If the module of a type is `Core` it is renamed to `Base` before hashing because the
+    location of some types changes between `Core` to `Base` across julia versions.
+    Likewise, the type names of AbstractArray types are made uniform
+    as their printing changes from Julia 1.6 -> 1.7. 
 """
 stable_type_id(x) = stable_id_helper(x, Val(:type))
 
@@ -488,10 +519,10 @@ stable_type_id(x) = stable_id_helper(x, Val(:type))
 Returns a 64 bit hash that is the same for a given type so long as the set of field names
 remains unchanged.
 """
-stable_typefields_id(::Type{T}) where {T} = hash_field_str(T)
+stable_typefields_id(::Type{T}) where {T} = hash64(sort_(fieldnames(T)))
 @generated function stable_typefields_id(x)
-    number = hash_field_str(x)
-    :(return $number)
+    number = hash64(sort_(fieldnames(x)))
+    return :(return $number)
 end
 
 function cleanup_name(str)
@@ -536,15 +567,10 @@ function ConstantHash(constant, method=nothing)
                  :ConstantHash)
     return PrivateConstantHash(constant, method)
 end
+
 macro ConstantHash(constant)
-    if constant isa Symbol || constant isa String
-        return PrivateConstantHash(first(reinterpret(UInt64,
-                                                     sha256(codeunits(String(constant))))),
-                                   WriteHash())
-    elseif constant isa Number
-        return PrivateConstantHash(first(reinterpret(UInt64,
-                                                     sha256(reinterpret(UInt8, [constant])))),
-                                   WriteHash())
+    if constant isa Symbol || constant isa String || constant isa Number
+        return :(PrivateConstantHash($(hash64(constant)), WriteHash()))
     else
         error("Unexpected expression: `$constant`")
     end
@@ -697,6 +723,9 @@ root_version(x) = root_version(parent_context(x))
 parent_context(::HashVersion) = nothing
 root_version(::HashVersion{V}) where {V} = V
 
+# NOTE: below, using root_version lets us leave `HashVersion{1}` return values unchanged, only
+# using the newer (more efficeint) hash_method return-values for `HashVersion{2}`.
+
 function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # we need to find `default_method` here because `hash_method(x::MyType, ::Any)` is less
     # specific than the current method, but if we have something defined for a specific type
@@ -726,14 +755,14 @@ end
 function hash_method(::AbstractArray, c::HashVersion)
     return (TypeNameHash(c), FnHash(size), IterateHash())
 end
-function hash_method(::AbstractString, c::HashVersion)
-    return (FnHash(root_version(c) > 1 ? stable_type_id : qualified_name, WriteHash()),
+function hash_method(::AbstractString, c::HashVersion{V}) where V
+    return (FnHash(V > 1 ? stable_type_id : qualified_name, WriteHash()),
             WriteHash())
 end
 hash_method(::Symbol, ::HashVersion{1}) = (PrivateConstantHash(":"), WriteHash())
 hash_method(::Symbol, ::HashVersion) = (@ConstantHash(":"), WriteHash())
-function hash_method(::AbstractDict, c::HashVersion)
-    return (root_version(c) < 2 ? FnHash(qualified_name_) :
+function hash_method(::AbstractDict, c::HashVersion{V}) where V
+    return (V < 2 ? FnHash(qualified_name_) :
             FnHash(stable_typename_id, WriteHash()), StructHash(keys => getindex, :ByName))
 end
 hash_method(::Tuple, c::HashVersion) = (TypeNameHash(c), IterateHash())
@@ -772,6 +801,9 @@ TablesEq() = TablesEq(HashVersion{1}())
 parent_context(x::TablesEq) = x.parent
 function hash_method(x::T, m::TablesEq) where {T}
     if Tables.istable(T)
+        # NOTE: using root_version let's us ensure that `TableEq` is unchanged when using
+        # `HashVersion{1}` as a parent or ancestor, but make use of the updated, more
+        # optimized API for `HashVersion{2}`
         return (root_version(m) > 1 ? @ConstantHash("Tables.istable") :
                 PrivateConstantHash("Tables.istable"),
                 FnHash(Tables.columns, StructHash(Tables.columnnames => Tables.getcolumn)))
@@ -795,6 +827,9 @@ struct ViewsEq{T}
 end
 ViewsEq() = ViewsEq(HashVersion{1}())
 parent_context(x::ViewsEq) = x.parent
+# NOTE: using root_version let's us ensure that `ViewsEq` is unchanged when using
+# `HashVersion{1}` as a parent or ancestor, but make use of the updated, more optimized API
+# for `HashVersion{2}`
 function hash_method(::AbstractArray, c::ViewsEq)
     return (root_version(c) > 1 ? @ConstantHash("Base.AbstractArray") :
             PrivateConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
