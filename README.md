@@ -213,7 +213,7 @@ struct NamedTuplesEq{T}
 end
 StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
-    return FnHash(stable_typename_id), UseStruct(:ByName)
+    return FnHash(stable_typename_id), StructHash(:ByName)
 end
 context = NamedTuplesEq(HashVersion{2}())
 stable_hash((; a=1:2, b=1:2), context) == stable_hash((; b=1:2, a=1:2), context) # true
