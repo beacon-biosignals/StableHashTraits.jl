@@ -214,6 +214,8 @@ include("setup_tests.jl")
                                 stable_hash("12", MyOldContext()))) ==
               stable_hash("12", HashVersion{1}())
         @test_deprecated(UseProperties(:ByName))
+        @test_deprecated(qualified_name("bob"))
+        @test_deprecated(qualified_type("bob"))
         @test_deprecated(UseQualifiedName())
         @test_deprecated(UseSize(UseIterate()))
         @test_deprecated(ConstantHash("foo"))
