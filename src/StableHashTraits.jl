@@ -357,7 +357,7 @@ function hash_foreach_old(fn, hash_state, context, xs)
 end
 
 function hash_foreach_new(fn, hash_state, context, xs)
-    inner_state = start_nested_hash!(hash_stae)
+    inner_state = start_nested_hash!(hash_state)
     for x in xs
         f_x, method = fn(x)
         inner_state = stable_hash_helper(f_x, inner_state, context, method)
@@ -417,12 +417,12 @@ qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_type_(fn::Function) = qname_(fn, string)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
 qualified_type_(x::T) where {T} = qname_(T <: DataType ? x : T, string)
-qualified_(::Type{T}, ::Val{:name}) where {T} = qualified_name_(T)
-qualified_(::Type{T}, ::Val{:type}) where {T} = qualified_type_(T)
+qualified_(T, ::Val{:name}) = qualified_name_(T)
+qualified_(T, ::Val{:type}) = qualified_type_(T)
 # we need `Type{Val}` methods below because the generated functions that call `qualified_`
 # only have access to the type of a value
-qualified_(::Type{T}, ::Type{Val{:name}}) where {T} = qualified_name_(T)
-qualified_(::Type{T}, ::Type{Val{:type}}) where {T} = qualified_type_(T)
+qualified_(T, ::Type{Val{:name}}) = qualified_name_(T)
+qualified_(T, ::Type{Val{:type}}) = qualified_type_(T)
 
 # deprecate external use of `qualified_name/type`
 function qualified_name(x)
