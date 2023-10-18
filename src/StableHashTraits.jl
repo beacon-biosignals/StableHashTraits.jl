@@ -755,13 +755,13 @@ end
 function hash_method(::AbstractArray, c::HashVersion)
     return (TypeNameHash(c), FnHash(size), IterateHash())
 end
-function hash_method(::AbstractString, c::HashVersion{V}) where V
+function hash_method(::AbstractString, c::HashVersion{V}) where {V}
     return (FnHash(V > 1 ? stable_type_id : qualified_name, WriteHash()),
             WriteHash())
 end
 hash_method(::Symbol, ::HashVersion{1}) = (PrivateConstantHash(":"), WriteHash())
 hash_method(::Symbol, ::HashVersion) = (@ConstantHash(":"), WriteHash())
-function hash_method(::AbstractDict, c::HashVersion{V}) where V
+function hash_method(::AbstractDict, c::HashVersion{V}) where {V}
     return (V < 2 ? FnHash(qualified_name_) :
             FnHash(stable_typename_id, WriteHash()), StructHash(keys => getindex, :ByName))
 end
