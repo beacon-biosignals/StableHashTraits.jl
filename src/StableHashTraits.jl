@@ -260,8 +260,10 @@ function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
     if position(x.io) ≥ limit
         x.content_hash_state = update_hash!(x.content_hash_state,
                                             @view x.bytes[1:position(x.io)])
+        # we copy reinterpreted because, e.g. `crc32c` will not accept a reinterpreted array
+        # (and copying here does not noticeably worsen the benchmarks)
         x.delimiter_hash_state = update_hash!(x.delimiter_hash_state,
-                                              reinterpret(UInt8, x.delimiters))
+                                              copy(reinterpret(UInt8, x.delimiters)))
 
         empty!(x.delimiters)
         x.total_bytes_hashed += position(x.io) # tack total number of bytes that have been hashed
@@ -290,7 +292,9 @@ function compute_hash!(x::BufferedHashState)
     flush_bytes!(x, 0)
     # recursively hash the delimiter hash state into the content hash
     delimiter_hash = compute_hash!(x.delimiter_hash_state)
-    state = update_hash!(x.content_hash_state, reinterpret(UInt8, [delimiter_hash;]))
+    # we copy reinterpreted because, e.g. `crc32c` will not accept a reinterpreted array
+    # (and copying here does not noticeably worsen the benchmarks)
+    state = update_hash!(x.content_hash_state, copy(reinterpret(UInt8, [delimiter_hash;])))
 
     return compute_hash!(state)
 end
