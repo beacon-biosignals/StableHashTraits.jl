@@ -572,7 +572,7 @@ macro ConstantHash(constant)
     if constant isa Symbol || constant isa String || constant isa Number
         return :(PrivateConstantHash($(hash64(constant)), WriteHash()))
     else
-        error("Unexpected expression: `$constant`")
+        return :(throw(ArgumentError(string("Unexpected expression: ", $(string(constant))))))
     end
 end
 
@@ -671,12 +671,12 @@ define this method.
 
 This is normally all that you need to know to implement a new context. However, if your
 context is expected to be the root context—one that does not fallback to any parent (akin to
-`HashVersion`)—then there may be a bit more work invovled. In this case, `parent_context`
+`HashVersion`)—then there may be a bit more work involved. In this case, `parent_context`
 should return `nothing` so that the single argument fallback for `hash_method` can be
 called. You will also need to define [`StableHashTraits.root_version`](@ref).
 
-Furthermore, if you implement a root context and want to implement `hash_method` over `Any`
-you will instead have to manually manage the fallback mechanism as follows:
+Furthermore, if you implement a root context you will probably have to manually manage the
+fallback to single-argument `hash_method` methods to avoid method ambiguities.
 
 ```julia
 # generic fallback method
@@ -688,12 +688,12 @@ function hash_method(x::T, ::MyRootContext) where T
 end
 ```
 
-This works because `hash_method(::Any)` returns a sentinal value
+This works because `hash_method(::Any)` returns a sentinel value
 (`StableHashTraits.NotImplemented()`) that indicates that there is no more specific method
 available. This pattern is necessary to avoid the method ambiguities that would arise
 between `hash_method(x::MyType, ::Any)` and `hash_method(x::Any, ::MyRootContext)`.
-Generally if a type implements hash_method for itself, but absent a context, we want this
-`hash_method` to be used.
+Generally if a type implements hash_method for itself, but absent a context, we want the
+`hash_method` that does not accept a context argument to be used.
 """
 function parent_context(x::Any)
     Base.depwarn("You should explicitly define a `parent_context` method for context " *
@@ -710,7 +710,7 @@ fallback method value returns 1.
 In almost all cases, a root hash context should return 2. The optimizations used in
 HashVersion{2} include a number of changes to the hash-trait implementations that do not
 alter the documented behavior but do change the actual hash value returned because of how
-and when elements get hashed. 
+and when elements get hashed.
 
 """
 root_version(x::Nothing) = 1
@@ -818,8 +818,8 @@ end
 """
     ViewsEq(parent_context)
 
-Create a hash context where only the contents of an array or string determine its hash: that is,
-the type of the array or string (e.g. `SubString` vs. `String`) does not impact the hash
+Create a hash context where only the contents of an array or string determine its hash: that
+is, the type of the array or string (e.g. `SubString` vs. `String`) does not impact the hash
 value.
 """
 struct ViewsEq{T}
