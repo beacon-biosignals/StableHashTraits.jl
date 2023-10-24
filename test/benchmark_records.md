@@ -59,7 +59,6 @@ objects, not their content. These hashes can be optimized using `@generated` fun
 macros to guarantee that their hashes are computed at compile time.
 
 ```
-
 12×5 DataFrame
  Row │ benchmark   hash       base        trait       ratio     
      │ SubStrin…   SubStrin…  String      String      Float64   

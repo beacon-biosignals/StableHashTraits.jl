@@ -45,6 +45,9 @@ that the number in `HashVersion` does not necessarily match the package version 
 Instead of passing a context, you can instead pass a `version` keyword, that will
 set the context to `HashVersion{version}()`.
 
+Instead of passing a context, you can instead pass a `version` keyword, that will
+set the context to `HashVersion{version}()`.
+
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
 [old_hash])`. 
@@ -1013,15 +1016,13 @@ parent_context(x::ViewsEq) = x.parent
 # for `HashVersion{2}`
 function hash_method(::AbstractArray, c::ViewsEq)
     return (root_version(c) > 1 ? @ConstantHash("Base.AbstractArray") :
-            ConstantHash("Base.AbstractArray"),
+            PrivateConstantHash("Base.AbstractArray"), 
             (root_version(c) > 2 ? (FnHash(stable_eltype_id),) : ())...,
-            FnHash(size),
-            IterateHash())
+            FnHash(size), IterateHash())
 end
 function hash_method(::AbstractString, c::ViewsEq)
     return (root_version(c) > 1 ? @ConstantHash("Base.AbstractString") :
-            ConstantHash("Base.AbstractString", WriteHash()),
-            WriteHash())
+            PrivateConstantHash("Base.AbstractString", WriteHash()), WriteHash())
 end
 
 end

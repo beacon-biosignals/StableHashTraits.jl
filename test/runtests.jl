@@ -173,7 +173,8 @@ include("setup_tests.jl")
                 @test test_hash(:foo) != test_hash("foo")
                 @test test_hash(:foo) != test_hash(:bar)
                 @test test_hash(view("bob", 1:2)) != test_hash("bo")
-                @test test_hash(view("bob", 1:2), ViewsEq(ctx)) == test_hash("bo", ViewsEq(ctx))
+                @test test_hash(view("bob", 1:2), ViewsEq(ctx)) ==
+                      test_hash("bo", ViewsEq(ctx))
                 @test test_hash(S3Path("s3://foo/bar")) != test_hash(S3Path("s3://foo/baz"))
             end
 
