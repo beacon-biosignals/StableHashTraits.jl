@@ -45,11 +45,12 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 
 You compute hashes using `stable_hash`. This is called on the object you want to hash, and
 (optionally) a second argument called the context. The context you use affects how hashing
-occurs (it defaults to `HashVersion{1}()`), see the final section below for details on
-how you can implement your own contexts. It is generally recommended that you avoid
-`HashVerison{1}()`, and favor the latest version, `HashVersion{3}()` as it include substantial speed
-improvements. When you do not need to include a custom context, a short-hand for specifying
-`HashVersion{3}()` is to call `stable_hash(x; version=3)`.
+occurs (it defaults to `HashVersion{1}()`). It is generally recommended that you avoid
+`HashVerison{1}()`, favoring `HashVersion{3}()` as it include substantial speed
+improvements, and fewer hash collisions, compared to version 1. See the final section below
+for details on how you can implement your own contexts. When you do not need to include a
+custom context, a short-hand for specifying `HashVersion{3}()` is to call `stable_hash(x;
+version=3)`. 
 
 These standard contexts (`HashVersion{V}`) aim to ensure that if two values are
 different, the input to the hash algorithm will differ. 
@@ -84,7 +85,7 @@ following values, typically based only on the *type* of its input.
     - `stable_typename_id`: Get the qualified name of an object's type, e.g. `Base.String` and return 64 bit hash of this string
     - `stable_type_id`: Get the qualified name and type parameters of a type, e.g.
        `Base.Vector{Int}`, and return a 64 bit hash of this string.
-5. `@ConstantHash(x)`: at compile time, hash the literal string or number using `sha256`
+5. `@ConstantHash(x)`: at compile time, hash the literal (constant) string or number using `sha256`
   and include the first 64 bits as a constant number that is recursively hashed
   using the `WriteHash` method.
 6. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
@@ -119,7 +120,7 @@ This release includes speed improvements of about 100 fold.
 - **Feature**: The requirements for `HashVersion{2}` on the passed hash function have been
   relaxed, such that `alg=crc32` should again work (no need to call `alg=(x,s=UInt32(0)) ->
   crc32c(copy(x),s)`).
-- **Feature**: `@ConstantHash` allow for precomputed hash values of constant strings and
+- **Feature**: `@ConstantHash` allows for precomputed hash values of constant strings and
   numbers.
 - **Feature**:  `stable_typename_id` and `stable_type_id` provide compile-time 64 bit hashes
   of the types of objects
@@ -134,10 +135,11 @@ This release includes speed improvements of about 100 fold.
 - **Deprecation**: `qualified_name` and `qualified_type` have been deprected, in favor of
   `stable_typename_id` and `stable_type_id`.
 - **Deprecation**: `ConstantHash` has been deprecated in favor of the more efficient
-  `@ConstantHash`. Note that if the argument to `ConstantHash` was an expression rather than
-  a compile time constant you would need to replace `ConstantHash(exp)` with `FnHash(_ ->
-  exp)` (but this is probably a code smell, since `hash_method` values should normally only
-  depend on the type of their arguments).
+  `@ConstantHash`. To remove deprecated API: any call to `ConstantHash(x)` where `x` is
+  a constant literal should be changed to `@ConstantHash(x)`. If `x` is an expression
+  you can use `FnHash(_ -> x)` to achieve the same result. Note however that the use
+  of a non-literal is probably a code smell, as `hash_method` should normally only
+  depend on the type of its arguments.
 
 ### In 1.0:
 
@@ -200,7 +202,7 @@ changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 You can customize how hashes are computed within a given scope using a context object. This
 is also a very useful way to avoid type piracy. The context can be any object you'd like and
 is passed as the second argument to `stable_hash`. By default it is equal to
-`HashVersion{1}()` and this determines how objects are hashed when a more method specific is not defined.
+`HashVersion{1}()` and this determines how objects are hashed when a more specific method is not defined.
 
 This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
 is the method called for `WriteHash`, and falls back to `Base.write`). Because of the way
@@ -213,7 +215,7 @@ fallback, and return it in an implementation of the method
 `StableHashTraits.parent_context`. 
 
 As an example, here is how we could write a context that treats all named tuples with the
-same keys as equivalent. 
+same keys and values as equivalent. 
 
 ```julia
 struct NamedTuplesEq{T}
@@ -221,7 +223,7 @@ struct NamedTuplesEq{T}
 end
 StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
 function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
-    return FnHash(stable_typename_id), UseStruct(:ByName)
+    return FnHash(stable_typename_id), StructHash(:ByName)
 end
 context = NamedTuplesEq(HashVersion{3}())
 stable_hash((; a=1:2, b=1:2), context) == stable_hash((; b=1:2, a=1:2), context) # true

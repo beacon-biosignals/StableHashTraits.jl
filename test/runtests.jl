@@ -26,7 +26,8 @@ include("setup_tests.jl")
         @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
     end
 
-    for V in (1, 2, 3), hashfn in (sha256, sha1, crc)
+    for V in (1, 2, 3), hashfn in (sha256, sha1, crc32c)
+        hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
             test_hash(x, c=ctx) = stable_hash(x, c; alg=hashfn)
@@ -107,14 +108,14 @@ include("setup_tests.jl")
                       test_hash([(; x=i, y=i) for i in 1:10])
                 @test test_hash([(; x=i, y=i) for i in 1:10]) !=
                       test_hash(DataFrame(; x=1:10, y=1:10))
-                @test test_hash((; x=collect(1:10), y=collect(1:10)), TablesEq()) ==
-                      test_hash([(; x=i, y=i) for i in 1:10], TablesEq())
-                @test test_hash([(; x=i, y=i) for i in 1:10], TablesEq()) ==
-                      test_hash(DataFrame(; x=1:10, y=1:10), TablesEq())
+                @test test_hash((; x=collect(1:10), y=collect(1:10)), TablesEq(ctx)) ==
+                      test_hash([(; x=i, y=i) for i in 1:10], TablesEq(ctx))
+                @test test_hash([(; x=i, y=i) for i in 1:10], TablesEq(ctx)) ==
+                      test_hash(DataFrame(; x=1:10, y=1:10), TablesEq(ctx))
                 @test test_hash(DataFrame(; x=1:10, y=1:10)) !=
                       test_hash(NonTableStruct(1:10, 1:10))
-                @test test_hash(DataFrame(; x=1:10, y=1:10), TablesEq()) !=
-                      test_hash(NonTableStruct(1:10, 1:10), TablesEq())
+                @test test_hash(DataFrame(; x=1:10, y=1:10), TablesEq(ctx)) !=
+                      test_hash(NonTableStruct(1:10, 1:10), TablesEq(ctx))
             end
 
             # test out HashAndContext
@@ -141,17 +142,16 @@ include("setup_tests.jl")
                 @test test_hash([1 2; 3 4]) != test_hash(vec([1 2; 3 4]))
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4]')
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4])
-                # TODO: setup some tests for eltype elision in ViewsEq (also add benchmark)
-                @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) !=
-                      test_hash(vec([1 2; 3 4]), ViewsEq(HashVersion{V}()))
-                @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) ==
-                      test_hash([1 3; 2 4]', ViewsEq(HashVersion{V}()))
-                @test test_hash([1 2; 3 4], ViewsEq(HashVersion{V}())) !=
-                      test_hash([1 3; 2 4], ViewsEq(HashVersion{V}()))
+                @test test_hash([1 2; 3 4], ViewsEq(ctx)) !=
+                      test_hash(vec([1 2; 3 4]), ViewsEq(ctx))
+                @test test_hash([1 2; 3 4], ViewsEq(ctx)) ==
+                      test_hash([1 3; 2 4]', ViewsEq(ctx))
+                @test test_hash([1 2; 3 4], ViewsEq(ctx)) !=
+                      test_hash([1 3; 2 4], ViewsEq(ctx))
                 @test test_hash(reshape(1:10, 2, 5)) != test_hash(reshape(1:10, 5, 2))
                 @test test_hash(view(collect(1:5), 1:2)) != test_hash([1, 2])
-                @test test_hash(view(collect(1:5), 1:2), ViewsEq(HashVersion{V}())) ==
-                      test_hash([1, 2], ViewsEq(HashVersion{V}()))
+                @test test_hash(view(collect(1:5), 1:2), ViewsEq(ctx)) ==
+                      test_hash([1, 2], ViewsEq(ctx))
 
                 @test test_hash([(), ()]) != test_hash([(), (), ()])
 
@@ -173,7 +173,7 @@ include("setup_tests.jl")
                 @test test_hash(:foo) != test_hash("foo")
                 @test test_hash(:foo) != test_hash(:bar)
                 @test test_hash(view("bob", 1:2)) != test_hash("bo")
-                @test test_hash(view("bob", 1:2), ViewsEq()) == test_hash("bo", ViewsEq())
+                @test test_hash(view("bob", 1:2), ViewsEq(ctx)) == test_hash("bo", ViewsEq(ctx))
                 @test test_hash(S3Path("s3://foo/bar")) != test_hash(S3Path("s3://foo/baz"))
             end
 
@@ -205,9 +205,8 @@ include("setup_tests.jl")
             @testset "Custom hash_method" begin
                 @test @ConstantHash(5).constant isa UInt64
                 @test @ConstantHash("foo").constant isa UInt64
-                if V > 1
-                    @test test_hash(TestType(1, 2)) != TestType(UInt(1), UInt(2))
-                end
+                @test_throws ArgumentError @ConstantHash(1 + 2)
+                V > 1 && @test test_hash(TestType(1, 2)) != TestType(UInt(1), UInt(2))
                 @test test_hash(ExtraTypeParams{:A,Int}(2)) !=
                       test_hash(ExtraTypeParams{:B,Int}(2))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType(1, 2))
@@ -250,6 +249,8 @@ include("setup_tests.jl")
         @test_deprecated(HashVersion{1}())
         @test_deprecated(HashVersion{2}())
         @test_deprecated(UseProperties(:ByName))
+        @test_deprecated(qualified_name("bob"))
+        @test_deprecated(qualified_type("bob"))
         @test_deprecated(UseQualifiedName())
         @test_deprecated(UseSize(UseIterate()))
         @test_deprecated(ConstantHash("foo"))
