@@ -354,39 +354,39 @@ end
 # field and its type has been propagated)
 # then you can check in `hash_method` that the type has been propagated
 
-# Type elision is a hash context that strips a hash method of type-based identifiers of an object
-# (e.g. `stable_type_id`), `ElideType` indicates that, when possible, this elision should
-# be performed
-struct ElideType{P}
+# Types can be elided when the container (iterable or struct) of an object 
+# has its type hashed AND when that type has concrete (leaf) type information
+# about the element type. We signal this first condition by wrapping the 
+# hash context with `ContainerTypeIsHashed`.
+struct ContainerTypeIsHashed{P}
     parent::P
 end
-parent_context(x::ElideType) = x.parent
+parent_context(x::ContainerTypeIsHashed) = x.parent
 
-# as we traverse nested objects, we must check at each level whether elision is possible, so
-# we have to remove the `ElideType` context to indicate that we have yet to check that it is
-# possible (otherwise, all nested objects would have `stable_type_id` calls removed
-# regardless of whether our checks passed)
-ignore_elision(x) = x
-ignore_elision(x::ElideType) = parent_context(x)
+# as we traverse the structure of objects, we want to clear `ContainerTypeIsHashed` once we've
+# gone deep enough (we need to explicitly check the new, nested container and wrap it
+# with a new `ContainerTypeIsHashed` when appropriate)
+context_for_elements(x) = x
+context_for_elements(x::ContainerTypeIsHashed) = parent_context(x)
 
-# ElidedTypeHash is a hash method that replaces FnHash(stable_hash_id); when actually
-# computing a hash, it is a no-op, but it exists so that we can treat it as if it were
-# `FnHash(stable_type_id)`, for purposes of determining if elision is possible at the next
-# level of object nesting
-struct ElidedTypeHash end
+# ElidedHash is a hash method that replaces type hashes (`FnHash(stable_type_id)`); when
+# actually computing a hash, it is a no-op, but it exists so that we can treat it as if it
+# were a call to `FnHash(stable_type_id)`, for purposes of propagating `ContainerTypeIsHashed`
+struct ElidedHash end
 
-# to elide the type from a set of hash methods is to remove all
-# calls to `FnHash(stable_type_id)`
+# to elide the type from a set of hash methods we remove all
+# calls to `FnHash(stable_type_id)` and replace them with `ElidedHash`
+function stable_type_id end
 elide_type(trait) = trait
 elide_type(trait::Tuple{}) = ()
+function elide_type(trait::Tuple{<:typeof(stable_type_id), <:Vararg{<:Any}})
+    head, rest... = trait
+    return ElidedHash(), rest...
+end
 function elide_type(trait::Tuple)
     head, rest... = trait
-    return elide_head_type(head, rest)
+    return head, elide_type(rest)...
 end
-
-function stable_type_id end
-elide_head_type(x::FnHash{<:typeof(stable_type_id)}, rest) = ElidedTypeHash(), rest...
-elide_head_type(x, rest) = (x, elide_type(rest)...)
 
 #####
 ##### IterateHash 
@@ -396,12 +396,12 @@ eltype_(xs) = eltype_(xs, Base.IteratorEltype(xs))
 eltype_(_, _) = Any
 eltype_(x, ::Base.HasEltype) = eltype(x)
 
-iterate_can_elide_type(xs, root, context) = false
-iterate_can_elide_type(xs, root::Val{1}, ::ElideType) = false
-iterate_can_elide_type(xs, root::Val{2}, ::ElideType) = false
-# to check of ellission is possible for `IterateHash`
-# we determine if the eltype is concrete
-function iterate_can_elide_type(xs, root, context::ElideType)
+# to check if ellission is possible for `IterateHash` we determine if the eltype is concrete
+# for HashVerion{T} where T >= 3
+iterator_hashes_element_type(xs, root, context) = false
+iterator_hashes_element_type(xs, root::Val{1}, ::ContainerTypeIsHashed) = false
+iterator_hashes_element_type(xs, root::Val{2}, ::ContainerTypeIsHashed) = false
+function iterator_hashes_element_type(xs, root, context::ContainerTypeIsHashed)
     # `isdispatchtuple`: determine if T is a tuple of "leaf types"
     # meaning it has no subtypes that could appear in a method call
     # i.e. a concrete type
@@ -409,9 +409,9 @@ function iterate_can_elide_type(xs, root, context::ElideType)
 end
 
 function stable_hash_helper(xs, hash_state, context, root, ::IterateHash)
-    if iterate_can_elide_type(xs, root, context)
+    if iterator_hashes_element_type(xs, root, context)
         return hash_foreach(hash_state, root, xs) do x
-            return x, elide_type(hash_method(x, context)), ignore_elision(context)
+            return x, elide_type(hash_method(x, context)), context_for_elements(context)
         end
     else
         return hash_foreach(hash_state, root, xs) do x
@@ -420,6 +420,7 @@ function stable_hash_helper(xs, hash_state, context, root, ::IterateHash)
     end
 end
 
+# in HashVersion{1} (root::Val{1}), we use nesting per iterated element
 function hash_foreach(fn, hash_state, root::Val{1}, xs)
     for x in xs
         f_x, method, context = fn(x)
@@ -430,7 +431,12 @@ function hash_foreach(fn, hash_state, root::Val{1}, xs)
     return hash_state
 end
 
-function hash_foreach(fn, hash_state, root, xs)
+# in HashVersion{2} and beyond we use nesting around the entire sequence of iterated
+# elements
+hash_foreach(fn, hash_state, root, xs) = hash_foreach__(fn, hash_state, root, xs)
+# the purpose of this indirection (using a helper) will be clear 
+# below when we implement specialied methods for `ElidedHash`
+function hash_foreach__(fn, hash_state, root, xs)
     inner_state = start_nested_hash!(hash_state)
     for x in xs
         f_x, method, context = fn(x)
@@ -440,15 +446,18 @@ function hash_foreach(fn, hash_state, root, xs)
     return hash_state
 end
 
-# if one of the hash methods is `ElidedTypeHash` while iterating over a tuple,
-# we simply skip `ElidedTypeHash`, as if it weren't there at all
-hash_foreach(fn, hash_state, root::Val{3}, xs::Tuple{<:ElidedTypeHash}) = hash_state
-function hash_foreach(fn, hash_state, root::Val{3}, xs::Tuple{<:ElidedTypeHash,<:Any})
+# specialized methods for handling `ElidedHash`: if one of the hash methods is `ElidedHash`
+# while iterating over a tuple, we simply skip `ElidedHash`, as if it weren't there at all
+# this is only supported for root::Val{T} where T >= 3 and requires appropriate method
+# definitions for Val{1} and Val{2} to avoid method ambiguity.
+hash_foreach(fn, hash_state, root::Val{1}, xs::Tuple{<:ElidedHash}) = hash_foreach__(fn, hash_state, root, xs)
+hash_foreach(fn, hash_state, root::Val{2}, xs::Tuple{<:ElidedHash}) = hash_foreach__(fn, hash_state, root, xs)
+hash_foreach(fn, hash_state, root, xs::Tuple{<:ElidedHash}) = hash_state
+function hash_foreach(fn, hash_state, root, xs::Tuple{<:ElidedHash,<:Any})
     f_x, method, context = fn(xs[2])
     return stable_hash_helper(f_x, hash_state, context, root, method)
 end
-function hash_foreach(fn, hash_state, root::Val{3},
-                      xs::Tuple{<:ElidedTypeHash,<:Any,Vararg{<:Any}})
+function hash_foreach(fn, hash_state, root, xs::Tuple{<:ElidedHash,<:Any,Vararg{<:Any}})
     _, rest... = xs
     return hash_foreach(fn, hash_state, root, rest)
 end
@@ -475,6 +484,11 @@ sort_(x) = sort(x; by=string)
     return sort_(fieldnames(T))
 end
 
+# most generic method: we simply hash each key => value pair
+# of the object structure
+function stable_hash_helper(x, hash_state, context, root, use::StructHash)
+    return simple_struct_hash(x, hash_state, context, root, use)
+end
 function simple_struct_hash(x, hash_state, context, root, use)
     fieldsfn, getfieldfn = use.fnpair
     return hash_foreach(hash_state, root, orderfields(use, fieldsfn(x))) do k
@@ -483,17 +497,21 @@ function simple_struct_hash(x, hash_state, context, root, use)
     end
 end
 
-function stable_hash_helper(x, hash_state, context, root, use::StructHash)
-    return simple_struct_hash(x, hash_state, context, root, use)
+# more optimized method: for StructHash's of actual `struct` objects (using `fieldnames ∘
+# typeof`, a.k.a. `fieldnames_`) we use a more optimized method that precomputes a hash of
+# the fieldnames at compile time, hashing only the contents of the struct at runtime
+
+function stable_hash_helper(x, hash_state, context, root, use::FieldStructHash)
+    return compile_time_field_struct_hash(x, hash_state, context, root, use)
 end
 
-function stable_hash_helper(x, hash_state, context, root::Val{1}, use::FieldStructHash)
-    return simple_struct_hash(x, hash_state, context, root, use)
-end
-
-function stable_hash_helper(x, hash_state, context, root::Val{1},
-                            use::FieldStructHash{typeof(getfield)})
-    return simple_struct_hash(x, hash_state, context, root, use)
+function compile_time_field_struct_hash(x, hash_state, context, root, use)
+    _, getfieldfn = use.fnpair
+    hash_state, fields = hash_fieldtypes(x, hash_state, context, root, use)
+    return hash_foreach(hash_state, root, fields) do k
+        val = getfieldfn(x, k)
+        return val, hash_method(val, context), context
+    end
 end
 
 function hash_fieldtypes(x, hash_state, context, root,
@@ -506,25 +524,16 @@ function hash_fieldtypes(x, hash_state, context, root,
     return hash_state, fields
 end
 
-function compile_time_field_struct_hash(x, hash_state, context, root, use)
-    _, getfieldfn = use.fnpair
-    hash_state, fields = hash_fieldtypes(x, hash_state, context, root, use)
-    return hash_foreach(hash_state, root, fields) do k
-        val = getfieldfn(x, k)
-        return val, hash_method(val, context), context
-    end
+# do not apply the above method for HashVersion{V} for V == 1
+function stable_hash_helper(x, hash_state, context, root::Val{1}, use::FieldStructHash)
+    return simple_struct_hash(x, hash_state, context, root, use)
 end
 
-function stable_hash_helper(x, hash_state, context, root::Val{2}, use::FieldStructHash)
-    return compile_time_field_struct_hash(x, hash_state, context, root, use)
-end
+# even more optimized methods: for StructHash's that use both `fieldnames ∘ typeof` to get
+# fieldnames, and `getfield` for direct access to fields, we are able to consider eliding
+# the type hash of fields.
 
-function stable_hash_helper(x, hash_state, context, root::Val{2},
-                            use::FieldStructHash{typeof(getfield)})
-    return compile_time_field_struct_hash(x, hash_state, context, root, use)
-end
-
-function struct_can_elide_type(x, k)
+function struct_hashes_this_fields_type(x, k)
     return isdispatchtuple(Tuple{fieldtype(typeof(x), k)})
 end
 
@@ -533,15 +542,20 @@ function stable_hash_helper(x, hash_state, context, root,
     hash_state, fields = hash_fieldtypes(x, hash_state, context, root, use)
     hash_foreach(hash_state, root, fields) do k
         val = getfield(x, k)
-        # is the type of this field concrete?
-        if struct_can_elide_type(x, k)
-            # if it is, we can elide the type of this field
+        if struct_hashes_this_fields_type(x, k)
+            # in this case, we can elide the type of this field
             return val, elide_type(hash_method(val, context)),
-                   ignore_elision(context)
+                   context_for_elements(context)
         else
-            return val, hash_method(val, context), ignore_elision(context)
+            return val, hash_method(val, context), context_for_elements(context)
         end
     end
+end
+
+# do not apply the above method for HashVersion{V} for V <= 2
+function stable_hash_helper(x, hash_state, context, root::Union{Val{1},Val{2}},
+                            use::FieldStructHash{typeof(getfield)})
+    return compile_time_field_struct_hash(x, hash_state, context, root, use)
 end
 
 #####
@@ -710,26 +724,24 @@ function stable_hash_helper(x, hash_state, context, root::Union{Val{1},Val{2}},
     end
 end
 
-# detecting when we can elide struct and element types
-function elideable(fn::F, methods) where {F}
-    return any(x -> x isa FnHash{F} || x isa ElidedTypeHash, methods)
-end
-has_iterate_type(methods) = any(x -> x isa IterateHash, methods)
-has_struct_type(methods) = any(x -> x isa FieldStructHash, methods)
-function methods_permit_elision(methods)
-    if elideable(stable_type_id, methods)
-        return has_iterate_type(methods) || has_struct_type(methods)
-    elseif elideable(stable_eltype_id, methods)
-        return has_iterate_type(methods)
+# detects when the a container hashes its type
+# (so that the hashed type of any elements may be elided)
+any_isa(methods, types::Tuple) = any(m -> any(T -> m isa T, types), methods)
+any_isa(methods, T) = any(m -> m isa T, methods)
+function container_hashes_its_type(methods)
+    if any_isa(methods, (FnHash{<:typeof(stable_type_id)}, ElidedHash))
+        return any_isa(methods, (IterateHash, FieldStructHash))
+    elseif any_isa(methods, FnHash{<:typeof(stable_eltype_id)})
+        return any_isa(methods, IterateHash)
     end
     return false
 end
 
 # tuple hashing when we can elide types (root >= 3)
 function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
-    if methods_permit_elision(methods)
+    if container_hashes_its_type(methods)
         return hash_foreach(hash_state, root, methods) do method
-            return x, method, ElideType(context)
+            return x, method, ContainerTypeIsHashed(context)
         end
     else
         return hash_foreach(hash_state, root, methods) do method
