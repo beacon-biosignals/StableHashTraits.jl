@@ -45,9 +45,6 @@ that the number in `HashVersion` does not necessarily match the package version 
 Instead of passing a context, you can instead pass a `version` keyword, that will
 set the context to `HashVersion{version}()`.
 
-Instead of passing a context, you can instead pass a `version` keyword, that will
-set the context to `HashVersion{version}()`.
-
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
 [old_hash])`. 
@@ -313,7 +310,7 @@ end
 ##### ================ Hash Traits ================
 #####
 
-# predefine the traits, since they get references in various
+# predefine the traits, since they get referenced throughout
 
 struct WriteHash end
 
@@ -326,31 +323,6 @@ end
 struct FnHash{F,H}
     fn::F
     result_method::H # if non-nothing, apply to result of `fn`
-end
-
-#####
-##### WriteHash 
-#####
-
-"""
-    StableHashTraits.write(io, x, [context])
-
-Writes contents of `x` to an `io` buffer to be hashed during a call to `stable_hash`.
-Fall back methods are defined as follows:
-
-    write(io, x, context) = write(io, x)
-    write(io, x) = Base.write(io, x)
-
-Users of `StableHashTraits` can overwrite either the 2 or 3 argument version for 
-their types to customize the behavior of `stable_hash`. 
-
-See also: [`StableHashTraits.hash_method`](@ref).
-"""
-write(io, x, context) = write(io, x)
-write(io, x) = Base.write(io, x)
-
-function stable_hash_helper(x, hash_state, context, root, ::WriteHash)
-    return update_hash!(hash_state, x, context)
 end
 
 #####
@@ -387,13 +359,38 @@ struct ElidedHash end
 function stable_type_id end
 elide_type(trait) = trait
 elide_type(trait::Tuple{}) = ()
-function elide_type(trait::Tuple{<:typeof(stable_type_id), <:Vararg{<:Any}})
+function elide_type(trait::Tuple{<:typeof(stable_type_id),<:Vararg{<:Any}})
     head, rest... = trait
     return ElidedHash(), rest...
 end
 function elide_type(trait::Tuple)
     head, rest... = trait
     return head, elide_type(rest)...
+end
+
+#####
+##### WriteHash 
+#####
+
+"""
+    StableHashTraits.write(io, x, [context])
+
+Writes contents of `x` to an `io` buffer to be hashed during a call to `stable_hash`.
+Fall back methods are defined as follows:
+
+    write(io, x, context) = write(io, x)
+    write(io, x) = Base.write(io, x)
+
+Users of `StableHashTraits` can overwrite either the 2 or 3 argument version for 
+their types to customize the behavior of `stable_hash`. 
+
+See also: [`StableHashTraits.hash_method`](@ref).
+"""
+write(io, x, context) = write(io, x)
+write(io, x) = Base.write(io, x)
+
+function stable_hash_helper(x, hash_state, context, root, ::WriteHash)
+    return update_hash!(hash_state, x, context)
 end
 
 #####
@@ -458,8 +455,12 @@ end
 # while iterating over a tuple, we simply skip `ElidedHash`, as if it weren't there at all
 # this is only supported for root::Val{T} where T >= 3 and requires appropriate method
 # definitions for Val{1} and Val{2} to avoid method ambiguity.
-hash_foreach(fn, hash_state, root::Val{1}, xs::Tuple{<:ElidedHash}) = hash_foreach__(fn, hash_state, root, xs)
-hash_foreach(fn, hash_state, root::Val{2}, xs::Tuple{<:ElidedHash}) = hash_foreach__(fn, hash_state, root, xs)
+function hash_foreach(fn, hash_state, root::Val{1}, xs::Tuple{<:ElidedHash})
+    return hash_foreach__(fn, hash_state, root, xs)
+end
+function hash_foreach(fn, hash_state, root::Val{2}, xs::Tuple{<:ElidedHash})
+    return hash_foreach__(fn, hash_state, root, xs)
+end
 hash_foreach(fn, hash_state, root, xs::Tuple{<:ElidedHash}) = hash_state
 function hash_foreach(fn, hash_state, root, xs::Tuple{<:ElidedHash,<:Any})
     f_x, method, context = fn(xs[2])
@@ -1016,7 +1017,7 @@ parent_context(x::ViewsEq) = x.parent
 # for `HashVersion{2}`
 function hash_method(::AbstractArray, c::ViewsEq)
     return (root_version(c) > 1 ? @ConstantHash("Base.AbstractArray") :
-            PrivateConstantHash("Base.AbstractArray"), 
+            PrivateConstantHash("Base.AbstractArray"),
             (root_version(c) > 2 ? (FnHash(stable_eltype_id),) : ())...,
             FnHash(size), IterateHash())
 end
