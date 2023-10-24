@@ -357,7 +357,7 @@ function stable_type_id end
 function stable_eltype_id end
 elide_type(trait) = trait
 elide_type(trait::Tuple{}) = ()
-const ElidibleFunctions = Union{<:typeof(stable_type_id), <:typeof(stable_eltype_id)}
+const ElidibleFunctions = Union{<:typeof(stable_type_id),<:typeof(stable_eltype_id)}
 function elide_type(trait::Tuple{FnHash{F},Vararg{Any}}) where {F<:ElidibleFunctions}
     head, rest... = trait
     return ElidedHash{F}(), rest...
@@ -425,10 +425,10 @@ function stable_hash_helper(xs, hash_state, context, root, ::IterateHash)
 end
 
 # in HashVersion{1} (root::Val{1}), we use nesting per iterated element
- hash_foreach(fn, hash_state, root::Val{1}, xs) = hash_foreach_old(fn, hash_state, root, xs)
+hash_foreach(fn, hash_state, root::Val{1}, xs) = hash_foreach_old(fn, hash_state, root, xs)
 # the purpose of this indirection (using a helper) will be clear below when we implement
 # specialied methods for `ElidedHash`
- function hash_foreach_old(fn, hash_state, root, xs)
+function hash_foreach_old(fn, hash_state, root, xs)
     for x in xs
         f_x, method, context = fn(x)
         inner_state = start_nested_hash!(hash_state)
@@ -773,11 +773,13 @@ end
 
 # detects when the a container hashes its type
 # (so that the hashed type of any elements may be elided)
-any_isa(methods::Tuple, ::Type{T}) where T = any(x -> x isa T, methods)
+any_isa(methods::Tuple, ::Type{T}) where {T} = any(x -> x isa T, methods)
 function container_hashes_its_type(methods)
-    if any_isa(methods, FnHash{<:typeof(stable_type_id)}) || any_isa(methods, ElidedHash{<:typeof(stable_type_id)})
+    if any_isa(methods, FnHash{<:typeof(stable_type_id)}) ||
+       any_isa(methods, ElidedHash{<:typeof(stable_type_id)})
         return any_isa(methods, IterateHash) || any_isa(methods, FieldStructHash)
-    elseif any_isa(methods, FnHash{<:typeof(stable_eltype_id)}) || any_isa(methods, ElidedHash{<:typeof(stable_eltype_id)})
+    elseif any_isa(methods, FnHash{<:typeof(stable_eltype_id)}) ||
+           any_isa(methods, ElidedHash{<:typeof(stable_eltype_id)})
         return any_isa(methods, IterateHash)
     end
     return false
