@@ -349,16 +349,18 @@ context_for_elements(x::ContainerTypeIsHashed) = parent_context(x)
 # ElidedHash is a hash method that replaces type hashes (`FnHash(stable_type_id)`); when
 # actually computing a hash, it is a no-op, but it exists so that we can treat it as if it
 # were a call to `FnHash(stable_type_id)`, for purposes of propagating `ContainerTypeIsHashed`
-struct ElidedHash end
+struct ElidedHash{F} end
 
 # to elide the type from a set of hash methods we remove all
 # calls to `FnHash(stable_type_id)` and replace them with `ElidedHash`
 function stable_type_id end
+function stable_eltype_id end
 elide_type(trait) = trait
 elide_type(trait::Tuple{}) = ()
-function elide_type(trait::Tuple{typeof(stable_type_id),Vararg{Any}})
+const ElidibleFunctions = Union{<:typeof(stable_type_id), <:typeof(stable_eltype_id)}
+function elide_type(trait::Tuple{FnHash{F},Vararg{Any}}) where {F<:ElidibleFunctions}
     head, rest... = trait
-    return ElidedHash(), rest...
+    return ElidedHash{F}(), rest...
 end
 function elide_type(trait::Tuple)
     head, rest... = trait
@@ -771,12 +773,11 @@ end
 
 # detects when the a container hashes its type
 # (so that the hashed type of any elements may be elided)
-any_isa(methods, types::Tuple) = any(m -> any(T -> m isa T, types), methods)
-any_isa(methods, T) = any(m -> m isa T, methods)
+any_isa(methods::Tuple, ::Type{T}) where T = any(x -> x isa T, methods)
 function container_hashes_its_type(methods)
-    if any_isa(methods, (FnHash{<:typeof(stable_type_id)}, ElidedHash))
-        return any_isa(methods, (IterateHash, FieldStructHash))
-    elseif any_isa(methods, FnHash{<:typeof(stable_eltype_id)})
+    if any_isa(methods, FnHash{<:typeof(stable_type_id)}) || any_isa(methods, ElidedHash{<:typeof(stable_type_id)})
+        return any_isa(methods, IterateHash) || any_isa(methods, FieldStructHash)
+    elseif any_isa(methods, FnHash{<:typeof(stable_eltype_id)}) || any_isa(methods, ElidedHash{<:typeof(stable_eltype_id)})
         return any_isa(methods, IterateHash)
     end
     return false
