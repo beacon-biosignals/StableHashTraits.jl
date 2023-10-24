@@ -349,6 +349,11 @@ end
 ##### Type Elision 
 #####
 
+# TODO: better idea. Just propagage types directly via the context. SO if you use the right 
+# FnHash, a type gets added to the context (or if you're in a struct with the appropriate
+# field and its type has been propagated)
+# then you can check in `hash_method` that the type has been propagated
+
 # Type elision is a hash context that strips a hash method of type-based identifiers of an object
 # (e.g. `stable_type_id`), `ElideType` indicates that, when possible, this elision should
 # be performed
