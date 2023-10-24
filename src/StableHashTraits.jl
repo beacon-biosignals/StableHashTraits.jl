@@ -1018,6 +1018,8 @@ parent_context(x::ViewsEq) = x.parent
 function hash_method(::AbstractArray, c::ViewsEq)
     return (root_version(c) > 1 ? @ConstantHash("Base.AbstractArray") :
             PrivateConstantHash("Base.AbstractArray"),
+            # NOTE: we hash the eltype so that we can avoid hashing the type for each
+            # element (where possible) (c.f. Type Elision)
             (root_version(c) > 2 ? (FnHash(stable_eltype_id),) : ())...,
             FnHash(size), IterateHash())
 end
