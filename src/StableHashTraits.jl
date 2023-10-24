@@ -329,15 +329,12 @@ end
 ##### Type Elision 
 #####
 
-# TODO: better idea. Just propagage types directly via the context. SO if you use the right 
-# FnHash, a type gets added to the context (or if you're in a struct with the appropriate
-# field and its type has been propagated)
-# then you can check in `hash_method` that the type has been propagated
-
-# Types can be elided when the container (iterable or struct) of an object 
-# has its type hashed AND when that type has concrete (leaf) type information
-# about the element type. We signal this first condition by wrapping the 
-# hash context with `ContainerTypeIsHashed`.
+# In some cases we can elide type hashes: e.g. for an array, we need not include a hash of
+# the type for each element, when we hash the type of the arry and the eltype is `Int`. More
+# generally, we can safely elide the hash of an object's type when it is in a container
+# (iterable or struct) that has its type hashed AND when that type has concrete (leaf) type
+# information about the contained type. We signal this first condition by wrapping the hash
+# context with `ContainerTypeIsHashed`.
 struct ContainerTypeIsHashed{P}
     parent::P
 end
@@ -359,7 +356,7 @@ struct ElidedHash end
 function stable_type_id end
 elide_type(trait) = trait
 elide_type(trait::Tuple{}) = ()
-function elide_type(trait::Tuple{<:typeof(stable_type_id),<:Vararg{<:Any}})
+function elide_type(trait::Tuple{typeof(stable_type_id),Vararg{Any}})
     head, rest... = trait
     return ElidedHash(), rest...
 end
@@ -426,7 +423,10 @@ function stable_hash_helper(xs, hash_state, context, root, ::IterateHash)
 end
 
 # in HashVersion{1} (root::Val{1}), we use nesting per iterated element
-function hash_foreach(fn, hash_state, root::Val{1}, xs)
+ hash_foreach(fn, hash_state, root::Val{1}, xs) = hash_foreach_old(fn, hash_state, root, xs)
+# the purpose of this indirection (using a helper) will be clear below when we implement
+# specialied methods for `ElidedHash`
+ function hash_foreach_old(fn, hash_state, root, xs)
     for x in xs
         f_x, method, context = fn(x)
         inner_state = start_nested_hash!(hash_state)
@@ -439,8 +439,8 @@ end
 # in HashVersion{2} and beyond we use nesting around the entire sequence of iterated
 # elements
 hash_foreach(fn, hash_state, root, xs) = hash_foreach__(fn, hash_state, root, xs)
-# the purpose of this indirection (using a helper) will be clear 
-# below when we implement specialied methods for `ElidedHash`
+# the purpose of this indirection (using a helper) will be clear below when we implement
+# specialied methods for `ElidedHash`
 function hash_foreach__(fn, hash_state, root, xs)
     inner_state = start_nested_hash!(hash_state)
     for x in xs
@@ -455,20 +455,27 @@ end
 # while iterating over a tuple, we simply skip `ElidedHash`, as if it weren't there at all
 # this is only supported for root::Val{T} where T >= 3 and requires appropriate method
 # definitions for Val{1} and Val{2} to avoid method ambiguity.
-function hash_foreach(fn, hash_state, root::Val{1}, xs::Tuple{<:ElidedHash})
-    return hash_foreach__(fn, hash_state, root, xs)
-end
-function hash_foreach(fn, hash_state, root::Val{2}, xs::Tuple{<:ElidedHash})
-    return hash_foreach__(fn, hash_state, root, xs)
-end
-hash_foreach(fn, hash_state, root, xs::Tuple{<:ElidedHash}) = hash_state
-function hash_foreach(fn, hash_state, root, xs::Tuple{<:ElidedHash,<:Any})
+hash_foreach(fn, hash_state, root, xs::Tuple{ElidedHash}) = hash_state
+function hash_foreach(fn, hash_state, root, xs::Tuple{ElidedHash,Any})
     f_x, method, context = fn(xs[2])
     return stable_hash_helper(f_x, hash_state, context, root, method)
 end
-function hash_foreach(fn, hash_state, root, xs::Tuple{<:ElidedHash,<:Any,Vararg{<:Any}})
+function hash_foreach(fn, hash_state, root, xs::Tuple{ElidedHash,Any,Vararg{Any}})
     _, rest... = xs
     return hash_foreach(fn, hash_state, root, rest)
+end
+
+# exclude V=1 and V=2 from the above method specializations
+# (we make these methods specific to the types above to avoid method ambiguities)
+tuple_types = (:(Tuple{ElidedHash}), :(Tuple{ElidedHash,Any}),
+               :(Tuple{ElidedHash,Any,Vararg{Any}}))
+for TupleType in tuple_types
+    @eval function hash_foreach(fn, hash_state, root::Val{1}, xs::$(TupleType))
+        return hash_foreach_old(fn, hash_state, root, xs)
+    end
+    @eval function hash_foreach(fn, hash_state, root::Val{2}, xs::$(TupleType))
+        return hash_foreach__(fn, hash_state, root, xs)
+    end
 end
 
 #####
@@ -560,7 +567,11 @@ function stable_hash_helper(x, hash_state, context, root,
 end
 
 # do not apply the above method for HashVersion{V} for V <= 2
-function stable_hash_helper(x, hash_state, context, root::Union{Val{1},Val{2}},
+function stable_hash_helper(x, hash_state, context, root::Val{1},
+                            use::FieldStructHash{typeof(getfield)})
+    return simple_struct_hash(x, hash_state, context, root, use)
+end
+function stable_hash_helper(x, hash_state, context, root::Val{2},
                             use::FieldStructHash{typeof(getfield)})
     return compile_time_field_struct_hash(x, hash_state, context, root, use)
 end
