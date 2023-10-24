@@ -109,7 +109,10 @@ This release introduces a new hash context that reduces hash collisions.
 
 - **Feature** `HashVersion{3}` avoids more hash collisions, by ensuring that the type of
   primitive types is always encoded in the hashed data. HashVersion{1} remains
-  the default context to avoid breaking existing code.
+  the default context to avoid breaking existing code. 
+- **Implementation Note**: `HashVersion{3}` remains fast, relative to `HashVersion{2}`
+  by eliding the hash of individual element types when the `eltype` or `fieldtype`
+  of the object is concrete.
 
 ### In 1.1
 
