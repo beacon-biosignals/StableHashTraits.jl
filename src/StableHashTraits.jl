@@ -68,7 +68,7 @@ let
     # links to symbols here
 
     @doc """
-    hash_method(x, [context])
+        StableHashTraits.hash_method(x, [context])
 
     Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
     You should return one of the following values.
