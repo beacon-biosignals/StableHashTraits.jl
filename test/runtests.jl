@@ -74,6 +74,8 @@ include("setup_tests.jl")
                                 bytes2hex_(test_hash(Dict(:a => "1", :b => "2"))))
                 @test_reference("references/ref19_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(ExtraTypeParams{:A,Int}(2))))
+                @test_reference("references/ref20_$(V)_$(nameof(hashfn)).txt",
+                                bytes2hex_(test_hash(==("test"))))
             end
 
             # verifies that transform can be called recursively
@@ -166,6 +168,12 @@ include("setup_tests.jl")
                 @test test_hash(sin) != test_hash("sin")
                 @test test_hash(sin) != test_hash("Base.sin")
                 @test test_hash(Int) != test_hash("Base.Int")
+                @test test_hash(==("foo")) == test_hash(==("foo"))
+                if V > 1
+                    @test test_hash(==("foo")) != test_hash(==("bar"))
+                else
+                    @test test_hash(==("foo")) == test_hash(==("bar"))
+                end
                 @test_throws ArgumentError test_hash(x -> x + 1)
             end
 

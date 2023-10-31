@@ -784,6 +784,10 @@ end
 function hash_method(::AbstractSet, c::HashVersion)
     return (TypeNameHash(c), FnHash(sort! ∘ collect))
 end
+hash_method(fn::Base.Fix1, c::HashVersion{1}) = @invoke hash_method(fn::Function, c)
+hash_method(fn::Base.Fix2, c::HashVersion{1}) = @invoke hash_method(fn::Function, c)
+hash_method(fn::Base.Fix1, c::HashVersion) = (@ConstantHash("Base.Fix1"), StructHash())
+hash_method(fn::Base.Fix2, c::HashVersion) = (@ConstantHash("Base.Fix2"), StructHash())
 
 #####
 ##### TablesEq 
