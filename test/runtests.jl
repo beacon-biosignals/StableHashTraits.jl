@@ -171,8 +171,10 @@ include("setup_tests.jl")
                 @test test_hash(==("foo")) == test_hash(==("foo"))
                 @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 1))
                 if V > 1
+                    @test test_hash(Base.Fix1(-, 1)) != test_hash(Base.Fix1(-, 2))
                     @test test_hash(==("foo")) != test_hash(==("bar"))
                 else
+                    @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 2))
                     @test test_hash(==("foo")) == test_hash(==("bar"))
                 end
                 @test_throws ArgumentError test_hash(x -> x + 1)
