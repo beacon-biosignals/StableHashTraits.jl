@@ -169,6 +169,7 @@ include("setup_tests.jl")
                 @test test_hash(sin) != test_hash("Base.sin")
                 @test test_hash(Int) != test_hash("Base.Int")
                 @test test_hash(==("foo")) == test_hash(==("foo"))
+                @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 1))
                 if V > 1
                     @test test_hash(==("foo")) != test_hash(==("bar"))
                 else
