@@ -237,8 +237,9 @@ Numerical changes will, of course, change the hash. One way this can catch you o
 are some differences in `StaticArray` outputs between julia versions:
 
 ```julia
+julia> using StaticArrays, StableHashTraits;
+
 julia> begin
-        using StaticArrays, StableHashTraits
         rotmatrix2d(a) = @SMatrix [cos(a) sin(a); -sin(a) cos(a)]
         rotate(a, p) = rotmatrix2d(a) * p 
         rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
