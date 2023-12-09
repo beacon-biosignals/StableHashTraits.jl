@@ -547,8 +547,6 @@ stable_typefields_id(::Type{T}) where {T} = hash64(sort_(fieldnames(T)))
     return :(return $number)
 end
 
-
-
 #####
 ##### FnHash
 #####
