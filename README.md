@@ -85,9 +85,9 @@ following values, typically based only on the *type* of its input.
     - `stable_typename_id`: Get the qualified name of an object's type, e.g. `Base.String` and return 64 bit hash of this string
     - `stable_type_id`: Get the qualified name and type parameters of a type, e.g.
        `Base.Vector{Int}`, and return a 64 bit hash of this string.
-5. `@ConstantHash(x)`: at compile time, hash the literal (constant) string or number using `sha256`
-  and include the first 64 bits as a constant number that is recursively hashed
-  using the `WriteHash` method.
+5. `@ConstantHash(x)`: at compile time, hash the literal (constant) string or number using
+    `sha256` and include the first 64 bits as a constant number that is recursively hashed
+    using the `WriteHash` method.
 6. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
     results. For example: `(@ConstantHash("header"), StructHash())` would compute a hash for
     both the string `"header"` and the fields of the object, and then recursively hash
@@ -242,3 +242,43 @@ Contexts can be customized not only when you call `stable_hash` but also when yo
 contents of a particular object. This lets you change how hashing occurs within the object.
 See the docstring of `HashAndContext` for details. 
 <!-- END_CONTEXTS -->
+
+## Hashing Gotchas
+
+Numerical changes will, of course, change the hash. One way this can catch you off guard
+are some differences in `StaticArray` outputs between julia versions:
+
+```julia
+julia> using StaticArrays, StableHashTraits;
+
+julia> begin
+        rotmatrix2d(a) = @SMatrix [cos(a) sin(a); -sin(a) cos(a)]
+        rotate(a, p) = rotmatrix2d(a) * p 
+        rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
+    end;
+```
+
+In julia 1.9.4:
+
+```julia
+
+julia> bytes2hex(stable_hash(rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006)); version=2))
+"4ccdc172688dd2b5cd50ba81071a19217c3efe2e3b625e571542004c8f96c797"
+
+julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
+2-element SVector{2, Float64} with indices SOneTo(2):
+  7.419375817039376e-17
+ -0.5953242152248626
+```
+
+In julia 1.6.7
+
+```julia
+julia> bytes2hex(stable_hash(rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006)); version=2))
+"3b8d998f3106c05f8b74ee710267775d0d0ce0e6780c1256f4926d3b7dcddf9e"
+
+julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
+2-element SVector{2, Float64} with indices SOneTo(2):
+  5.551115123125783e-17
+ -0.5953242152248626
+```

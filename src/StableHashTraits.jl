@@ -9,13 +9,13 @@ using SHA: SHA, sha256
 """
     HashVersion{V}()
 
-The default `hash_context` used by `stable_hash`. There are currently three versions
-(1-3). Unless you are aiming for backwards compatibility with an existing code base
-it is recommended that you use the latest version, as it is fast and avoids
-more hash collisions.
+The default `hash_context` used by `stable_hash`. There are currently two versions (1-3).
+You should generally use the newset version (3) except when prohibited by compatibility
+requirements. Version 1 is the default version, so as to avoid changing the hash computed by
+existing code.
 
-By explicitly passing this hash version in `stable_hash` you ensure that hash values for 
-these fallback methods will not change even if new fallbacks are defined. 
+By explicitly passing this hash version in `stable_hash` you ensure that hash values for
+these fallback methods will not change even if new hash versions are created.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
@@ -47,7 +47,7 @@ set the context to `HashVersion{version}()`.
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
-[old_hash])`. 
+[old_hash])`.
 
 The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
 third argument to [`StableHashTraits.write`](@ref)
@@ -61,17 +61,17 @@ function stable_hash(x, context; alg=sha256)
 end
 
 # extract contents of README so we can insert it into the some of the docstrings
-function __init__()
-    readme = read(joinpath(pkgdir(StableHashTraits), "README.md"), String)
+let
+    readme_file = joinpath(pkgdir(StableHashTraits), "README.md")
+    Base.include_dependency(readme_file)
+    readme = read(readme_file, String)
     traits = match(r"START_HASH_TRAITS -->(.*)<!-- END_HASH_TRAITS"s, readme).captures[1]
     contexts = match(r"START_CONTEXTS -->(.*)<!-- END_CONTEXTS"s, readme).captures[1]
     # TODO: if we ever generate `Documenter.jl` docs we need to revise the
     # links to symbols here
 
-    traits, contexts
-
     @doc """
-    hash_method(x, [context])
+        StableHashTraits.hash_method(x, [context])
 
     Retrieve the trait object that indicates how a type should be hashed using `stable_hash`.
     You should return one of the following values.
@@ -80,8 +80,6 @@ function __init__()
 
     $contexts
     """ hash_method
-
-    return nothing
 end
 
 function hash_method end
@@ -207,7 +205,7 @@ HashState(x::SHA.SHA_CTX, ctx) = x
 similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
 
 #####
-##### RecursiveHashState: handles a function of the form hash(bytes, [old_hash]) 
+##### RecursiveHashState: handles a function of the form hash(bytes, [old_hash])
 #####
 
 function HashState(fn::Function, context)
@@ -236,7 +234,7 @@ HashState(x::RecursiveHashState) = x
 similar_hash_state(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
 
 #####
-##### BufferedHashState: wrapper that buffers bytes before passing them to the hash algorithm 
+##### BufferedHashState: wrapper that buffers bytes before passing them to the hash algorithm
 #####
 
 mutable struct BufferedHashState{T} <: HashState
@@ -381,8 +379,8 @@ Fall back methods are defined as follows:
     write(io, x, context) = write(io, x)
     write(io, x) = Base.write(io, x)
 
-Users of `StableHashTraits` can overwrite either the 2 or 3 argument version for 
-their types to customize the behavior of `stable_hash`. 
+Users of `StableHashTraits` can overwrite either the 2 or 3 argument version for
+their types to customize the behavior of `stable_hash`.
 
 See also: [`StableHashTraits.hash_method`](@ref).
 """
@@ -394,7 +392,7 @@ function stable_hash_helper(x, hash_state, context, root, ::WriteHash)
 end
 
 #####
-##### IterateHash 
+##### IterateHash
 #####
 
 eltype_(xs) = eltype_(xs, Base.IteratorEltype(xs))
@@ -482,7 +480,7 @@ for TupleType in tuple_types
 end
 
 #####
-##### StructHash 
+##### StructHash
 #####
 
 fieldnames_(::T) where {T} = fieldnames(T)
@@ -583,6 +581,26 @@ end
 ##### Stable values for types
 #####
 
+function cleanup_name(str)
+    # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
+    # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
+    # https://discourse.julialang.org/t/difference-between-base-and-core/37426
+    str = replace(str, r"^Core\." => "Base.")
+    str = replace(str, ", " => ",") # spacing in type names vary across minor julia versions
+    # in 1.6 and older AbstractVector and AbstractMatrix types get a `where` clause, but in
+    # later versions of julia, they do not
+    str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
+    str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
+    return str
+end
+
+function validate_name(str)
+    if occursin(r"\.#[^.]*$", str)
+        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value"))
+    end
+    return str
+end
+
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_type_(fn::Function) = qname_(fn, string)
@@ -633,7 +651,7 @@ end
     stable_typename_id(x)
 
 Returns a 64 bit hash that is the same for a given type so long as the name and the module
-of the type doesn't change. 
+of the type doesn't change.
 
 ## Example
 
@@ -680,7 +698,7 @@ julia> stable_type_id(["a", "b"])
     If the module of a type is `Core` it is renamed to `Base` before hashing because the
     location of some types changes between `Core` to `Base` across julia versions.
     Likewise, the type names of AbstractArray types are made uniform
-    as their printing changes from Julia 1.6 -> 1.7. 
+    as their printing changes from Julia 1.6 -> 1.7.
 """
 stable_type_id(x) = stable_id_helper(x, Val(:type))
 
@@ -698,27 +716,8 @@ end
 
 stable_eltype_id(x) = stable_type_id(eltype(x))
 
-function cleanup_name(str)
-    # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
-    # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
-    # https://discourse.julialang.org/t/difference-between-base-and-core/37426
-    str = replace(str, r"^Core\." => "Base.")
-    str = replace(str, ", " => ",") # spacing in type names vary across minor julia versions
-    # in 1.6 and older AbstractVector and AbstractMatrix types get a `where` clause, but in
-    # later versions of julia, they do not
-    str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
-    str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
-    return str
-end
-function validate_name(str)
-    if occursin(r"\.#[^.]*$", str)
-        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value"))
-    end
-    return str
-end
-
 #####
-##### FnHash 
+##### FnHash
 #####
 
 FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
@@ -751,7 +750,7 @@ function stable_hash_helper(x, hash_state, context, root,
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method
         methodstr = nameof(typeof(method))
-        msg = """`$methodstr` is incorrectly called inside 
+        msg = """`$methodstr` is incorrectly called inside
               `hash_method(::$(typeof(x)), ::$(typeof(context))). Applying
               it would lead to infinite recursion. This can usually be
               fixed by passing a second argument to `$methodstr`."""
@@ -762,7 +761,7 @@ function stable_hash_helper(x, hash_state, context, root,
 end
 
 #####
-##### Tuples 
+##### Tuples
 #####
 
 function stable_hash_helper(x, hash_state, context, root::Union{Val{1},Val{2}},
@@ -800,7 +799,7 @@ function stable_hash_helper(x, hash_state, context, root, methods::Tuple)
 end
 
 #####
-##### HashAndContext 
+##### HashAndContext
 #####
 
 """
@@ -840,7 +839,7 @@ function stable_hash_helper(x, hash_state, context, root, method::HashAndContext
 end
 
 #####
-##### Deprecations 
+##### Deprecations
 #####
 
 # deprecations
@@ -902,7 +901,7 @@ end
     StableHashTraits.root_version(context)
 
 Return the version of the root context: an integer in the range (1, 2). The default
-fallback method value returns 1. 
+fallback method value returns 1.
 
 In almost all cases, a root hash context should return 2. The optimizations used in
 HashVersion{2} include a number of changes to the hash-trait implementations that do not
@@ -982,9 +981,17 @@ end
 function hash_method(::AbstractSet, c::HashVersion)
     return (TypeNameHash(c), FnHash(sort! ∘ collect))
 end
+function hash_method(fn::Base.Fix1, c::HashVersion{1})
+    return invoke(hash_method, Tuple{Function,typeof(c)}, fn, c)
+end
+function hash_method(fn::Base.Fix2, c::HashVersion{1})
+    return invoke(hash_method, Tuple{Function,typeof(c)}, fn, c)
+end
+hash_method(fn::Base.Fix1, c::HashVersion) = (@ConstantHash("Base.Fix1"), StructHash())
+hash_method(fn::Base.Fix2, c::HashVersion) = (@ConstantHash("Base.Fix2"), StructHash())
 
 #####
-##### TablesEq 
+##### TablesEq
 #####
 
 """
@@ -1012,7 +1019,7 @@ function hash_method(x::T, m::TablesEq) where {T}
 end
 
 #####
-##### ViewsEq 
+##### ViewsEq
 #####
 
 """
