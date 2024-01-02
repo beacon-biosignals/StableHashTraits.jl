@@ -581,71 +581,8 @@ end
 ##### Stable values for types
 #####
 
-function cleanup_name(str)
-    # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
-    # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
-    # https://discourse.julialang.org/t/difference-between-base-and-core/37426
-    str = replace(str, r"^Core\." => "Base.")
-    str = replace(str, ", " => ",") # spacing in type names vary across minor julia versions
-    # in 1.6 and older AbstractVector and AbstractMatrix types get a `where` clause, but in
-    # later versions of julia, they do not
-    str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
-    str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
-    return str
-end
-
-function validate_name(str)
-    if occursin(r"\.#[^.]*$", str)
-        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value"))
-    end
-    return str
-end
-
-qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
-qualified_name_(fn::Function) = qname_(fn, nameof)
-qualified_type_(fn::Function) = qname_(fn, string)
-qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
-qualified_type_(x::T) where {T} = qname_(T <: DataType ? x : T, string)
-qualified_(T, ::Val{:name}) = qualified_name_(T)
-qualified_(T, ::Val{:type}) = qualified_type_(T)
-# we need `Type{Val}` methods below because the generated functions that call `qualified_`
-# only have access to the type of a value
-qualified_(T, ::Type{Val{:name}}) = qualified_name_(T)
-qualified_(T, ::Type{Val{:type}}) = qualified_type_(T)
-
-# deprecate external use of `qualified_name/type`
-function qualified_name(x)
-    Base.depwarn("`qualified_name` is deprecated, favor `stable_typename_id` in all cases " *
-                 "where backwards compatible hash values are not required.",
-                 :qualified_name)
-    return qualified_name_(x)
-end
-function qualified_type(x)
-    Base.depwarn("`qualified_type` is deprecated, favor `stable_type_id` in all cases " *
-                 "where backwards compatible hash values are not required.",
-                 :qualified_type)
-    return qualified_type_(x)
-end
-
-bytes_of_val(f) = reinterpret(UInt8, [f;])
-bytes_of_val(f::Symbol) = codeunits(String(f))
-bytes_of_val(f::String) = codeunits(f)
-function hash64(x)
-    bytes = sha256(bytes_of_val(x))
-    # take the first 64 bytes of `bytes`
-    return first(reinterpret(UInt64, bytes))
-end
-function hash64(values::Tuple)
-    sha = SHA.SHA2_256_CTX()
-    for val in values
-        SHA.update!(sha, bytes_of_val(val))
-    end
-    bytes = SHA.digest!(sha)
-    # take the first 64 bytes of our hash
-    return first(reinterpret(UInt64, bytes))
-end
-
-# NOTE: using stable_{typename|type}_id increases speed by ~x10-20 vs. `qualified_name`
+# NOTE: using generated functions stable_{typename|type}_id increases speed by ~x10-20 vs.
+# calling `qualified_name` or `qualified_type` directly
 
 """
     stable_typename_id(x)
@@ -715,6 +652,70 @@ stable_typefields_id(::Type{T}) where {T} = hash64(sort_(fieldnames(T)))
 end
 
 stable_eltype_id(x) = stable_type_id(eltype(x))
+
+function cleanup_name(str)
+    # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
+    # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
+    # https://discourse.julialang.org/t/difference-between-base-and-core/37426
+    str = replace(str, r"^Core\." => "Base.")
+    str = replace(str, ", " => ",") # spacing in type names vary across minor julia versions
+    # in 1.6 and older AbstractVector and AbstractMatrix types get a `where` clause, but in
+    # later versions of julia, they do not
+    str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
+    str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
+    return str
+end
+
+function validate_name(str)
+    if occursin(r"\.#[^.]*$", str)
+        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value"))
+    end
+    return str
+end
+
+qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
+qualified_name_(fn::Function) = qname_(fn, nameof)
+qualified_type_(fn::Function) = qname_(fn, string)
+qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
+qualified_type_(x::T) where {T} = qname_(T <: DataType ? x : T, string)
+qualified_(T, ::Val{:name}) = qualified_name_(T)
+qualified_(T, ::Val{:type}) = qualified_type_(T)
+# we need `Type{Val}` methods below because the generated functions that call `qualified_`
+# only have access to the type of a value
+qualified_(T, ::Type{Val{:name}}) = qualified_name_(T)
+qualified_(T, ::Type{Val{:type}}) = qualified_type_(T)
+
+# deprecate external use of `qualified_name/type`
+function qualified_name(x)
+    Base.depwarn("`qualified_name` is deprecated, favor `stable_typename_id` in all cases " *
+                 "where backwards compatible hash values are not required.",
+                 :qualified_name)
+    return qualified_name_(x)
+end
+function qualified_type(x)
+    Base.depwarn("`qualified_type` is deprecated, favor `stable_type_id` in all cases " *
+                 "where backwards compatible hash values are not required.",
+                 :qualified_type)
+    return qualified_type_(x)
+end
+
+bytes_of_val(f) = reinterpret(UInt8, [f;])
+bytes_of_val(f::Symbol) = codeunits(String(f))
+bytes_of_val(f::String) = codeunits(f)
+function hash64(x)
+    bytes = sha256(bytes_of_val(x))
+    # take the first 64 bytes of `bytes`
+    return first(reinterpret(UInt64, bytes))
+end
+function hash64(values::Tuple)
+    sha = SHA.SHA2_256_CTX()
+    for val in values
+        SHA.update!(sha, bytes_of_val(val))
+    end
+    bytes = SHA.digest!(sha)
+    # take the first 64 bytes of our hash
+    return first(reinterpret(UInt64, bytes))
+end
 
 #####
 ##### FnHash
