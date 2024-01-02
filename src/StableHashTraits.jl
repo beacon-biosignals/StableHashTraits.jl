@@ -330,7 +330,7 @@ end
 #####
 
 # In some cases we can elide type hashes: e.g. for an array, we need not include a hash of
-# the type for each element, when we hash the type of the arry and the eltype is `Int`. More
+# the type for each element, when we hash the type of the array and the `eltype` is `Int`. More
 # generally, we can safely elide the hash of an object's type when it is in a container
 # (iterable or struct) that has its type hashed AND when that type has concrete (leaf) type
 # information about the contained type. We signal this first condition by wrapping the hash
@@ -346,13 +346,14 @@ parent_context(x::ContainerTypeIsHashed) = x.parent
 context_for_elements(x) = x
 context_for_elements(x::ContainerTypeIsHashed) = parent_context(x)
 
-# ElidedHash is a hash method that replaces type hashes (`FnHash(stable_type_id)`); when
-# actually computing a hash, it is a no-op, but it exists so that we can treat it as if it
-# were a call to `FnHash(stable_type_id)`, for purposes of propagating `ContainerTypeIsHashed`
+# ElidedHash is a hash method that replaces type hashes (e.g. `FnHash(stable_type_id)`);
+# when actually computing a hash, it is a no-op, but it exists so that we can treat it as if
+# it were a call to e.g. `FnHash(stable_type_id)`, for purposes of propagating
+# `ContainerTypeIsHashed`
 struct ElidedHash{F} end
 
 # to elide the type from a set of hash methods we remove all
-# calls to `FnHash(stable_type_id)` and replace them with `ElidedHash`
+# calls to `FnHash(fun)` and replace them with `ElidedHash{typeof(fun)}`
 function stable_type_id end
 function stable_eltype_id end
 elide_type(trait) = trait
