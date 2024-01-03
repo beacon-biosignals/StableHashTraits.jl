@@ -467,6 +467,11 @@ function fold_parsed(match, state, vals)
            length(vals) > 0 ? vals : nothing
 end
 
+# NOTE: `split_symbol_and_type` will need to handle cases where 
+# it must extract the symbol from `head` and get the type from both the
+# latter half of head and the right from the args
+# (would it help if we parsed the `::`?)
+
 function revise_named_tuples(parsed::Parsed)
     if parsed.name == :Head && endswith(parsed.args[1], "Base.@NamedTuple")
         symbols_and_types = split_symbol_and_type.(parsed.args[2:end])
