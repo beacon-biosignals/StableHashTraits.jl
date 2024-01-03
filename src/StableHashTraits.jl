@@ -4,6 +4,10 @@ export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @C
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq,
        stable_typename_id, stable_type_id
 using TupleTools, Tables, Compat
+# we need this to parse and re-arrange type string outputs in Julia 1.10 and later.
+@static if VERSION >= v"1.10" 
+    using PikaParser
+end
 using SHA: SHA, sha256
 
 """
@@ -424,7 +428,84 @@ function cleanup_name(str)
     # later versions of julia, they do not
     str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
     str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
-    return str
+    # in 1.10 NamedTuples get a cleaned up format that we need to revert
+    # to the old output
+    # str = cleanup_named_tuple_type(str)
+    return str 
+end
+
+# TODO: make const
+BracketParser = let P = PikaParser 
+    rules = Dict(
+        :element => P.some(P.satisfy(x -> x ∉ ",{()}" && !isspace(x))),
+        :space => P.satisfy(isspace),
+        :sep => P.first(P.seq(P.many(:space), P.token(','), P.many(:space)), 
+                        P.some(:space)),
+        :brackets => P.seq(P.token('{'), :clause, P.token('}')),
+        :head_brackets => P.seq(:element, :brackets),
+        :inclause => P.first(:head_brackets, :brackets, :element),
+        :clause => P.seq(:inclause, P.many(:sepclause => P.seq(:sep, :inclause))),
+    )
+    P.make_grammar([:clause], P.flatten(rules, Char))
+end
+
+struct Parsed
+    name::Symbol
+    args::Vector{Any}
+    Parsed(val, args...) = new(val, collect(args))
+end
+
+function fold_parsed(match, state, vals)
+    return match.rule ∈ (:element, :space, :sep) ? String(match.view) :
+           match.rule == :brackets ? Parsed(:Brackets, vals[2]...) :
+           match.rule == :clause ?
+           (isnothing(vals[2]) ? vals[1] : vcat(vals[1], vals[2])) :
+           match.rule == :head_brackets ? Parsed(:Head, vals...) :
+           match.rule == :sepclause ? Parsed(:SepClause, vals...) :
+           match.rule == :inclause ? vals[1] :
+           match.rule == :sep ? :sep :
+           length(vals) > 0 ? vals : nothing
+end
+
+function revise_named_tuples(parsed::Parsed)
+    if parsed.name == :Head && endswith(parsed.args[1], "Base.@NamedTuple")
+        symbols_and_types = split_symbol_and_type.(parsed.args[2:end])
+        symbol_tuple = join(":"*first.(symbols_and_types),",")
+        types = join(last.(symbols_and_types),",")
+        return "Base.NamedTuple{$symbol_tuple,Tuple{$types}}"
+    else if parsed.name == :Brackets
+        "{"*join(revise_named_tupels(parsed.args))*"}"
+    else if parsed.name == :Head
+        parsed.args[1]*revise_named_tuples(parsed.args[2])
+    else if parsed.name == :SpeClause
+        parsed.args[1]*revise_named_tuples(parsed.args[2])
+    else
+        throw(ArgumentError("Unexpected name $(parsed.name)"))
+    end
+end
+
+revise_named_tuples(parsed::AbstractString) = parsed
+
+
+function cleanup_named_tuple_type(str)
+    @static if VERSION >= v"1.10"
+        if contains(str, "@NamedTuple")
+            parsed = PikaParser.parse(BracketParser, str)
+            match = P.find_match_at!(parsed, :clause, 1)
+            folded = P.traverse_match(parsed, match; fold=fold_parsed)
+            return revise_named_tuples(folded)
+        else
+            return str
+        end
+    else
+        return str
+    end
+end
+
+function cleanup_named_tuple_type_helper(exp::Expr)
+    if exp.head == :macrocall && exp.args[1] == :(Base.var"@NamedTuple")
+        
+    end
 end
 
 function validate_name(str)
