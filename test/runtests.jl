@@ -77,7 +77,7 @@ include("setup_tests.jl")
                 @test_reference("references/ref20_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(==("test"))))
                 @test_reference("references/ref21_$(V)_$(nameof(hashfn)).txt",
-                                bytes2hex_(test_hash((1, (a=1, b=(x=1, y=2), c=(1,2))))))
+                                bytes2hex_(test_hash((1, (a=1, b=(x=1, y=2), c=(1, 2))))))
             end
 
             # verifies that transform can be called recursively
@@ -244,5 +244,5 @@ end # @testset
 @testset "Aqua" begin
     # NOTE: in Julia 1.9 and older we intentionally do not load `PikaParser`
     # as it is only used when transformer type strings in 1.10
-    Aqua.test_all(StableHashTraits, stale_deps = VERSION > v"1.9")
+    Aqua.test_all(StableHashTraits; stale_deps=VERSION >= v"1.10")
 end
