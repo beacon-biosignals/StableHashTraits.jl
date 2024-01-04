@@ -5,7 +5,7 @@ export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @C
        stable_typename_id, stable_type_id
 using TupleTools, Tables, Compat
 # we need this to parse and re-arrange type string outputs in Julia 1.10 and later.
-@static if VERSION >= v"1.10" 
+@static if VERSION >= v"1.10"
     using PikaParser
 end
 using SHA: SHA, sha256

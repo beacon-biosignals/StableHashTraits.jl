@@ -165,7 +165,6 @@ end
     # end
 end
 
-
 function cleanup_named_tuple_type(str)
     @static if VERSION >= v"1.10"
         if contains(str, "@NamedTuple")
@@ -177,4 +176,3 @@ function cleanup_named_tuple_type(str)
         return str
     end
 end
-
