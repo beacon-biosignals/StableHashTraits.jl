@@ -240,5 +240,7 @@ include("setup_tests.jl")
 end # @testset
 
 @testset "Aqua" begin
-    Aqua.test_all(StableHashTraits)
+    # NOTE: in Julia 1.9 and older we intentionally do not load `PikaParser`
+    # as it is only used when transformer type strings in 1.10
+    Aqua.test_all(StableHashTraits, stale_deps = VERSION > v"1.9")
 end
