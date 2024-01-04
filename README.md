@@ -31,6 +31,13 @@ StableHashTraits aims to guarantee a stable hash so long as you only upgrade to 
 versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an
 object's hash in this case would be considered a bug.
 
+> ⚠️ Julia 1.10 broke the stability of hashes in `StableHashTraits`; 1.1.4 corrects this
+> bug. Please use version 1.1.4, or a higher version, when using Julia 1.10. More precisely:
+> Hashes in 1 - 1.1.3 of StableHashTraits will generate the correct hashes on Julia 1.6 -
+> 1.9 but an incorrect hash in 1.10. Hashes in 1.1.4 will generate the correct hash for
+> Julia 1.6 - 1.10. (The cause of this bug was the change in the string representation
+> named tuples, so any hashed objects that include the type of a named tuple changed).
+
 ## Why use `stable_hash` instead of `Base.hash`?
 
 This package can be useful any time one of the following holds:
@@ -46,7 +53,7 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 You compute hashes using `stable_hash`. This is called on the object you want to hash, and
 (optionally) a second argument called the context. The context you use affects how hashing
 occurs (it defaults to `HashVersion{1}()`). It is generally recommended that you avoid
-`HashVerison{1}()`, favoring `HashVersion{2}()` as it include substantial speed
+`HashVersion{1}()`, favoring `HashVersion{2}()` as it include substantial speed
 improvements. See the final section below for details on
 how you can implement your own contexts. When you do not need to include a custom context, a short-hand for specifying
 `HashVersion{2}()` is to call `stable_hash(x; version=2)`. 
@@ -123,7 +130,7 @@ This release includes speed improvements of about 100 fold.
   optimized implementations used by `HashVersion{2}`.
 - **Deprecation**: `HashVersion{1}` has been deprecated, favor version 2 over 1 in all cases
   where backwards compatibility is not required.  
-- **Deprecation**: `qualified_name` and `qualified_type` have been deprected, in favor of
+- **Deprecation**: `qualified_name` and `qualified_type` have been deprecated, in favor of
   `stable_typename_id` and `stable_type_id`.
 - **Deprecation**: `ConstantHash` has been deprecated in favor of the more efficient
   `@ConstantHash`. To remove deprecated API: any call to `ConstantHash(x)` where `x` is
@@ -135,7 +142,7 @@ This release includes speed improvements of about 100 fold.
 ### In 1.0:
 
 This is a very breaking release, almost all values hash differently and the API has changed.
-However, far fewer manual defintions of `hash_method` become necessary. The fallback for
+However, far fewer manual definitions of `hash_method` become necessary. The fallback for
 `Any` should handle many more cases. 
 
 - **Breaking**: `transform` has been removed, its features are covered by `FnHash` and
