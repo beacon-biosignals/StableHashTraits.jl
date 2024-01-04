@@ -53,7 +53,7 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 You compute hashes using `stable_hash`. This is called on the object you want to hash, and
 (optionally) a second argument called the context. The context you use affects how hashing
 occurs (it defaults to `HashVersion{1}()`). It is generally recommended that you avoid
-`HashVersion{1}()`, favoring `HashVersion{2}()` as it include substantial speed
+`HashVersion{1}()`, favoring `HashVersion{2}()` as it includes substantial speed
 improvements. See the final section below for details on
 how you can implement your own contexts. When you do not need to include a custom context, a short-hand for specifying
 `HashVersion{2}()` is to call `stable_hash(x; version=2)`. 
