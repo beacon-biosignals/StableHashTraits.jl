@@ -76,6 +76,8 @@ include("setup_tests.jl")
                                 bytes2hex_(test_hash(ExtraTypeParams{:A,Int}(2))))
                 @test_reference("references/ref20_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(==("test"))))
+                @test_reference("references/ref21_$(V)_$(nameof(hashfn)).txt",
+                                bytes2hex_(test_hash((1, (a=1, b=(x=1, y=2), c=(1,2))))))
             end
 
             # verifies that transform can be called recursively
