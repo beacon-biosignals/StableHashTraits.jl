@@ -30,12 +30,12 @@ end
     # As I see it we have two options for how to handle things moving forward with 1.10: we
     # could start to create a function that generates a string (or some other stable
     # representation) from the internal representation of a type OR we can parse the string
-    # generated in 1.0 to generate the string of a type from 1.9 and lower. The former
-    # sounds super dependent on julia internals and potentially a very deep rabbit hole. It
-    # would also require replciating the older julia print output unless we want to release
-    # a breaking version of StableHashTraits. 
+    # generated in 1.0 to generate the string of a type from 1.9 and lower. The former may
+    # be the best way forward long term but would almost certainly involve changing existing
+    # hashes, and so needs to be done as a separate hash version.
 
-    # So we're going with the latter option for now.
+    # So we're going with the latter option for now to maintain the behavior from 1.9 in
+    # 1.10
 
     # We make use of PikaParser (docs linked below) as a way to generate a simple grammar
     # and parser that looks at comma and/or space separated clauses surrounded by brackets;
@@ -90,7 +90,7 @@ end
     # argument because it may need to recursively call `parse_walker(fn,...)`, and in
     # general fn could be a composition of multiple transformers, each of which would need
     # to apply the entire set of transformers passed to `parse_walker` if/when the
-    # individual transformers call it recursively 
+    # individual transformers call it recursively
     function parse_walker(fn, parsed::Parsed)
         result = fn(fn, parsed)
         !isnothing(result) && return result
@@ -118,7 +118,7 @@ end
         return mapreduce(x -> parse_walker(fn, x), *, parsed)
     end
 
-    # revise_named_tuples actually grabs a parsed named tuple type and 
+    # revise_named_tuples actually grabs a parsed named tuple type and
     # re-arranges it to the pre Julia 1.10 format. Note that we remove
     # spaces between commas because `cleanup_name` also removes those
     function revise_named_tuples(fn, parsed)
