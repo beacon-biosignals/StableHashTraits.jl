@@ -77,8 +77,8 @@ include("setup_tests.jl")
                 @test_reference("references/ref20_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(==("test"))))
             end
-
             # verifies that transform can be called recursively
+
             @testset "FnHash" begin
                 @test test_hash(GoodTransform(2)) == test_hash(GoodTransform("-0.2"))
                 @test test_hash(GoodTransform(3)) != test_hash(GoodTransform("-0.2"))
@@ -200,6 +200,42 @@ include("setup_tests.jl")
                 @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
                 @test test_hash(TestType(1, 2)) != test_hash(TestType4(2, 1))
                 @test_throws ArgumentError test_hash(BadHashMethod())
+            end
+
+            @testset "Pluto-defined strucst are stable" begin
+                notebook_str = """
+                ### A Pluto.jl notebook ###
+                # v0.19.36
+
+                using Markdown
+                using InteractiveUtils
+
+                # ╔═╡ 3592b099-9c96-4939-94b8-7ef2614b0955
+                import Pkg
+
+                # ╔═╡ 72871656-ae6e-11ee-2b23-251ac2aa38a3
+                begin
+                    Pkg.activate("$(joinpath(@__DIR__, ".."))")
+                    using StableHashTraits
+                end
+
+                # ╔═╡ b449d8e9-7ede-4171-a5ab-044c338ebae2
+                struct MyStruct end
+
+                # ╔═╡ 1e683f1d-f5f6-4064-970c-1facabcf61cc
+                StableHashTraits.stable_hash(MyStruct()) |> bytes2hex
+
+                # ╔═╡ Cell order:
+                # ╠═3592b099-9c96-4939-94b8-7ef2614b0955
+                # ╠═72871656-ae6e-11ee-2b23-251ac2aa38a3
+                # ╠═b449d8e9-7ede-4171-a5ab-044c338ebae2
+                # ╠═1e683f1d-f5f6-4064-970c-1facabcf61cc
+                """
+                nb = mktempdir() do dir
+                    path = joinpath(dir, "notebook.pluto.jl")
+                    write(path, notebook_str)
+                    Pluto.load_notebook(path)
+                end
             end
 
             if V > 2 && hashfn == sha256

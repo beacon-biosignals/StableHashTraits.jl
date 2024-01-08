@@ -59,7 +59,8 @@ end
 
 # extract contents of README so we can insert it into the some of the docstrings
 let
-    readme_file = joinpath(pkgdir(StableHashTraits), "README.md")
+    readme_file = joinpath(
+        (StableHashTraits), "README.md")
     Base.include_dependency(readme_file)
     readme = read(readme_file, String)
     traits = match(r"START_HASH_TRAITS -->(.*)<!-- END_HASH_TRAITS"s, readme).captures[1]
@@ -428,13 +429,33 @@ function cleanup_name(str)
 end
 
 function validate_name(str)
-    if occursin(r"\.#[^.]*$", str)
-        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value"))
+    if occursin(r"#[^.]*$", str)
+        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value: found type $str"))
     end
     return str
 end
 
-qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
+"""
+    is_inside_pluto(mod::Module)
+
+Returns true if the module was defined inside of a pluto notebook.
+"""
+function is_inside_pluto(mod::Module)
+    # pulled from: https://github.com/JuliaPluto/PlutoHooks.jl/blob/f6bc0a3962a700257641c3449db344cf0ddeae1d/src/notebook.jl#L89-L98
+    startswith(string(nameof(mod)), "workspace#") &&
+        isdefined(mod, Symbol("@bind"))
+end
+
+function modulestring(m::Module)
+    if is_inside_pluto(m)
+        # pluto uses anonymous modules, which can safely be replaced with a single module name
+        bytes2hex(@ConstantHash("PlutoModule"))
+    else
+        return string(m)
+    end
+end
+
+qname_(T, name) = validate_name(cleanup_name(string(modulestring(parentmodule(T)), '.', name(T))))
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_type_(fn::Function) = qname_(fn, string)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
