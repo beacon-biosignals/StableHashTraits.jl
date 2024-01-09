@@ -233,6 +233,8 @@ include("setup_tests.jl")
 
                 # ╔═╡ 1e683f1d-f5f6-4064-970c-1facabcf61cc
                 StableHashTraits.stable_hash(MyStruct()) |> bytes2hex_
+                # TODO: make a new cell for testing that this all works
+                # with nested structures
 
                 # ╔═╡ Cell order:
                 # ╠═3592b099-9c96-4939-94b8-7ef2614b0955
