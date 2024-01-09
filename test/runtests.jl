@@ -203,8 +203,6 @@ include("setup_tests.jl")
             end
 
             @testset "Pluto-defined strucst are stable" begin
-                server = Pluto.ServerSession()
-                server.options.evaluation.workspace_use_distributed = false
                 notebook_project_dir = joinpath(@__DIR__, "..")
                 @info "Notebook project: $notebook_project_dir"
 
@@ -243,6 +241,9 @@ include("setup_tests.jl")
                 # ╠═b449d8e9-7ede-4171-a5ab-044c338ebae2
                 # ╠═1e683f1d-f5f6-4064-970c-1facabcf61cc
                 """
+
+                server = Pluto.ServerSession()
+                server.options.evaluation.workspace_use_distributed = false
                 olddir = pwd()
                 nb = mktempdir() do dir
                     path = joinpath(dir, "notebook.pluto.jl")
