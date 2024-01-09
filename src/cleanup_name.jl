@@ -87,7 +87,7 @@ end
         # parsed if it finds a match starting at the first character and ending at the last
         # character of the string
         if parsed.matches[m].last != length(str)
-            throw(ParseError("Cannot properly parse type string, unable to create a stable"*
+            throw(ParseError("Cannot properly parse type string, unable to create a stable" *
                              " hash of it: " * str))
         end
         return PikaParser.traverse_match(parsed, m; fold=fold_parsed)

@@ -96,7 +96,15 @@ include("setup_tests.jl")
                       ((; kwargs...) -> test_hash(kwargs))(; b=2, a=1)
                 @test test_hash((; a=1, b=2)) != test_hash((; b=2, a=1))
                 @test test_hash((; a=1, b=2)) != test_hash((; a=2, b=1))
-                @test_throws StableHashTraits.ParseError test_hash((;a=1, b=BadShowSyntax()))
+                # Yes: this uses an internal type, that's because using the user-facing
+                # function (`stable_type_id`) runs into confusing compilation issues during
+                # CI because of the way that generated functions work. This test here is to
+                # make sure that if, for whatever reason, we fail to parse a type, we will
+                # not silently fail, creating a bad `stable_type_id`
+                if VERSION >= v"1.10"
+                    @test_throws(StableHashTraits.ParseError,
+                                 StableHashTraits.qualified_type_((; a=1, b=BadShowSyntax())))
+                end
             end
 
             # table like
