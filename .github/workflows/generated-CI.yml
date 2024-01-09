@@ -1,3 +1,5 @@
+# validates that @generated functions are used properly (not defined before any
+# functions they call into)
 name: CI
 on:
   push:
@@ -21,9 +23,6 @@ jobs:
         # julia versions
         version:
           - '1.6' # LTS
-          - '1.7'
-          - '1.8'
-          - '1.9'
         os:
           - ubuntu-latest
         arch:
@@ -45,7 +44,16 @@ jobs:
             ${{ runner.os }}-test-
             ${{ runner.os }}-
       - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
+      - name: "Run `dev StableHashTraits`"
+        shell: julia --color=yes --project {0}
+        run: |
+          using Pkg
+          Pkg.activate("test/ValidateGenerated")
+          Pkg.develop(PackageSpec(; path="."))
+      - uses: julia-actions/julia-runtest@main
+        with:
+          compiled_modules: 'no'
+          project: '@./test/ValidateGenerated'
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v2
         with:
