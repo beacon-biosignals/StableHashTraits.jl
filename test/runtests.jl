@@ -103,7 +103,8 @@ include("setup_tests.jl")
                 # not silently fail, creating a bad `stable_type_id`
                 if VERSION >= v"1.10"
                     @test_throws(StableHashTraits.ParseError,
-                                 StableHashTraits.qualified_type_((; a=1, b=BadShowSyntax())))
+                                 StableHashTraits.qualified_type_((; a=1,
+                                                                   b=BadShowSyntax())))
                 end
             end
 
