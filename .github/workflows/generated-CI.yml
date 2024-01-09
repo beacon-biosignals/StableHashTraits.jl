@@ -1,6 +1,6 @@
 # validates that @generated functions are used properly (not defined before any
 # functions they call into)
-name: CI
+name: generated-CI
 on:
   push:
     branches:
@@ -38,11 +38,9 @@ jobs:
           cache-name: cache-artifacts
         with:
           path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          key: generated-function-test-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
+            generated-function-test-
       - uses: julia-actions/julia-buildpkg@v1
       - name: "Run `dev StableHashTraits`"
         shell: julia --color=yes --project {0}
