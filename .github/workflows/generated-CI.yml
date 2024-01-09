@@ -39,10 +39,6 @@ jobs:
         with:
           path: ~/.julia/artifacts
           key: generated-function-test-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
       - uses: julia-actions/julia-buildpkg@v1
       - name: "Run `dev StableHashTraits`"
         shell: julia --color=yes --project {0}
