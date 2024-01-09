@@ -203,6 +203,9 @@ include("setup_tests.jl")
             end
 
             @testset "Pluto-defined strucst are stable" begin
+                server = Pluto.ServerSession()
+                server.options.evaluation.workspace_use_distributed = false
+
                 notebook_str = """
                 ### A Pluto.jl notebook ###
                 # v0.19.36
@@ -215,15 +218,17 @@ include("setup_tests.jl")
 
                 # ╔═╡ 72871656-ae6e-11ee-2b23-251ac2aa38a3
                 begin
-                    Pkg.activate("$(joinpath(@__DIR__, ".."))")
+                    Pkg.activate("$(joinpath(@__DIR__))")
                     using StableHashTraits
+                    bytes2hex_(x::Number) = x
+                    bytes2hex_(x) = bytes2hex(x)
                 end
 
                 # ╔═╡ b449d8e9-7ede-4171-a5ab-044c338ebae2
                 struct MyStruct end
 
                 # ╔═╡ 1e683f1d-f5f6-4064-970c-1facabcf61cc
-                StableHashTraits.stable_hash(MyStruct()) |> bytes2hex
+                StableHashTraits.stable_hash(MyStruct()) |> bytes2hex_
 
                 # ╔═╡ Cell order:
                 # ╠═3592b099-9c96-4939-94b8-7ef2614b0955
@@ -231,11 +236,19 @@ include("setup_tests.jl")
                 # ╠═b449d8e9-7ede-4171-a5ab-044c338ebae2
                 # ╠═1e683f1d-f5f6-4064-970c-1facabcf61cc
                 """
+                olddir = pwd()
                 nb = mktempdir() do dir
                     path = joinpath(dir, "notebook.pluto.jl")
                     write(path, notebook_str)
-                    Pluto.load_notebook(path)
-                end
+                    nb = Pluto.load_notebook(path)
+                    Pluto.update_run!(server, nb, nb.cells)
+                    return nb
+                end;
+                # pluto changes pwd
+                cd(olddir)
+
+                @test_reference("references/pluto_$(V)_$(nameof(hashfn)).txt",
+                                strip(nb.cells[4].output.body, '"'))
             end
 
             if V > 2 && hashfn == sha256
