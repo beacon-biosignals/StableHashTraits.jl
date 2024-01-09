@@ -1,5 +1,4 @@
 include("setup_tests.jl")
-using Infiltrator
 
 @testset "StableHashTraits.jl" begin
     bytes2hex_(x::Number) = x
@@ -251,7 +250,7 @@ using Infiltrator
                     nb = Pluto.load_notebook(path)
                     Pluto.update_run!(server, nb, nb.cells)
                     return nb
-                end;
+                end
                 # pluto changes pwd
                 cd(olddir)
 
