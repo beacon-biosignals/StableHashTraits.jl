@@ -87,12 +87,10 @@ end
         # parsed if it finds a match starting at the first character and ending at the last
         # character of the string
         if parsed.matches[m].last != length(str)
-            # TODO: how do we make a test for this... I've tried a few things and a *cannot*
-            # for the life of me get a type to print out something syntactically incorrect;
-            # overloading `Base.show` or `Base.string` didn't do the trick
-            throw(ParseError("Cannot properly parse type string, unable to create a stable hash of it: \n"*str))
+            throw(ParseError("Cannot properly parse type string, unable to create a stable"*
+                             " hash of it: " * str))
         end
-        return PikaParser.traverse_match(parsed, match; fold=fold_parsed)
+        return PikaParser.traverse_match(parsed, m; fold=fold_parsed)
     end
     # TODO: we will also probably have to do something with @Kwargs or whatnot
 

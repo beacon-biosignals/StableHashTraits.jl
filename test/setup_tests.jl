@@ -1,3 +1,9 @@
+# because of the way generated functions work, this needs to be declared before the
+# generated functions of `StableHashTraits` are loaded to properly generate the error I
+# expect
+struct BadShowSyntax end
+Base.show(io::IO, ::Type{<:BadShowSyntax}) = print(io, "{")
+
 using StableHashTraits
 using ReferenceTests
 using Aqua

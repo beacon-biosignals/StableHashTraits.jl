@@ -96,6 +96,7 @@ include("setup_tests.jl")
                       ((; kwargs...) -> test_hash(kwargs))(; b=2, a=1)
                 @test test_hash((; a=1, b=2)) != test_hash((; b=2, a=1))
                 @test test_hash((; a=1, b=2)) != test_hash((; a=2, b=1))
+                @test_throws StableHashTraits.ParseError test_hash((;a=1, b=BadShowSyntax()))
             end
 
             # table like
