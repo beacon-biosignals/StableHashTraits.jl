@@ -1,4 +1,5 @@
 include("setup_tests.jl")
+using Infiltrator
 
 @testset "StableHashTraits.jl" begin
     bytes2hex_(x::Number) = x
@@ -205,6 +206,8 @@ include("setup_tests.jl")
             @testset "Pluto-defined strucst are stable" begin
                 server = Pluto.ServerSession()
                 server.options.evaluation.workspace_use_distributed = false
+                notebook_project_dir = joinpath(@__DIR__, "..")
+                @info "Notebook project: $notebook_project_dir"
 
                 notebook_str = """
                 ### A Pluto.jl notebook ###
@@ -218,8 +221,12 @@ include("setup_tests.jl")
 
                 # ╔═╡ 72871656-ae6e-11ee-2b23-251ac2aa38a3
                 begin
-                    Pkg.activate("$(joinpath(@__DIR__))")
+                    Pkg.activate("$notebook_project_dir")
                     using StableHashTraits
+                end
+
+                # ╔═╡ 1c505fa8-75fa-4ed2-8c3f-43e28135b55d
+                begin
                     bytes2hex_(x::Number) = x
                     bytes2hex_(x) = bytes2hex(x)
                 end
@@ -233,6 +240,7 @@ include("setup_tests.jl")
                 # ╔═╡ Cell order:
                 # ╠═3592b099-9c96-4939-94b8-7ef2614b0955
                 # ╠═72871656-ae6e-11ee-2b23-251ac2aa38a3
+                # ╠═1c505fa8-75fa-4ed2-8c3f-43e28135b55d
                 # ╠═b449d8e9-7ede-4171-a5ab-044c338ebae2
                 # ╠═1e683f1d-f5f6-4064-970c-1facabcf61cc
                 """
@@ -247,8 +255,12 @@ include("setup_tests.jl")
                 # pluto changes pwd
                 cd(olddir)
 
-                @test_reference("references/pluto_$(V)_$(nameof(hashfn)).txt",
-                                strip(nb.cells[4].output.body, '"'))
+                if nb.cells[5].output.body isa Dict
+                    throw(Error("Failed notebook eval: $(nb.cells[5].output.body[:msg])"))
+                else
+                    @test_reference("references/pluto_$(V)_$(nameof(hashfn)).txt",
+                                    strip(nb.cells[5].output.body, '"'))
+                end
             end
 
             if V > 2 && hashfn == sha256

@@ -424,6 +424,14 @@ function cleanup_name(str)
     # later versions of julia, they do not
     str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
     str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
+    # cleanup pluto workspace names
+
+    # handle pluto symbols
+    # TODO: eventually, when we create hash version 3 (which will generate strings
+    # from scratch rather than leveraging `string(T)`), we should handle pluto
+    # symbols by checking `is_inside_pluto` as defined here
+    # https://github.com/JuliaPluto/PlutoHooks.jl/blob/f6bc0a3962a700257641c3449db344cf0ddeae1d/src/notebook.jl#L89-L98
+    str = replace(str, r"workspace#[0-9]+" => "PlutoWorkspace")
     return str
 end
 
@@ -434,30 +442,7 @@ function validate_name(str)
     return str
 end
 
-"""
-    is_inside_pluto(mod::Module)
-
-Returns true if the module was defined inside of a pluto notebook.
-
-TODO: replace this with an official method from `Pluto` once it is implemented
-"""
-function is_inside_pluto(mod::Module)
-    # pulled from: https://github.com/JuliaPluto/PlutoHooks.jl/blob/f6bc0a3962a700257641c3449db344cf0ddeae1d/src/notebook.jl#L89-L98
-    startswith(string(nameof(mod)), "workspace#") &&
-        isdefined(mod, Symbol("@bind"))
-end
-
-# TODO: oh wait; our problem is much worse, since we could have a pluto structure
-# nested inside some other type; this is best delt by implementing the new hash version first
-function qname_(T, name)
-    str = if is_inside_pluto(parentmodule(T))
-        _, suffix = split(string(T), '.'; limit=2)
-        "StableHashTraits.PlutoWorkspace."*suffix
-    else
-        string(parentmodule(T), '.', name(T))
-    end
-    validate_name(cleanup_name(str))
-end
+qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_type_(fn::Function) = qname_(fn, string)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
