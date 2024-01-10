@@ -421,8 +421,8 @@ end
 include("cleanup_name.jl")
 
 function validate_name(str)
-    if occursin(r"\.#[^.]*$", str)
-        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value"))
+    if occursin("#", str)
+        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value: found type $str"))
     end
     return str
 end
