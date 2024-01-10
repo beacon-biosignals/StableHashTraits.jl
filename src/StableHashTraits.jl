@@ -489,9 +489,7 @@ function qualified_type2_helper(x::Union{Function,Type})
     end
     if x isa DataType && !isempty(x.parameters)
         result *= "{" * join(qualified_type2_helper.(x.parameters), ",") * "}"
-    # PROBLEM: the type may not yet have parameters when this function is compiled
-    # (because of how generated functions work)
-    elseif x isa Function && hasproperty(typeof(x), :parameters) && !isempty(typeof(x).parameters)
+    elseif x isa Function && !isempty(typeof(x).parameters)
         result *= "{" * join(qualified_type2_helper.(typeof(x).parameters), ",") * "}"
     end
     return result
