@@ -177,6 +177,13 @@ include("setup_tests.jl")
                     @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 2))
                     @test test_hash(==("foo")) == test_hash(==("bar"))
                 end
+
+                if V > 2
+                    @test test_hash(Functor(1)) == test_hash(Functor(2))
+                    @test test_hash(Functor{Any}(1)) != test_hash(Functor(1))
+                    @test test_hash(Functor(1)) == test_hash(Functor(1))
+                else
+
                 @test_throws ArgumentError test_hash(x -> x + 1)
             end
 

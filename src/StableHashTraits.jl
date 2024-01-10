@@ -489,7 +489,9 @@ function qualified_type2_helper(x::Union{Function,Type})
     end
     if x isa DataType && !isempty(x.parameters)
         result *= "{" * join(qualified_type2_helper.(x.parameters), ",") * "}"
-    elseif x isa Function && !isempty(typeof(x).parameters)
+    # PROBLEM: the type may not yet have parameters when this function is compiled
+    # (because of how generated functions work)
+    elseif x isa Function && hasproperty(typeof(x), :parameters) && !isempty(typeof(x).parameters)
         result *= "{" * join(qualified_type2_helper.(typeof(x).parameters), ",") * "}"
     end
     return result
@@ -561,7 +563,11 @@ julia> stable_typename_id(["a", "b"])
 stable_typename_id(x) = stable_id_helper(x, Val(:name))
 stable_id_helper(::Type{T}, of::Val) where {T} = hash64(qualified_(T, of))
 @generated function stable_id_helper(x, of)
-    T = x <: Function ? x.instance : x
+    T = if x <: Function && hasproperty(x, :instance) && isdefined(x, :instance)
+        getproperty(x, :instance)
+    else
+        x
+    end
     str = qualified_(T, of)
     number = hash64(str)
     :(return $number)
@@ -861,9 +867,17 @@ end
 function hash_method(::Function, c::HashVersion{1})
     return (PrivateConstantHash("Base.Function"), FnHash(qualified_name_))
 end
-function hash_method(::Function, c::HashVersion)
+function hash_method(::Function, c::HashVersion{2})
     return (@ConstantHash("Base.Function"), TypeHash(c))
 end
+function hash_method(x::T, c::HashVersion{3}) where {T<:Function}
+    if fieldnames(T) isa Tuple{}
+        return @ConstantHash("Base.Function"), TypeHash(c)
+    else
+        return TypeHash(c), StructHash(:ByName)
+    end
+end
+
 function hash_method(::AbstractSet, c::HashVersion)
     return (TypeNameHash(c), FnHash(sort! ∘ collect))
 end

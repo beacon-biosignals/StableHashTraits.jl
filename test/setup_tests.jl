@@ -129,3 +129,8 @@ function StableHashTraits.end_nested_hash!(x::CountedBufferState, n)
     x.state = StableHashTraits.end_nested_hash!(x.state, n.state)
     return x
 end
+
+struct Functor{T} <: Function
+    val::T
+end
+(fn::Functor)(x) = fn.val + x
