@@ -414,13 +414,6 @@ end
 ##### Stable values for types
 #####
 
-@generated function stable_id_helper(x, of)
-    T = x <: Function ? x.instance : x
-    str = qualified_(T, of)
-    number = hash64(str)
-    :(return $number)
-end
-
 function cleanup_name(str)
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
     # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
@@ -499,6 +492,37 @@ function hash64(values::Tuple)
 end
 
 # NOTE: using stable_{typename|type}_id increases speed by ~x10-20 vs. `qualified_name`
+
+"""
+    stable_typename_id(x)
+
+Returns a 64 bit hash that is the same for a given type so long as the name and the module
+of the type doesn't change.
+
+## Example
+
+```jldoctest
+julia> stable_typename_id([1, 2, 3])
+0x56c6b9ca080a0aa4
+
+julia> stable_typename_id(["a", "b"])
+0x56c6b9ca080a0aa4
+```
+
+!!! note
+    If the module of a type is `Core` it is renamed to `Base` before hashing because the
+    location of some types changes between `Core` to `Base` across julia versions.
+    Likewise, the type names of AbstractArray types are made uniform
+    as their printing changes from Julia 1.6 -> 1.7.
+"""
+stable_typename_id(x) = stable_id_helper(x, Val(:name))
+stable_id_helper(::Type{T}, of::Val) where {T} = hash64(qualified_(T, of))
+@generated function stable_id_helper(x, of)
+    T = x <: Function ? x.instance : x
+    str = qualified_(T, of)
+    number = hash64(str)
+    :(return $number)
+end
 
 """
     stable_type_id(x)`
