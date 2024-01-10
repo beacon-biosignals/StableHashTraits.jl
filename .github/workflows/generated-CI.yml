@@ -50,7 +50,7 @@ jobs:
       - uses: julia-actions/julia-runtest@main
         with:
           compiled_modules: 'no'
-          project: ~/work/StableHashTraits.jl/StableHashTraits.jl/test/ValidateGenerated.jl
+          project: StableHashTraits.jl/test/ValidateGenerated.jl
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v2
         with:
