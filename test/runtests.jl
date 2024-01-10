@@ -179,10 +179,14 @@ include("setup_tests.jl")
                 end
 
                 if V > 2
-                    @test test_hash(Functor(1)) == test_hash(Functor(2))
+                    @test test_hash(Functor(1)) != test_hash(Functor(2))
                     @test test_hash(Functor{Any}(1)) != test_hash(Functor(1))
                     @test test_hash(Functor(1)) == test_hash(Functor(1))
                 else
+                    @test test_hash(Functor(1)) == test_hash(Functor(2))
+                    @test test_hash(Functor{Any}(1)) != test_hash(Functor(1))
+                    @test test_hash(Functor(1)) == test_hash(Functor(1))
+                end
 
                 @test_throws ArgumentError test_hash(x -> x + 1)
             end
