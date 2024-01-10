@@ -180,12 +180,16 @@ include("setup_tests.jl")
 
                 if V > 2
                     @test test_hash(Functor(1)) != test_hash(Functor(2))
-                    @test test_hash(Functor{Any}(1)) != test_hash(Functor(1))
                     @test test_hash(Functor(1)) == test_hash(Functor(1))
+                    @test test_hash(Functor{Any}(1)) != test_hash(Functor(1))
                 else
                     @test test_hash(Functor(1)) == test_hash(Functor(2))
-                    @test test_hash(Functor{Any}(1)) != test_hash(Functor(1))
                     @test test_hash(Functor(1)) == test_hash(Functor(1))
+                    if V == 1
+                        @test test_hash(Functor{Any}(1)) == test_hash(Functor(1))
+                    else
+                        @test test_hash(Functor{Any}(1)) != test_hash(Functor(1))
+                    end
                 end
 
                 @test_throws ArgumentError test_hash(x -> x + 1)
