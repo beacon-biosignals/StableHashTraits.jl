@@ -1,14 +1,14 @@
 # StableHashTraits
 
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
- [![GitHub Actions](https://github.com/beacon-biosignals/StableHashTraits.jl/workflows/CI/badge.svg)](https://github.com/beacon-biosignals/StableHashTraits.jl/actions/workflows/ci.yml)
+ [![GitHub Actions](https://github.com/beacon-biosignals/StableHashTraits.jl/workflows/CI/badge.svg)](https://github.com/beacon-biosignals/StableHashTraits.jl/actions/workflows/CI.yml)
  [![codecov](https://codecov.io/gh/beacon-biosignals/StableHashTraits.jl/branch/main/graph/badge.svg?token=4O1YO0GMNM)](https://codecov.io/gh/beacon-biosignals/StableHashTraits.jl)
 [![Code Style: YASGuide](https://img.shields.io/badge/code%20style-yas-violet.svg)](https://github.com/jrevels/YASGu)
 
 
 The aim of StableHashTraits is to make it easy to compute a stable hash of any Julia value
 with minimal boilerplate using trait-based dispatch; here, "stable" means the value will not
-change across Julia versions (or between Julia sessions). 
+change across Julia versions (or between Julia sessions).
 
 For example:
 
@@ -21,7 +21,7 @@ struct MyType
    metadata::Dict{Symbol, Any}
 end
 # ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
-StableHashTraits.stable_hash(::MyType) = FnHash(x -> x.data) 
+StableHashTraits.stable_hash(::MyType) = FnHash(x -> x.data)
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 stable_hash(a; version=2) == stable_hash(b; version=2) # true
@@ -56,10 +56,10 @@ occurs (it defaults to `HashVersion{1}()`). It is generally recommended that you
 `HashVersion{1}()`, favoring `HashVersion{2}()` as it includes substantial speed
 improvements. See the final section below for details on
 how you can implement your own contexts. When you do not need to include a custom context, a short-hand for specifying
-`HashVersion{2}()` is to call `stable_hash(x; version=2)`. 
+`HashVersion{2}()` is to call `stable_hash(x; version=2)`.
 
 There are sensible defaults for `stable_hash` that aim to ensure that if two values are
-different, the input to the hash algorithm will differ. 
+different, the input to the hash algorithm will differ.
 
 You can customize the hash behavior for particular types by implementing the trait
 `StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional
@@ -75,13 +75,13 @@ following values, typically based only on the *type* of its input.
 2. `IterateHash()`: assumes the object is iterable and finds a hash of all elements
 3. `StructHash([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
     the object as defined by a sequence of pairs. How precisely this occurs is determined by
-    the two arguments: 
-      - `pair` Defines how fields are extracted; the default is 
-        `fieldnames ∘ typeof => getfield` 
+    the two arguments:
+      - `pair` Defines how fields are extracted; the default is
+        `fieldnames ∘ typeof => getfield`
         but this could be changed to e.g. `propertynames => getproperty` or
         `Tables.columnnames => Tables.getcolumn`. The first element of the pair is a
         function used to compute a list of keys and the second element is a two argument
-        function used to extract the keys from the object. 
+        function used to extract the keys from the object.
       - `order` can be `:ByOrder` (the default)—which sorts by the order returned by
         `pair[1]`—or `:ByName`—which sorts by lexigraphical order.
 4. `FnHash(fn, [method])`: hash the result of applying `fn` to the given object. Optionally,
@@ -129,7 +129,7 @@ This release includes speed improvements of about 100 fold.
   existing root contexts, but should be defined to return 2 to make use of the more
   optimized implementations used by `HashVersion{2}`.
 - **Deprecation**: `HashVersion{1}` has been deprecated, favor version 2 over 1 in all cases
-  where backwards compatibility is not required.  
+  where backwards compatibility is not required.
 - **Deprecation**: `qualified_name` and `qualified_type` have been deprecated, in favor of
   `stable_typename_id` and `stable_type_id`.
 - **Deprecation**: `ConstantHash` has been deprecated in favor of the more efficient
@@ -143,19 +143,19 @@ This release includes speed improvements of about 100 fold.
 
 This is a very breaking release, almost all values hash differently and the API has changed.
 However, far fewer manual definitions of `hash_method` become necessary. The fallback for
-`Any` should handle many more cases. 
+`Any` should handle many more cases.
 
 - **Breaking**: `transform` has been removed, its features are covered by `FnHash` and
   `HashAndContext`.
 - **Breaking**: `stable_hash` no longer accepts multiple objects to hash (wrap them in a
   tuple instead); it now accepts a single object to hash, and the second positional argument
-  is the context (see below for details on contexts). 
+  is the context (see below for details on contexts).
 - **Breaking**: The default `alg` for `stable_hash` is `sha256`; to use the old default
   (crc32c) you can pass `alg=(x,s=UInt32(0)) -> crc32c(copy(x),s)`.
 - **Deprecation**: The traits to return from `hash_method` have changed quite a bit. You
   will need to replace the old names as follows to avoid deprecation warnings during your
   tests:
-    - Favor `StructHash()` (which uses `fieldnames` instead of `propertynames`) 
+    - Favor `StructHash()` (which uses `fieldnames` instead of `propertynames`)
       to `UseProperties()`.
     - *BUT* to reproduce `UseProperties()`, call `StructHash(propertynames => getproperty)`
     - Replace `UseQualifiedName()` with `FnHash(qualified_name, HashWrite())`
@@ -210,17 +210,17 @@ have to include this context as an argument when you define a method of `hash_co
 
 When you define a hash context it should normally accept a parent context that serves as a
 fallback, and return it in an implementation of the method
-`StableHashTraits.parent_context`. 
+`StableHashTraits.parent_context`.
 
 As an example, here is how we could write a context that treats all named tuples with the
-same keys and values as equivalent. 
+same keys and values as equivalent.
 
 ```julia
 struct NamedTuplesEq{T}
     parent::T
 end
 StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
-function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq) 
+function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq)
     return FnHash(stable_typename_id), StructHash(:ByName)
 end
 context = NamedTuplesEq(HashVersion{2}())
@@ -229,13 +229,13 @@ stable_hash((; a=1:2, b=1:2), context) == stable_hash((; b=1:2, a=1:2), context)
 
 If we instead defined `parent_context` to return `nothing`, our context would need to
 implement a `hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and
-`Pair` for the call to `stable_hash` above to succeed. 
+`Pair` for the call to `stable_hash` above to succeed.
 
 ### Customizing hashes within an object
 
 Contexts can be customized not only when you call `stable_hash` but also when you hash the
 contents of a particular object. This lets you change how hashing occurs within the object.
-See the docstring of `HashAndContext` for details. 
+See the docstring of `HashAndContext` for details.
 <!-- END_CONTEXTS -->
 
 ## Hashing Gotchas
@@ -248,7 +248,7 @@ julia> using StaticArrays, StableHashTraits;
 
 julia> begin
         rotmatrix2d(a) = @SMatrix [cos(a) sin(a); -sin(a) cos(a)]
-        rotate(a, p) = rotmatrix2d(a) * p 
+        rotate(a, p) = rotmatrix2d(a) * p
         rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
     end;
 ```

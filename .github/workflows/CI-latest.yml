@@ -1,4 +1,4 @@
-name: CI
+name: CI-latest
 on:
   push:
     branches:
@@ -20,11 +20,6 @@ jobs:
         # we test on all versions back to LTS because we want to test for stability across
         # julia versions
         version:
-          - '1.6' # LTS
-          - '1.7'
-          - '1.8'
-          - '1.9'
-          - '1.10'
           - 'nightly'
         os:
           - ubuntu-latest
@@ -49,8 +44,3 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-runtest@v1
-      - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v2
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: lcov.info
