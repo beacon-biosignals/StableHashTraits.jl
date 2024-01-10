@@ -19,8 +19,8 @@ these fallback methods will not change even if new fallbacks are defined.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
-        V <= 3 && Base.depwarn("HashVersion{V} for V < 3 is deprecated, favor "*
-                               "`HashVersion{3}` in all cases where backwards compatible "*
+        V <= 3 && Base.depwarn("HashVersion{V} for V < 3 is deprecated, favor " *
+                               "`HashVersion{3}` in all cases where backwards compatible " *
                                "hash values are not required.", :HashVersion)
         return new{V}()
     end
@@ -464,14 +464,14 @@ Returns true if the module was defined inside of a pluto notebook.
 """
 function is_inside_pluto(mod::Module)
     # pulled from: https://github.com/JuliaPluto/PlutoHooks.jl/blob/f6bc0a3962a700257641c3449db344cf0ddeae1d/src/notebook.jl#L89-L98
-    startswith(string(nameof(mod)), "workspace#") &&
+    return startswith(string(nameof(mod)), "workspace#") &&
         isdefined(mod, Symbol("@bind"))
 end
 
 qualified_type2_(x::Function) = validate_name(qualified_type2_helper(x))
 qualified_type2_(::Type{T}) where {T} = validate_name(qualified_type2_helper(T))
 qualified_type2_(::T) where {T} = validate_name(qualified_type2_helper(T))
-function qualified_type2_helper(x::Union{Function, Type})
+function qualified_type2_helper(x::Union{Function,Type})
     # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
     # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
     # https://discourse.julialang.org/t/difference-between-base-and-core/37426
@@ -839,7 +839,8 @@ function hash_method(::AbstractArray, c::HashVersion)
     return (TypeNameHash(c), FnHash(size), IterateHash())
 end
 function hash_method(::AbstractString, c::HashVersion{V}) where {V}
-    return (FnHash(V > 2 ? stable_type_id(; version=2) : V == 2 ? stable_type_id : qualified_name, WriteHash()),
+    return (FnHash(V > 2 ? stable_type_id(; version=2) :
+                   V == 2 ? stable_type_id : qualified_name, WriteHash()),
             WriteHash())
 end
 hash_method(::Symbol, ::HashVersion{1}) = (PrivateConstantHash(":"), WriteHash())
