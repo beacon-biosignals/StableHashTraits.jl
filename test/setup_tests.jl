@@ -9,6 +9,7 @@ using CRC32c
 using DataFrames
 using Tables
 using AWSS3
+using Pluto
 
 struct TestType
     a::Any

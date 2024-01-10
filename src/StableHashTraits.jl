@@ -424,12 +424,25 @@ function cleanup_name(str)
     # later versions of julia, they do not
     str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
     str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
+    # cleanup pluto workspace names
+
+    # handle pluto symbols
+
+    # TODO: eventually, when we create hash version 3 (which will generate strings from
+    # scratch rather than leveraging `string(T)`), we should handle pluto symbols by
+    # checking `is_inside_pluto` as defined here
+    # https://github.com/JuliaPluto/PlutoHooks.jl/blob/f6bc0a3962a700257641c3449db344cf0ddeae1d/src/notebook.jl#L89-L98
+
+    # NOTE: in more recent julia versions (>= 1.8) the values are surrounded by `var`
+    # qualifiers
+    str = replace(str, r"var\"workspace#[0-9]+\"" => "PlutoWorkspace")
+    str = replace(str, r"workspace#[0-9]+" => "PlutoWorkspace")
     return str
 end
 
 function validate_name(str)
-    if occursin(r"\.#[^.]*$", str)
-        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value"))
+    if occursin("#", str)
+        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value: found type $str"))
     end
     return str
 end
