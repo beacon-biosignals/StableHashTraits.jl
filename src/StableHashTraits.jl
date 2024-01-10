@@ -545,7 +545,7 @@ of the type doesn't change.
 ## Example
 
 ```jldoctest
-julia> stable_typename_id([1, 2, 3])
+julia> stable_typename_id([1, 2, 3];)
 0x56c6b9ca080a0aa4
 
 julia> stable_typename_id(["a", "b"])
@@ -581,10 +581,10 @@ of `stable_type_id` passed to the currying function.
 
 ```jldoctest
 julia> stable_type_id([1, 2, 3]; version=2)
-0xfd5878e59e259648
+0xd6c546646e68f67e
 
 julia> stable_type_id(["a", "b"]; version=2)
-0xe191f67c4c8e3370
+0x876c54d6c97ec6b3
 ```
 
 !!! note
