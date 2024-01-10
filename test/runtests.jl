@@ -26,7 +26,7 @@ include("setup_tests.jl")
         @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
     end
 
-    for V in (1, 2), hashfn in (sha256, sha1, crc32c)
+    for V in (1, 2, 3), hashfn in (sha256, sha1, crc32c)
         hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
@@ -306,10 +306,13 @@ include("setup_tests.jl")
         @test_deprecated(UseProperties(:ByName))
         @test_deprecated(qualified_name("bob"))
         @test_deprecated(qualified_type("bob"))
+        @test_deprecated(stable_type_id("bob"))
         @test_deprecated(UseQualifiedName())
         @test_deprecated(UseSize(UseIterate()))
         @test_deprecated(ConstantHash("foo"))
         @test_deprecated(UseTable())
+        @test_deprecated(HashVersion{1}())
+        @test_deprecated(HashVersion{2}())
     end
 end # @testset
 
