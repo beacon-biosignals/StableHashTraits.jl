@@ -19,8 +19,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # we test on all versions back to LTS because we want to test for stability across
-        # julia versions
         version:
           - '1.6' # LTS
         os:
