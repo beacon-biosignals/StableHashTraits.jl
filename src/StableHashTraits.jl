@@ -465,7 +465,7 @@ Returns true if the module was defined inside of a pluto notebook.
 function is_inside_pluto(mod::Module)
     # pulled from: https://github.com/JuliaPluto/PlutoHooks.jl/blob/f6bc0a3962a700257641c3449db344cf0ddeae1d/src/notebook.jl#L89-L98
     return startswith(string(nameof(mod)), "workspace#") &&
-        isdefined(mod, Symbol("@bind"))
+           isdefined(mod, Symbol("@bind"))
 end
 
 qualified_type2_(x::Function) = validate_name(qualified_type2_helper(x))
