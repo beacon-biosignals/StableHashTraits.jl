@@ -232,9 +232,10 @@ include("setup_tests.jl")
                 struct MyStruct end
 
                 # ╔═╡ 1e683f1d-f5f6-4064-970c-1facabcf61cc
-                StableHashTraits.stable_hash(MyStruct()) |> bytes2hex_
-                # TODO: make a new cell for testing that this all works
-                # with nested structures
+                stable_hash(MyStruct()) |> bytes2hex_
+
+                # ╔═╡ f8f3a7a4-544f-456f-ac63-5b5ce91a071a
+                stable_hash((a=MyStruct, b=(c=MyStruct(), d=2))) |> bytes2hex_
 
                 # ╔═╡ Cell order:
                 # ╠═3592b099-9c96-4939-94b8-7ef2614b0955
@@ -242,6 +243,7 @@ include("setup_tests.jl")
                 # ╠═1c505fa8-75fa-4ed2-8c3f-43e28135b55d
                 # ╠═b449d8e9-7ede-4171-a5ab-044c338ebae2
                 # ╠═1e683f1d-f5f6-4064-970c-1facabcf61cc
+                # ╠═f8f3a7a4-544f-456f-ac63-5b5ce91a071a
                 """
 
                 server = Pluto.ServerSession()
@@ -257,11 +259,20 @@ include("setup_tests.jl")
                 # pluto changes pwd
                 cd(olddir)
 
+                # NOTE: V refers to the hash version currently in loose
+                # its the `for` loop at the top of this file
                 if nb.cells[5].output.body isa Dict
                     throw(Error("Failed notebook eval: $(nb.cells[5].output.body[:msg])"))
                 else
-                    @test_reference("references/pluto_$(V)_$(nameof(hashfn)).txt",
+                    @test_reference("references/pluto01_$(V)_$(nameof(hashfn)).txt",
                                     strip(nb.cells[5].output.body, '"'))
+                end
+
+                if nb.cells[6].output.body isa Dict
+                    throw(Error("Failed notebook eval: $(nb.cells[6].output.body[:msg])"))
+                else
+                    @test_reference("references/pluto02_$(V)_$(nameof(hashfn)).txt",
+                                    strip(nb.cells[6].output.body, '"'))
                 end
             end
 
