@@ -324,11 +324,81 @@ include("setup_tests.jl")
         @test_deprecated(ConstantHash("foo"))
         @test_deprecated(UseTable())
     end
+
+    if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
+        @testset "PikaParser" begin
+            using StableHashTraits.StableNames: parse_brackets, parse_walker, Parsed,
+                                                ParseError, cleanup_named_tuple_type
+
+            # verify parser output
+            @test parse_brackets("bob") == ["bob"]
+            # all we care about are spaces and ,
+            @test parse_brackets("fjkdls;fejiel;e;afjkdls;klfj-----@") == ["fjkdls;fejiel;e;afjkdls;klfj-----@"]
+            @test parse_brackets("bob joe") == ["bob", Parsed(:SepClause, " ", "joe")]
+            @test parse_brackets("bob, joe") == ["bob", Parsed(:SepClause, ", ", "joe")]
+            @test parse_brackets("bob, joe, ") == ["bob", Parsed(:SepClause, ", ", "joe"), ", "]
+            @test parse_brackets("bob,joe") == ["bob", Parsed(:SepClause, ",", "joe")]
+            @test parse_brackets("{bob, joe}") ==
+                Any[Parsed(:Brackets, "bob", Parsed(:SepClause, ", ", "joe"))]
+            @test parse_brackets("foo{bob, joe}") ==
+                  Any[Parsed(:Head, "foo",
+                             Parsed(:Brackets, "bob", Parsed(:SepClause, ", ", "joe")))]
+            @test parse_brackets("foo {bob, joe}") ==
+                  Any["foo",
+                      Parsed(:SepClause, " ",
+                             Parsed(:Brackets, "bob", Parsed(:SepClause, ", ", "joe")))]
+            @test parse_brackets("foo{bar{baz, biz}, boz}") ==
+                  Any[Parsed(:Head, "foo",
+                             Parsed(:Brackets,
+                                    Parsed(:Head, "bar",
+                                           Parsed(:Brackets, "baz",
+                                                  Parsed(:SepClause, ", ", "biz"))),
+                                    Parsed(:SepClause, ", ", "boz")))]
+            @test parse_brackets("{, joe}") == Any[Parsed(:Brackets, ", ", "joe")]
+
+            # various invalid strings
+            @test_throws ParseError parse_brackets("{ joe{bob, bill} }}")
+            @test_throws ParseError parse_brackets("{{ joe{bob, bill} }")
+            @test_throws ParseError parse_brackets("{ joe{bob,} bill} }")
+            @test_throws ParseError parse_brackets("{ joe{bob, {bill} }")
+
+            # verify parser round-trip
+            round_trips(str) = parse_walker((fn, p) -> nothing, parse_brackets(str)) == str
+            @test round_trips("bob")
+            @test round_trips("bob joe")
+            @test round_trips("bob, joe")
+            @test round_trips("bob,joe")
+            @test round_trips("{bob, joe}")
+            @test round_trips("foo{bob, joe}")
+            @test round_trips("foo {bob, joe}")
+            @test round_trips("foo{bar{baz, biz}, boz}")
+
+            # verify that we can replace an element in various locations using
+            # parse_walker's second argument
+            replace_bob(str) = parse_walker((fn, p) -> p == "bob" ? "BOB" : nothing,
+                                            parse_brackets(str))
+            @test replace_bob("bob") == "BOB"
+            @test replace_bob("bob joe") == "BOB joe"
+            @test replace_bob("bob, joe") == "BOB, joe"
+            @test replace_bob("bob,joe") == "BOB,joe"
+            @test replace_bob("{bob, joe}") == "{BOB, joe}"
+            @test replace_bob("foo{bob, joe}") == "foo{BOB, joe}"
+            @test replace_bob("foo {bob, joe}") == "foo {BOB, joe}"
+            @test replace_bob("foo{bar{baz, biz}, boz}") == "foo{bar{baz, biz}, boz}"
+
+            # validate the named tuple replaceer
+            @test cleanup_named_tuple_type("@NamedTuple{x::Int, y::Int}") ==
+                  "NamedTuple{(:x,:y),Tuple{Int,Int}}"
+            @test cleanup_named_tuple_type("FooBar{Baz{Float64, (custom, display(}, " *
+                                           "@NamedTuple{x::Int, y::Int}}") ==
+                  "FooBar{Baz{Float64, (custom, display(}, NamedTuple{(:x,:y),Tuple{Int,Int}}}"
+        end
+    end
 end # @testset
 
 @testset "Aqua" begin
     # NOTE: in Julia 1.9 and older we intentionally do not load `PikaParser`
-    # as it is only used when transformer type strings in 1.10
+    # as it is only used when transforming type strings in 1.10
     if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
         Aqua.test_all(StableHashTraits)
     else

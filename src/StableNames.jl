@@ -1,3 +1,12 @@
+module StableNames
+
+const NAMED_TUPLES_PRETTY_PRINT_VERSION = v"1.10.0-DEV.885"
+
+# we need this to parse and re-arrange type string outputs in Julia 1.10 and later.
+@static if VERSION >= NAMED_TUPLES_PRETTY_PRINT_VERSION
+    using PikaParser
+end
+
 # NOTE: over time, generating a stable name for a type that is consistent across julia
 # versions has become quite complicated. In particular, julia has not considered the string
 # output of a type to be a breaking change and so minor versions often include improvements
@@ -64,10 +73,10 @@ end
                      :brackets => P.seq(P.token('{'), :clause, P.token('}')),
                      :head_brackets => P.seq(:element, :brackets),
                      :inclause => P.first(:head_brackets, :brackets, :element),
-                     :clause => P.seq(P.many(:space),
+                     :clause => P.seq(P.many(:sep),
                                       :inclause,
                                       P.many(:sepclause => P.seq(:sep, :inclause)),
-                                      P.many(:space)))
+                                      P.many(:sep)))
         P.make_grammar([:clause], P.flatten(rules, Char))
     end
 
@@ -75,6 +84,11 @@ end
         name::Symbol
         args::Vector{Any}
         Parsed(val, args...) = new(val, collect(args))
+    end
+    function Base.:(==)(x::Parsed, y::Parsed)
+        x.name != y.name && return false
+        any(xa != ya for (xa, ya) in zip(x.args, y.args)) && return false
+        return true
     end
 
     function fold_parsed(match, state, vals)
@@ -107,7 +121,7 @@ end
         # NOTE: pika parser is robust to errors; we only know that the string was fully
         # parsed if it finds a match starting at the first character and ending at the last
         # character of the string
-        if parsed.matches[m].last != length(str)
+        if m === 0 || parsed.matches[m].last != length(str)
             throw(ParseError("Cannot properly parse type string, unable to create a stable" *
                              " hash of it: " * str))
         end
@@ -195,11 +209,14 @@ end
     #         return nothing
     #     end
     # end
+
+    @inline function cleanup_named_tuple_type(str)
+        if contains(str, "@NamedTuple")
+            return parse_walker(revise_named_tuples, parse_brackets(str))
+        end
+    end
+else
+    @inline cleanup_named_tuple_type(str) = str
 end
 
-@inline function cleanup_named_tuple_type(str)
-    if VERSION >= NAMED_TUPLES_PRETTY_PRINT_VERSION && contains(str, "@NamedTuple")
-        return parse_walker(revise_named_tuples, parse_brackets(str))
-    end
-    return str
 end

@@ -1,15 +1,11 @@
 module StableHashTraits
 
-const NAMED_TUPLES_PRETTY_PRINT_VERSION = v"1.10.0-DEV.885"
+include("StableNames.jl"); using .StableNames: cleanup_name, NAMED_TUPLES_PRETTY_PRINT_VERSION
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq,
        stable_typename_id, stable_type_id
 using TupleTools, Tables, Compat
-# we need this to parse and re-arrange type string outputs in Julia 1.10 and later.
-@static if VERSION >= NAMED_TUPLES_PRETTY_PRINT_VERSION
-    using PikaParser
-end
 using SHA: SHA, sha256
 
 """
@@ -419,8 +415,6 @@ end
 #####
 ##### Stable values for types
 #####
-
-include("cleanup_name.jl")
 
 function validate_name(str)
     if occursin("#", str)
