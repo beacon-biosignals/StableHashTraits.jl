@@ -96,12 +96,13 @@ include("setup_tests.jl")
                       ((; kwargs...) -> test_hash(kwargs))(; b=2, a=1)
                 @test test_hash((; a=1, b=2)) != test_hash((; b=2, a=1))
                 @test test_hash((; a=1, b=2)) != test_hash((; a=2, b=1))
-                # Yes: this uses an internal type, that's because using the user-facing
-                # function (`stable_type_id`) runs into confusing compilation issues during
-                # CI because of the way that generated functions work. This test here is to
-                # make sure that if, for whatever reason, we fail to parse a type, we will
-                # not silently fail, creating a bad `stable_type_id`
-                if VERSION >= v"1.10"
+                # One might want to tes this using `stable_type_id`, however this uses an
+                # internal function (`qualified_type_`) because otherwise this runs into
+                # confusing compilation issues during CI because of the way that generated
+                # functions work. This test here is to make sure that if, for whatever
+                # reason, we fail to parse a type, we will not silently fail, creating a bad
+                # `stable_type_id`.
+                if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
                     @test_throws(StableHashTraits.ParseError,
                                  StableHashTraits.qualified_type_((; a=1,
                                                                    b=BadShowSyntax())))
@@ -328,5 +329,9 @@ end # @testset
 @testset "Aqua" begin
     # NOTE: in Julia 1.9 and older we intentionally do not load `PikaParser`
     # as it is only used when transformer type strings in 1.10
-    Aqua.test_all(StableHashTraits; stale_deps=VERSION >= v"1.10")
+    if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
+        Aqua.test_all(StableHashTraits)
+    else
+        Aqua.test_all(StableHashTraits; ignore=[:PikaParser])
+    end
 end

@@ -39,11 +39,11 @@ function cleanup_name(str)
     return str
 end
 
-@static if VERSION >= v"1.10"
+@static if VERSION >= NAMED_TUPLES_PRETTY_PRINT_VERSION
     # As I see it we have two options for how to handle things moving forward with 1.10: we
     # could start to create a function that generates a string (or some other stable
     # representation) from the internal representation of a type OR we can parse the string
-    # generated in 1.0 to generate the string of a type from 1.9 and lower. The former may
+    # generated in 1.10 to generate the string of a type from 1.9 and lower. The former may
     # be the best way forward long term but would almost certainly involve changing existing
     # hashes, and so needs to be done as a separate hash version.
 
@@ -78,13 +78,21 @@ end
     end
 
     function fold_parsed(match, state, vals)
-        return match.rule ∈ (:element, :space, :sep) ? String(match.view) :
-               match.rule == :brackets ? Parsed(:Brackets, vals[2]...) :
-               match.rule == :clause ? reduce(vcat, filter(!isnothing, vals); init=[]) :
-               match.rule == :head_brackets ? Parsed(:Head, vals...) :
-               match.rule == :sepclause ? Parsed(:SepClause, vals...) :
-               match.rule == :inclause ? vals[1] :
-               length(vals) > 0 ? vals : nothing
+        return if match.rule ∈ (:element, :space, :sep)
+            String(match.view)
+        elseif match.rule == :brackets
+            Parsed(:Brackets, vals[2]...)
+        elseif match.rule == :clause
+            reduce(vcat, filter(!isnothing, vals); init=[])
+        elseif match.rule == :head_brackets
+            Parsed(:Head, vals...)
+        elseif match.rule == :sepclause
+            Parsed(:SepClause, vals...)
+        elseif match.rule == :inclause
+            vals[1]
+        else
+            length(vals) > 0 ? vals : nothing
+        end
     end
 
     struct ParseError <: Exception
@@ -189,14 +197,9 @@ end
     # end
 end
 
-function cleanup_named_tuple_type(str)
-    @static if VERSION >= v"1.10"
-        if contains(str, "@NamedTuple")
-            return parse_walker(revise_named_tuples, parse_brackets(str))
-        else
-            return str
-        end
-    else
-        return str
+@inline function cleanup_named_tuple_type(str)
+    if VERSION >= NAMED_TUPLES_PRETTY_PRINT_VERSION && if contains(str, "@NamedTuple")
+        return parse_walker(revise_named_tuples, parse_brackets(str))
     end
+    return str
 end
