@@ -1,6 +1,6 @@
 module StableHashTraits
 
-const NAMED_TUPLES_PRETTY_PRINT_VERSION = v"1.10" # TODO: find exact version (in progress...)
+const NAMED_TUPLES_PRETTY_PRINT_VERSION = v"1.10.0-DEV.885"
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq,
