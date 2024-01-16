@@ -198,7 +198,7 @@ end
 end
 
 @inline function cleanup_named_tuple_type(str)
-    if VERSION >= NAMED_TUPLES_PRETTY_PRINT_VERSION && if contains(str, "@NamedTuple")
+    if VERSION >= NAMED_TUPLES_PRETTY_PRINT_VERSION && contains(str, "@NamedTuple")
         return parse_walker(revise_named_tuples, parse_brackets(str))
     end
     return str
