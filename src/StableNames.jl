@@ -214,6 +214,7 @@ end
         if contains(str, "@NamedTuple")
             return parse_walker(revise_named_tuples, parse_brackets(str))
         end
+        return str
     end
 else
     @inline cleanup_named_tuple_type(str) = str
