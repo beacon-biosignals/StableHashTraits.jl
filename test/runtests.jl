@@ -97,12 +97,11 @@ include("setup_tests.jl")
                 @test test_hash((; a=1, b=2)) != test_hash((; b=2, a=1))
                 @test test_hash((; a=1, b=2)) != test_hash((; a=2, b=1))
                 # Validate that badly printed types properly error, rather than silently
-                # producing a bad typestring with an unstable type id One might want to test
-                # this using `stable_type_id`, however this uses an internal function
-                # (`qualified_type_`) because otherwise this runs into confusing compilation
-                # issues during CI because of the way that generated functions work. This
-                # test here is to make sure that if, for whatever reason, we fail to parse a
-                # type, we will not silently fail, creating a bad `stable_type_id`.
+                # producing a bad typestring with an unstable type id. NOTE: One might want
+                # to test this using `stable_type_id`, however this uses an internal
+                # function (`qualified_type_`) because otherwise this runs into confusing
+                # compilation issues during CI because of the way that generated functions
+                # work.
                 if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
                     @test_throws(StableHashTraits.StableNames.ParseError,
                                  StableHashTraits.qualified_type_((; a=1,
