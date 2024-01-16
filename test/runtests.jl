@@ -332,6 +332,6 @@ end # @testset
     if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
         Aqua.test_all(StableHashTraits)
     else
-        Aqua.test_all(StableHashTraits; ignore=[:PikaParser])
+        Aqua.test_all(StableHashTraits; test_stale_dpes=(; ignore=[:PikaParser]))
     end
 end
