@@ -332,14 +332,16 @@ include("setup_tests.jl")
 
             # verify parser output
             @test parse_brackets("bob") == ["bob"]
-            # all we care about are spaces and ,
-            @test parse_brackets("fjkdls;fejiel;e;afjkdls;klfj-----@") == ["fjkdls;fejiel;e;afjkdls;klfj-----@"]
+            # all we care about are spaces {, }, and ","
+            @test parse_brackets("fjkdls;fejiel;e;afjkdls;klfj-----@") ==
+                  ["fjkdls;fejiel;e;afjkdls;klfj-----@"]
             @test parse_brackets("bob joe") == ["bob", Parsed(:SepClause, " ", "joe")]
             @test parse_brackets("bob, joe") == ["bob", Parsed(:SepClause, ", ", "joe")]
-            @test parse_brackets("bob, joe, ") == ["bob", Parsed(:SepClause, ", ", "joe"), ", "]
+            @test parse_brackets("bob, joe, ") ==
+                  ["bob", Parsed(:SepClause, ", ", "joe"), ", "]
             @test parse_brackets("bob,joe") == ["bob", Parsed(:SepClause, ",", "joe")]
             @test parse_brackets("{bob, joe}") ==
-                Any[Parsed(:Brackets, "bob", Parsed(:SepClause, ", ", "joe"))]
+                  Any[Parsed(:Brackets, "bob", Parsed(:SepClause, ", ", "joe"))]
             @test parse_brackets("foo{bob, joe}") ==
                   Any[Parsed(:Head, "foo",
                              Parsed(:Brackets, "bob", Parsed(:SepClause, ", ", "joe")))]
@@ -385,6 +387,7 @@ include("setup_tests.jl")
             @test replace_bob("foo{bob, joe}") == "foo{BOB, joe}"
             @test replace_bob("foo {bob, joe}") == "foo {BOB, joe}"
             @test replace_bob("foo{bar{baz, biz}, boz}") == "foo{bar{baz, biz}, boz}"
+            @test replace_bob("foo{bar{baz, bob}, boz}") == "foo{bar{baz, BOB}, boz}"
 
             # validate the named tuple replaceer
             @test cleanup_named_tuple_type("@NamedTuple{x::Int, y::Int}") ==

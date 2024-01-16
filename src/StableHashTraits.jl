@@ -1,6 +1,7 @@
 module StableHashTraits
 
-include("StableNames.jl"); using .StableNames: cleanup_name, NAMED_TUPLES_PRETTY_PRINT_VERSION
+include("StableNames.jl")
+using .StableNames: cleanup_name, NAMED_TUPLES_PRETTY_PRINT_VERSION
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq,
