@@ -1,4 +1,6 @@
-name: CI
+# validates that @generated functions are used properly (not defined before any
+# functions they call into)
+name: generated-CI
 on:
   push:
     branches:
@@ -17,13 +19,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # we test on all versions back to LTS because we want to test for stability across
-        # julia versions
         version:
           - '1.6' # LTS
-          - '1.7'
-          - '1.8'
-          - '1.9'
         os:
           - ubuntu-latest
         arch:
@@ -39,16 +36,17 @@ jobs:
           cache-name: cache-artifacts
         with:
           path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
+          key: generated-function-test-${{ hashFiles('**/Project.toml') }}
       - uses: julia-actions/julia-buildpkg@v1
+      - name: "Run `dev StableHashTraits`"
+        shell: julia --color=yes --project {0}
+        run: |
+          using Pkg
+          Pkg.activate("test/ValidateGenerated")
+          Pkg.develop(PackageSpec(; path="."))
+          Pkg.status()
       - uses: julia-actions/cache@v1
-      - uses: julia-actions/julia-runtest@v1
-      - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v2
+      - uses: julia-actions/julia-runtest@main
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: lcov.info
+          compiled_modules: 'no'
+          project: test/ValidateGenerated

@@ -1,0 +1,16 @@
+name = "ValidateGenerated"
+uuid = "2414485e-96d5-4872-b4c7-bad906d11ec1"
+authors = ["Beacon Biosignals, Inc."]
+version = "0.1.0"
+
+[deps]
+CRC32c = "8bf52ea8-c179-5cab-976a-9e18b702a9bc"
+StableHashTraits = "c5dd0088-6c3f-4803-b00e-f31a60c170fa"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+CRC32c = "8bf52ea8-c179-5cab-976a-9e18b702a9bc"
+StableHashTraits = "c5dd0088-6c3f-4803-b00e-f31a60c170fa"
+
+[targets]
+test = ["Test", "CRC32c", "StableHashTraits"]
