@@ -87,7 +87,7 @@ end
     end
     function Base.:(==)(x::Parsed, y::Parsed)
         x.name != y.name && return false
-        any(xa != ya for (xa, ya) in zip(x.args, y.args)) && return false
+        x.args != y.args && return false
         return true
     end
 

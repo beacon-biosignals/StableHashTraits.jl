@@ -31,13 +31,13 @@ StableHashTraits aims to guarantee a stable hash so long as you only upgrade to 
 versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an
 object's hash in this case would be considered a bug.
 
-> ⚠️ Julia 1.10 broke the stability of hashes in `StableHashTraits`; 1.1.5 corrects this
-> bug. Versions 1.1.4 are to be retroactively marked as incompatible with Julia 1.10. Please
-> use version 1.1.5, or a higher version, when using Julia 1.10. More precisely: Hashes in 1
-> - 1.1.4 of StableHashTraits will generate the correct hashes on Julia 1.6 - 1.9 but an
-> incorrect hash in 1.10. Hashes in 1.1.5 will generate the correct hash for Julia 1.6 -
-> 1.10. (The cause of this bug was the change in the string representation named tuples, so
-> any hashed objects that include the type of a named tuple changed).
+> ⚠️ In Julia 1.10 the stability of hashes in `StableHashTraits` is broken; 1.1.5 corrects
+> this bug. Versions 1.1.4 are to be retroactively marked as incompatible with Julia 1.10.
+> Please use version 1.1.5, or a higher version, when using Julia 1.10. More precisely:
+> Hashes in 1 - 1.1.4 of StableHashTraits will generate the correct hashes on Julia 1.6 -
+> 1.9 but an incorrect hash in 1.10. Hashes in 1.1.5 will generate the correct hash for
+> Julia 1.6 - 1.10. (The cause of this bug was the change in the string representation of
+> named tuples, so any hashed objects that include the type of a named tuple changed).
 
 ## Why use `stable_hash` instead of `Base.hash`?
 
