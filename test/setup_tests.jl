@@ -129,3 +129,6 @@ function StableHashTraits.end_nested_hash!(x::CountedBufferState, n)
     x.state = StableHashTraits.end_nested_hash!(x.state, n.state)
     return x
 end
+
+struct BadShowSyntax end
+Base.show(io::IO, ::Type{<:BadShowSyntax}) = print(io, "{")
