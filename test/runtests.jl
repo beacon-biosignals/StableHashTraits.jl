@@ -99,12 +99,12 @@ include("setup_tests.jl")
                 # Validate that badly printed types properly error, rather than silently
                 # producing a bad typestring with an unstable type id. NOTE: One might want
                 # to test this using `stable_type_id`, however this uses an internal
-                # function (`qualified_type_`) because otherwise this runs into confusing
+                # function (`qualified_type1_`) because otherwise this runs into confusing
                 # compilation issues during CI because of the way that generated functions
                 # work.
                 if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
                     @test_throws(StableHashTraits.StableNames.ParseError,
-                                 StableHashTraits.qualified_type_((; a=1,
+                                 StableHashTraits.qualified_type1_((; a=1,
                                                                    b=BadShowSyntax())))
                 end
             end
