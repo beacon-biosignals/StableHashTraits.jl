@@ -31,13 +31,12 @@ StableHashTraits aims to guarantee a stable hash so long as you only upgrade to 
 versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an
 object's hash in this case would be considered a bug.
 
-> ⚠️ In Julia 1.10 the stability of hashes in `StableHashTraits` is broken; 1.1.5 corrects
-> this bug. Versions 1.1.4 are to be retroactively marked as incompatible with Julia 1.10.
-> Please use version 1.1.5, or a higher version, when using Julia 1.10. More precisely:
-> Hashes in 1 - 1.1.4 of StableHashTraits will generate the correct hashes on Julia 1.6 -
-> 1.9 but an incorrect hash in 1.10. Hashes in 1.1.5 will generate the correct hash for
-> Julia 1.6 - 1.10. (The cause of this bug was the change in the string representation of
-> named tuples, so any hashed objects that include the type of a named tuple changed).
+> ⚠️ Hash versions 1 and 2 are deprecated and their use is strongly discouraged; use hash
+> version 3 or later (available in StableHashTraits v1.2 and later). In Julia 1.10 the
+> stability of hashes for hash version 1 and 2 in `StableHashTraits` is broken; 1.1.5
+> corrects this bug. Versions 1.1.4 were retroactively marked as incompatible with Julia
+> 1.10. StableHashTraits will release a breaking version (2.0) that does not include
+> the behavior of versions 1 and 2 from StableHashTraits 1.0
 
 ## Why use `stable_hash` instead of `Base.hash`?
 
@@ -109,6 +108,12 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 <!-- END_HASH_TRAITS -->
 
 ## Breaking changes
+
+### In 1.2
+
+- **Feature**: `HashVersion{3}` is more robust to future changes in julia internals and
+should be used moving forward.
+- **Deprecation**: Older hash versions are deprecated and should be avoided.
 
 ### In 1.1
 
