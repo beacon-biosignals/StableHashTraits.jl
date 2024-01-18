@@ -105,7 +105,7 @@ include("setup_tests.jl")
                 if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
                     @test_throws(StableHashTraits.StableNames.ParseError,
                                  StableHashTraits.qualified_type1_((; a=1,
-                                                                   b=BadShowSyntax())))
+                                                                    b=BadShowSyntax())))
                 end
             end
 
