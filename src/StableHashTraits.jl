@@ -22,9 +22,9 @@ these fallback methods will not change even if new fallbacks are defined.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
-        V == 1 && Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in " *
-                               "all cases where backwards compatible hash values are not " *
-                               "required.", :HashVersion)
+        V <= 3 && Base.depwarn("HashVersion{V} for V < 3 is deprecated, favor " *
+                               "`HashVersion{3}` in all cases where backwards compatible " *
+                               "hash values are not required.", :HashVersion)
         return new{V}()
     end
 end
@@ -425,16 +425,59 @@ function validate_name(str)
 end
 
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
+
 qualified_name_(fn::Function) = qname_(fn, nameof)
-qualified_type_(fn::Function) = qname_(fn, string)
+qualified_type1_(fn::Function) = qname_(fn, string)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
-qualified_type_(x::T) where {T} = qname_(T <: DataType ? x : T, string)
+qualified_type1_(x::T) where {T} = qname_(T <: DataType ? x : T, string)
 qualified_(T, ::Val{:name}) = qualified_name_(T)
-qualified_(T, ::Val{:type}) = qualified_type_(T)
+qualified_(T, ::Val{:type1}) = qualified_type1_(T)
+qualified_(T, ::Val{:type2}) = qualified_type2_(T)
+
+"""
+    is_inside_pluto(mod::Module)
+
+Returns true if the module was defined inside of a pluto notebook.
+"""
+function is_inside_pluto(mod::Module)
+    # pulled from: https://github.com/JuliaPluto/PlutoHooks.jl/blob/f6bc0a3962a700257641c3449db344cf0ddeae1d/src/notebook.jl#L89-L98
+    return startswith(string(nameof(mod)), "workspace#") &&
+           isdefined(mod, Symbol("@bind"))
+end
+
+qualified_type2_(x::Function) = validate_name(qualified_type2_helper(x))
+qualified_type2_(::Type{T}) where {T} = validate_name(qualified_type2_helper(T))
+qualified_type2_(::T) where {T} = validate_name(qualified_type2_helper(T))
+function qualified_type2_helper(x::Union{Function,Type})
+    # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
+    # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
+    # https://discourse.julialang.org/t/difference-between-base-and-core/37426
+    result = string(parentmodule(x)) * "." * string(nameof(x))
+    result = replace(result, r"^Core\." => "Base.")
+    # pluto creates an anonymous Module for each cell (and redefines it if the cell is
+    # re-evaluated); these should be replaced with a single module; e.g. we don't want
+    # the hash of `MyStruct` defined in a pluto cell to depend on what cell or what run of
+    # the cell it is
+    if is_inside_pluto(parentmodule(x))
+        # NOTE: in more recent julia versions (>= 1.8) the values are surrounded by `var`
+        # qualifiers, in earlier version they aren't
+        result = replace(result, r"var\"workspace#[0-9]+\"" => "PlutoWorkspace")
+        result = replace(result, r"workspace#[0-9]+" => "PlutoWorkspace")
+    end
+    if x isa DataType && !isempty(x.parameters)
+        result *= "{" * join(qualified_type2_helper.(x.parameters), ",") * "}"
+    elseif x isa Function && !isempty(typeof(x).parameters)
+        result *= "{" * join(qualified_type2_helper.(typeof(x).parameters), ",") * "}"
+    end
+    return result
+end
+qualified_type2_helper(x) = sprint(show, x)
+
 # we need `Type{Val}` methods below because the generated functions that call `qualified_`
 # only have access to the type of a value
 qualified_(T, ::Type{Val{:name}}) = qualified_name_(T)
-qualified_(T, ::Type{Val{:type}}) = qualified_type_(T)
+qualified_(T, ::Type{Val{:type1}}) = qualified_type1_(T)
+qualified_(T, ::Type{Val{:type2}}) = qualified_type2_(T)
 
 # deprecate external use of `qualified_name/type`
 function qualified_name(x)
@@ -447,7 +490,7 @@ function qualified_type(x)
     Base.depwarn("`qualified_type` is deprecated, favor `stable_type_id` in all cases " *
                  "where backwards compatible hash values are not required.",
                  :qualified_type)
-    return qualified_type_(x)
+    return qualified_type1_(x)
 end
 
 bytes_of_val(f) = reinterpret(UInt8, [f;])
@@ -479,7 +522,7 @@ of the type doesn't change.
 ## Example
 
 ```jldoctest
-julia> stable_typename_id([1, 2, 3])
+julia> stable_typename_id([1, 2, 3];)
 0x56c6b9ca080a0aa4
 
 julia> stable_typename_id(["a", "b"])
@@ -495,35 +538,58 @@ julia> stable_typename_id(["a", "b"])
 stable_typename_id(x) = stable_id_helper(x, Val(:name))
 stable_id_helper(::Type{T}, of::Val) where {T} = hash64(qualified_(T, of))
 @generated function stable_id_helper(x, of)
-    T = x <: Function ? x.instance : x
+    T = if x <: Function && hasproperty(x, :instance) && isdefined(x, :instance)
+        x.instance
+    else
+        x
+    end
     str = qualified_(T, of)
     number = hash64(str)
     :(return $number)
 end
 
 """
-    stable_type_id(x)`
+    stable_type_id([x]; version=1)`
 
-Returns a 64 bit hash that is the same for a given type so long as the module, and string
-representation of a type is the same (invariant to comma spacing).
+Returns a 64 bit hash that is the same for a given type so long as the module, and a
+simplified string representation of a type is the same.
+
+A currying method exists that accepts no positional arguments; this returns a function
+accepting a single positional argument and no keyword arguments that will use the version of
+`stable_type_id` passed to the currying function. In other words:
+`stable_type_id(;version)(x) === stable_type_id(x; version)`
 
 ## Example
 
 ```jldoctest
-julia> stable_type_id([1, 2, 3])
-0xfd5878e59e259648
+julia> stable_type_id([1, 2, 3]; version=2)
+0xd6c546646e68f67e
 
-julia> stable_type_id(["a", "b"])
-0xe191f67c4c8e3370
+julia> stable_type_id(["a", "b"]; version=2)
+0x876c54d6c97ec6b3
 ```
 
-!!! note
-    If the module of a type is `Core` it is renamed to `Base` before hashing because the
-    location of some types changes between `Core` to `Base` across julia versions.
-    Likewise, the type names of AbstractArray types are made uniform
-    as their printing changes from Julia 1.6 -> 1.7.
+!!! note If the module of a type is `Core` it is renamed to `Base` before hashing because
+    the location of some types changes between `Core` to `Base` across julia versions.
+    Likewise, the type names of AbstractArray types are made uniform as their printing
+    changes from Julia 1.6 -> 1.7.
+
+!!! warning Version 1 of of `stable_type_id` is deprecated, and its use strongly
+    discouraged. Version 2 relies on an approach that is more robust to future changes in
+    julia internals.
 """
-stable_type_id(x) = stable_id_helper(x, Val(:type))
+function stable_type_id(x; version=1)
+    if version == 1
+        Base.depwarn("`stable_type_id([x]; version=1)` has been deprecated, favor version=2.",
+                     :stable_type_id)
+        stable_id_helper(x, Val(:type1))
+    else
+        stable_id_helper(x, Val(:type2))
+    end
+end
+struct StableTypeID{V} end
+stable_type_id(; version=1) = StableTypeID{version}()
+(::StableTypeID{V})(x) where {V} = stable_type_id(x; version=V)
 
 """
     stable_typefields_id(x)
@@ -717,7 +783,7 @@ parent_context(::HashVersion) = nothing
 root_version(::HashVersion{V}) where {V} = V
 
 # NOTE: below, using root_version lets us leave `HashVersion{1}` return values unchanged, only
-# using the newer (more efficeint) hash_method return-values for `HashVersion{2}`.
+# using the newer (more efficient) hash_method return-values for `HashVersion{2}`.
 
 function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # we need to find `default_method` here because `hash_method(x::MyType, ::Any)` is less
@@ -735,11 +801,13 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # should not change the hash
     return (TypeHash(c), StructHash(:ByName))
 end
-TypeHash(::HashVersion{1}) = FnHash(qualified_type_)
-TypeHash(::HashVersion) = FnHash(stable_type_id, WriteHash())
+TypeHash(::HashVersion{1}) = FnHash(qualified_type1_)
+TypeHash(::HashVersion{2}) = FnHash(stable_type_id, WriteHash())
+TypeHash(::HashVersion) = FnHash(stable_type_id(; version=2), WriteHash())
 TypeNameHash(::HashVersion{1}) = FnHash(qualified_name)
 # we can use a more conservative id here, we used a shorter one before to avoid hashing long strings
-TypeNameHash(::HashVersion) = FnHash(stable_type_id, WriteHash())
+TypeNameHash(::HashVersion{2}) = FnHash(stable_type_id, WriteHash())
+TypeNameHash(::HashVersion{3}) = FnHash(stable_type_id(; version=2), WriteHash())
 
 hash_method(::NamedTuple, c::HashVersion) = (TypeNameHash(c), StructHash())
 function hash_method(::AbstractRange, c::HashVersion)
@@ -749,7 +817,8 @@ function hash_method(::AbstractArray, c::HashVersion)
     return (TypeNameHash(c), FnHash(size), IterateHash())
 end
 function hash_method(::AbstractString, c::HashVersion{V}) where {V}
-    return (FnHash(V > 1 ? stable_type_id : qualified_name, WriteHash()),
+    return (FnHash(V > 2 ? stable_type_id(; version=2) :
+                   V == 2 ? stable_type_id : qualified_name, WriteHash()),
             WriteHash())
 end
 hash_method(::Symbol, ::HashVersion{1}) = (PrivateConstantHash(":"), WriteHash())
@@ -761,7 +830,7 @@ end
 hash_method(::Tuple, c::HashVersion) = (TypeNameHash(c), IterateHash())
 hash_method(::Pair, c::HashVersion) = (TypeNameHash(c), IterateHash())
 function hash_method(::Type, c::HashVersion{1})
-    return (PrivateConstantHash("Base.DataType"), FnHash(qualified_type_))
+    return (PrivateConstantHash("Base.DataType"), FnHash(qualified_type1_))
 end
 function hash_method(::Type, c::HashVersion)
     return (@ConstantHash("Base.DataType"), TypeHash(c))
@@ -769,9 +838,17 @@ end
 function hash_method(::Function, c::HashVersion{1})
     return (PrivateConstantHash("Base.Function"), FnHash(qualified_name_))
 end
-function hash_method(::Function, c::HashVersion)
+function hash_method(::Function, c::HashVersion{2})
     return (@ConstantHash("Base.Function"), TypeHash(c))
 end
+function hash_method(x::T, c::HashVersion{3}) where {T<:Function}
+    if fieldnames(T) isa Tuple{}
+        return @ConstantHash("Base.Function"), TypeHash(c)
+    else
+        return TypeHash(c), StructHash(:ByName)
+    end
+end
+
 function hash_method(::AbstractSet, c::HashVersion)
     return (TypeNameHash(c), FnHash(sort! ∘ collect))
 end
@@ -781,8 +858,10 @@ end
 function hash_method(fn::Base.Fix2, c::HashVersion{1})
     return invoke(hash_method, Tuple{Function,typeof(c)}, fn, c)
 end
-hash_method(fn::Base.Fix1, c::HashVersion) = (@ConstantHash("Base.Fix1"), StructHash())
-hash_method(fn::Base.Fix2, c::HashVersion) = (@ConstantHash("Base.Fix2"), StructHash())
+hash_method(fn::Base.Fix1, c::HashVersion{2}) = (@ConstantHash("Base.Fix1"), StructHash())
+hash_method(fn::Base.Fix2, c::HashVersion{2}) = (@ConstantHash("Base.Fix2"), StructHash())
+hash_method(fn::Base.Fix1, c::HashVersion{3}) = (@ConstantHash("Base.Fix1"), StructHash())
+hash_method(fn::Base.Fix2, c::HashVersion{3}) = (@ConstantHash("Base.Fix2"), StructHash())
 
 #####
 ##### TablesEq

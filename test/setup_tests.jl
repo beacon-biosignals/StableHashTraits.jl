@@ -132,3 +132,8 @@ end
 
 struct BadShowSyntax end
 Base.show(io::IO, ::Type{<:BadShowSyntax}) = print(io, "{")
+
+struct Functor{T} <: Function
+    val::T
+end
+(fn::Functor)(x) = fn.val + x

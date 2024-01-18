@@ -26,7 +26,7 @@ include("setup_tests.jl")
         @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
     end
 
-    for V in (1, 2), hashfn in (sha256, sha1, crc32c)
+    for V in (1, 2, 3), hashfn in (sha256, sha1, crc32c)
         hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
@@ -99,13 +99,13 @@ include("setup_tests.jl")
                 # Validate that badly printed types properly error, rather than silently
                 # producing a bad typestring with an unstable type id. NOTE: One might want
                 # to test this using `stable_type_id`, however this uses an internal
-                # function (`qualified_type_`) because otherwise this runs into confusing
+                # function (`qualified_type1_`) because otherwise this runs into confusing
                 # compilation issues during CI because of the way that generated functions
                 # work.
                 if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
                     @test_throws(StableHashTraits.StableNames.ParseError,
-                                 StableHashTraits.qualified_type_((; a=1,
-                                                                   b=BadShowSyntax())))
+                                 StableHashTraits.qualified_type1_((; a=1,
+                                                                    b=BadShowSyntax())))
                 end
             end
 
@@ -190,6 +190,21 @@ include("setup_tests.jl")
                     @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 2))
                     @test test_hash(==("foo")) == test_hash(==("bar"))
                 end
+
+                if V > 2
+                    @test test_hash(Functor(1)) != test_hash(Functor(2))
+                    @test test_hash(Functor(1)) == test_hash(Functor(1))
+                    @test test_hash(Functor{Any}(1)) != test_hash(Functor(1))
+                else
+                    @test test_hash(Functor(1)) == test_hash(Functor(2))
+                    @test test_hash(Functor(1)) == test_hash(Functor(1))
+                    if V == 1
+                        @test test_hash(Functor{Any}(1)) == test_hash(Functor(1))
+                    else
+                        @test test_hash(Functor{Any}(1)) != test_hash(Functor(1))
+                    end
+                end
+
                 @test_throws ArgumentError test_hash(x -> x + 1)
             end
 
@@ -319,10 +334,13 @@ include("setup_tests.jl")
         @test_deprecated(UseProperties(:ByName))
         @test_deprecated(qualified_name("bob"))
         @test_deprecated(qualified_type("bob"))
+        @test_deprecated(stable_type_id("bob"))
         @test_deprecated(UseQualifiedName())
         @test_deprecated(UseSize(UseIterate()))
         @test_deprecated(ConstantHash("foo"))
         @test_deprecated(UseTable())
+        @test_deprecated(HashVersion{1}())
+        @test_deprecated(HashVersion{2}())
     end
 
     if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION

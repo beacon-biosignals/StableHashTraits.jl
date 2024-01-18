@@ -24,20 +24,19 @@ end
 StableHashTraits.stable_hash(::MyType) = FnHash(x -> x.data)
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
-stable_hash(a; version=2) == stable_hash(b; version=2) # true
+stable_hash(a; version=3) == stable_hash(b; version=3) # true
 ```
 
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking
 versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an
 object's hash in this case would be considered a bug.
 
-> ⚠️ In Julia 1.10 the stability of hashes in `StableHashTraits` is broken; 1.1.5 corrects
-> this bug. Versions 1.1.4 are to be retroactively marked as incompatible with Julia 1.10.
-> Please use version 1.1.5, or a higher version, when using Julia 1.10. More precisely:
-> Hashes in 1 - 1.1.4 of StableHashTraits will generate the correct hashes on Julia 1.6 -
-> 1.9 but an incorrect hash in 1.10. Hashes in 1.1.5 will generate the correct hash for
-> Julia 1.6 - 1.10. (The cause of this bug was the change in the string representation of
-> named tuples, so any hashed objects that include the type of a named tuple changed).
+> ⚠️ Hash versions 1 and 2 are deprecated and their use is strongly discouraged; use hash
+> version 3 or later (available in StableHashTraits v1.2 and later). In Julia 1.10 the
+> stability of hashes for hash version 1 and 2 in `StableHashTraits` is broken; 1.1.5
+> corrects this bug. Versions 1.1.4 were retroactively marked as incompatible with Julia
+> 1.10. StableHashTraits will release a breaking version (2.0) that does not include
+> the behavior of versions 1 and 2 from StableHashTraits 1.0
 
 ## Why use `stable_hash` instead of `Base.hash`?
 
@@ -54,10 +53,10 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 You compute hashes using `stable_hash`. This is called on the object you want to hash, and
 (optionally) a second argument called the context. The context you use affects how hashing
 occurs (it defaults to `HashVersion{1}()`). It is generally recommended that you avoid
-`HashVersion{1}()`, favoring `HashVersion{2}()` as it includes substantial speed
-improvements. See the final section below for details on
-how you can implement your own contexts. When you do not need to include a custom context, a short-hand for specifying
-`HashVersion{2}()` is to call `stable_hash(x; version=2)`.
+`HashVersion{1}()`, favoring `HashVersion{3}()` as it includes substantial speed
+improvements, and reliability improvements. See the final section below for details on how
+you can implement your own contexts. When you do not need to include a custom context, a
+short-hand for specifying `HashVersion{3}()` is to call `stable_hash(x; version=3)`.
 
 There are sensible defaults for `stable_hash` that aim to ensure that if two values are
 different, the input to the hash algorithm will differ.
@@ -84,7 +83,7 @@ following values, typically based only on the *type* of its input.
         function used to compute a list of keys and the second element is a two argument
         function used to extract the keys from the object.
       - `order` can be `:ByOrder` (the default)—which sorts by the order returned by
-        `pair[1]`—or `:ByName`—which sorts by lexigraphical order.
+        `pair[1]`—or `:ByName`—which sorts by lexicographical order.
 4. `FnHash(fn, [method])`: hash the result of applying `fn` to the given object. Optionally,
    use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result to
    determine how to hash it. There are two built-in functions commonly used with
@@ -100,6 +99,10 @@ following values, typically based only on the *type* of its input.
     both the string `"header"` and the fields of the object, and then recursively hash
     these two hashes.
 
+> ⚠️ Use of `stable_type_id(x; version=1)` (which is the default, for hash stability
+> reasons) is deprecated, and its use strongly discouraged. Use `stable_type(x; version=2)`
+> or the curried version `stalbe_type_id(; version=2)` instead.
+
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
 fields are the same for `StructHash`, the hash will be the same; etc...
@@ -109,6 +112,12 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 <!-- END_HASH_TRAITS -->
 
 ## Breaking changes
+
+### In 1.2
+
+- **Feature**: `HashVersion{3}` is more robust to future changes in julia internals and
+should be used moving forward.
+- **Deprecation**: Older hash versions are deprecated and should be avoided.
 
 ### In 1.1
 
@@ -177,7 +186,7 @@ changed.
 
 ### In 0.2:
 
-To support hasing of all tables (`Tables.istable(x) == true`), hashes have changed for such
+To support hashing of all tables (`Tables.istable(x) == true`), hashes have changed for such
 objects when:
    1. calling `stable_hash(x)` did not previously error
    1. `x` is not a `DataFrame` (these previously errored)
