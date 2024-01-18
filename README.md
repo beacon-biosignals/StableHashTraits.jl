@@ -1,8 +1,8 @@
 # StableHashTraits
 
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
-[![GitHub Actions](https://github.com/beacon-biosignals/StableHashTraits.jl/workflows/CI/badge.svg)](https://github.com/beacon-biosignals/StableHashTraits.jl/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/beacon-biosignals/StableHashTraits.jl/branch/main/graph/badge.svg?token=4O1YO0GMNM)](https://codecov.io/gh/beacon-biosignals/StableHashTraits.jl)
+ [![GitHub Actions](https://github.com/beacon-biosignals/StableHashTraits.jl/workflows/CI/badge.svg)](https://github.com/beacon-biosignals/StableHashTraits.jl/actions/workflows/CI.yml)
+ [![codecov](https://codecov.io/gh/beacon-biosignals/StableHashTraits.jl/branch/main/graph/badge.svg?token=4O1YO0GMNM)](https://codecov.io/gh/beacon-biosignals/StableHashTraits.jl)
 [![Code Style: YASGuide](https://img.shields.io/badge/code%20style-yas-violet.svg)](https://github.com/jrevels/YASGu)
 
 
@@ -31,19 +31,13 @@ StableHashTraits aims to guarantee a stable hash so long as you only upgrade to 
 versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an
 object's hash in this case would be considered a bug.
 
-> ⚠️ **Warning**
->
-> In short order, a breaking release of StableHashTraits will be created that employs the
-> behavior from hash version 3. Users should not expect the behavior of hash version 1 or 2
-> to remain available in future updates. It has become clear that future, minor julia
-> versions are likely to change the string representation of types in significant ways,
-> which version ≤ 3 rely on remaining mostly stable. It is the policy of the julia
-> developers that these string representations are not part of the public API of julia. This
-> means that a minor release to julia can break existing hashes from stable hash traits and
-> require a potentially complicated bug fix in StableHashTraits to maintain behavior with
-> future julia versions. Version 3 expects only that the parameters of a type are
-> programmatically accessible in future minor julia releases, and so it should be much
-> easier to keep StableHashTraits robust to changes in julia base.
+> ⚠️ In Julia 1.10 the stability of hashes in `StableHashTraits` is broken; 1.1.5 corrects
+> this bug. Versions 1.1.4 are to be retroactively marked as incompatible with Julia 1.10.
+> Please use version 1.1.5, or a higher version, when using Julia 1.10. More precisely:
+> Hashes in 1 - 1.1.4 of StableHashTraits will generate the correct hashes on Julia 1.6 -
+> 1.9 but an incorrect hash in 1.10. Hashes in 1.1.5 will generate the correct hash for
+> Julia 1.6 - 1.10. (The cause of this bug was the change in the string representation of
+> named tuples, so any hashed objects that include the type of a named tuple changed).
 
 ## Why use `stable_hash` instead of `Base.hash`?
 

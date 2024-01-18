@@ -1,5 +1,8 @@
 module StableHashTraits
 
+include("StableNames.jl")
+using .StableNames: cleanup_name, NAMED_TUPLES_PRETTY_PRINT_VERSION
+
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq,
        stable_typename_id, stable_type_id
@@ -413,32 +416,6 @@ end
 #####
 ##### Stable values for types
 #####
-
-function cleanup_name(str)
-    # We treat all uses of the `Core` namespace as `Base` across julia versions. What is in
-    # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
-    # https://discourse.julialang.org/t/difference-between-base-and-core/37426
-    str = replace(str, r"^Core\." => "Base.")
-    str = replace(str, ", " => ",") # spacing in type names vary across minor julia versions
-    # in 1.6 and older AbstractVector and AbstractMatrix types get a `where` clause, but in
-    # later versions of julia, they do not
-    str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
-    str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
-    # cleanup pluto workspace names
-
-    # handle pluto symbols
-
-    # TODO: eventually, when we create hash version 3 (which will generate strings from
-    # scratch rather than leveraging `string(T)`), we should handle pluto symbols by
-    # checking `is_inside_pluto` as defined here
-    # https://github.com/JuliaPluto/PlutoHooks.jl/blob/f6bc0a3962a700257641c3449db344cf0ddeae1d/src/notebook.jl#L89-L98
-
-    # NOTE: in more recent julia versions (>= 1.8) the values are surrounded by `var`
-    # qualifiers
-    str = replace(str, r"var\"workspace#[0-9]+\"" => "PlutoWorkspace")
-    str = replace(str, r"workspace#[0-9]+" => "PlutoWorkspace")
-    return str
-end
 
 function validate_name(str)
     if occursin("#", str)
