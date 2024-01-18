@@ -551,8 +551,8 @@ end
 """
     stable_type_id([x]; version=1)`
 
-Returns a 64 bit hash that is the same for a given type so long as the module, and string
-representation of a type is the same (invariant to comma spacing).
+Returns a 64 bit hash that is the same for a given type so long as the module, and a
+simplified string representation of a type is the same.
 
 A currying method exists that accepts no positional arguments; this returns a function
 accepting a single positional argument and no keyword arguments that will use the version of
@@ -569,18 +569,14 @@ julia> stable_type_id(["a", "b"]; version=2)
 0x876c54d6c97ec6b3
 ```
 
-!!! note
-    If the module of a type is `Core` it is renamed to `Base` before hashing because
+!!! note If the module of a type is `Core` it is renamed to `Base` before hashing because
     the location of some types changes between `Core` to `Base` across julia versions.
     Likewise, the type names of AbstractArray types are made uniform as their printing
     changes from Julia 1.6 -> 1.7.
 
-!!! note
-    Version 1 of of `stable_type_id` is deprecated, as it has proven to be the case
-    that minor julia updates change the string representation of types from time to time;
-    these changes have proven to be more and more common / sophisticated as time goes and so
-    version 2 relies on a distinct code path to compute a hash that is similar
-    to how types are displayed in Jula 1.6.
+!!! warning Version 1 of of `stable_type_id` is deprecated, and its use strongly
+    discouraged. Version 2 relies on an approach that is more robust to future changes in
+    julia internals.
 """
 function stable_type_id(x; version=1)
     if version == 1
