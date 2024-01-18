@@ -539,7 +539,7 @@ stable_typename_id(x) = stable_id_helper(x, Val(:name))
 stable_id_helper(::Type{T}, of::Val) where {T} = hash64(qualified_(T, of))
 @generated function stable_id_helper(x, of)
     T = if x <: Function && hasproperty(x, :instance) && isdefined(x, :instance)
-        getproperty(x, :instance)
+        x.instance
     else
         x
     end
