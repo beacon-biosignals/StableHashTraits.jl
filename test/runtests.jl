@@ -340,6 +340,10 @@ include("setup_tests.jl")
             @test parse_brackets("bob, joe, ") ==
                   ["bob", Parsed(:SepClause, ", ", "joe"), ", "]
             @test parse_brackets("bob,joe") == ["bob", Parsed(:SepClause, ",", "joe")]
+            @test parse_brackets("{}") == Any[Parsed(:Brackets, "")]
+            @test parse_brackets("{,,}") == Any[Parsed(:Brackets, ",", ",")]
+            @test parse_brackets("{ }") == Any[Parsed(:Brackets, " ")]
+            @test parse_brackets("{, joe}") == Any[Parsed(:Brackets, ", ", "joe")]
             @test parse_brackets("{bob, joe}") ==
                   Any[Parsed(:Brackets, "bob", Parsed(:SepClause, ", ", "joe"))]
             @test parse_brackets("foo{bob, joe}") ==

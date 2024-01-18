@@ -70,7 +70,8 @@ end
                      :space => P.satisfy(isspace),
                      :sep => P.first(P.seq(P.many(:space), P.token(','), P.many(:space)),
                                      P.some(:space)),
-                     :brackets => P.seq(P.token('{'), :clause, P.token('}')),
+                     :brackets => P.first(P.seq(P.token('{'), P.many(:sep), P.token('}')),
+                                          P.seq(P.token('{'), :clause, P.token('}'))),
                      :head_brackets => P.seq(:element, :brackets),
                      :inclause => P.first(:head_brackets, :brackets, :element),
                      :clause => P.seq(P.many(:sep),
@@ -95,7 +96,7 @@ end
         return if match.rule ∈ (:element, :space, :sep)
             String(match.view)
         elseif match.rule == :brackets
-            Parsed(:Brackets, vals[2]...)
+            Parsed(:Brackets, (isnothing(vals[1][2]) ? [""] : vals[1][2])...)
         elseif match.rule == :clause
             reduce(vcat, filter(!isnothing, vals); init=[])
         elseif match.rule == :head_brackets
