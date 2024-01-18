@@ -53,7 +53,7 @@ This is useful for content-addressed caching, in which e.g. some function of a v
 You compute hashes using `stable_hash`. This is called on the object you want to hash, and
 (optionally) a second argument called the context. The context you use affects how hashing
 occurs (it defaults to `HashVersion{1}()`). It is generally recommended that you avoid
-`HashVersion{1}()`, favoring `HashVersion{3}()` as it include substantial speed
+`HashVersion{1}()`, favoring `HashVersion{3}()` as it includes substantial speed
 improvements, and reliability improvements. See the final section below for details on how
 you can implement your own contexts. When you do not need to include a custom context, a
 short-hand for specifying `HashVersion{3}()` is to call `stable_hash(x; version=3)`.
@@ -98,6 +98,10 @@ following values, typically based only on the *type* of its input.
     results. For example: `(@ConstantHash("header"), StructHash())` would compute a hash for
     both the string `"header"` and the fields of the object, and then recursively hash
     these two hashes.
+
+> ⚠️ Use of `stable_type_id(x; version=1)` (which is the default, for hash stability
+> reasons) is deprecated, and its use strongly discouraged. Use `stable_type(x; version=2)`
+> or the curried version `stalbe_type_id(; version=2)` instead.
 
 Your hash will be stable if the output for the given method remains the same: e.g. if
 `write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
