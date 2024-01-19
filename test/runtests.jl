@@ -78,6 +78,8 @@ include("setup_tests.jl")
                                 bytes2hex_(test_hash(==("test"))))
                 @test_reference("references/ref21_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash((1, (a=1, b=(x=1, y=2), c=(1, 2))))))
+                @test_reference("references/ref22_$(V)_$(nameof(hashfn)).txt",
+                                bytes2hex_(test_hash((;))))
             end
             # verifies that transform can be called recursively
 
@@ -367,6 +369,7 @@ include("setup_tests.jl")
             @test_throws ParseError parse_brackets("{{ joe{bob, bill} }")
             @test_throws ParseError parse_brackets("{ joe{bob,} bill} }")
             @test_throws ParseError parse_brackets("{ joe{bob, {bill} }")
+            @test_throws ParseError parse_brackets("")
 
             # verify parser round-trip
             round_trips(str) = parse_walker((fn, p) -> nothing, parse_brackets(str)) == str
@@ -394,6 +397,7 @@ include("setup_tests.jl")
             @test replace_bob("foo{bar{baz, bob}, boz}") == "foo{bar{baz, BOB}, boz}"
 
             # validate the named tuple replaceer
+            @test cleanup_named_tuple_type(string(typeof((;)))) == "NamedTuple{(),Tuple{}}"
             @test cleanup_named_tuple_type("@NamedTuple{x::Int, y::Int}") ==
                   "NamedTuple{(:x,:y),Tuple{Int,Int}}"
             @test cleanup_named_tuple_type("FooBar{Baz{Float64, (custom, display(}, " *
