@@ -22,7 +22,7 @@ these fallback methods will not change even if new fallbacks are defined.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
-        V == 1 && Base.depwarn("HashVersion{1} is deprecated, favor `HashVersion{2}` in " *
+        V < 3 && Base.depwarn("HashVersion{T} for T < 3 are deprecated, favor `HashVersion{3}` in " *
                                "all cases where backwards compatible hash values are not " *
                                "required.", :HashVersion)
         return new{V}()
@@ -56,8 +56,14 @@ third argument to [`StableHashTraits.write`](@ref)
 """
 stable_hash(x; alg=sha256, version=1) = return stable_hash(x, HashVersion{version}(); alg)
 function stable_hash(x, context; alg=sha256)
-    return compute_hash!(stable_hash_helper(x, HashState(alg, context), context,
-                                            hash_method(x, context)))
+    if root_version(context) < 3
+        return compute_hash!(stable_hash_helper(x, HashState(alg, context), context,
+                                                hash_method(x, context)))
+    else
+        x_ = transform(x, context)
+        return compute_hash!(stable_hash_helper(x_, HashState(alg, context), context,
+                                                 StructType(x)))
+    end
 end
 
 # extract contents of README so we can insert it into the some of the docstrings
@@ -306,6 +312,95 @@ end
 
 #####
 ##### ================ Hash Traits ================
+#####
+
+#####
+##### StructTypes.DataType
+#####
+
+function stable_hash_helper(x::T, hash_state, context, ::StructTypes.DataType) where {T}
+    nested_hash_state = start_nested_hash!(hash_state)
+    stable_hash_helper(@ConstantHash("DataType"), nested_hash_state, context,
+                       StructTypes.NumberType())
+
+    # hash the field names
+    fields = fieldnames(T)
+    fieldhash, sorted_fields = get!(fieldcache(context), fields) do
+        sorted_fields = sort(fields)
+        fieldhash = stable_hash_helper(sorted_fields, similar_hash_state(hash_state),
+                                       context, StructType(fields_))
+        return fieldhash, sorted_fields
+    end
+    nested_hash_state = stable_hash_helper(fieldhash, nested_hash_state, context, StructTypes.NumberType())
+
+    # hash the fields
+    for field in sorted_fields
+        val = getfield(x, field)
+        tval = transform(val, context)
+        nested_hash_state = stable_hash_helper(tval, nested_hash_state, context, StructType(tval))
+    end
+
+    hash_state = end_nested_hash!(hash_state, nested_hash_state)
+    return hash_state
+end
+
+#####
+##### DictType
+#####
+
+function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
+    nested_hash_state = start_nested_hash!(hash_state)
+    stable_hash_helper(@ConstantHash("DictType"), nested_hash_state, context,
+                       StructTypes.NumberType())
+
+    for (key, value) in StructTypes.keyvaluepairs(x)
+        tkey = transform(key, context)
+        tvalue = transform(value, context)
+        nested_hash_state = stable_hash_helper(tkey, nested_hash_state, context,
+                                               StructType(tkey))
+        nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context,
+                                               StructType(tvalue))
+    end
+
+    hash_state = end_nested_hash!(hash_state, nested_hash_state)
+    return hash_state
+end
+
+#####
+##### ArrayType
+#####
+
+function stable_hash_helper(array, hash_state, context, ::StructTypes.ArrayType)
+    nested_hash_state = start_nested_hash!(hash_state)
+    stable_hash_helper(@ConstantHash("ArrayType"), nested_hash_state, context,
+                       StructTypes.NumberType())
+
+    for value in array
+        tvalue = transform(value, context)
+        nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context,
+                                               StructType(tvalue))
+    end
+
+    hash_state = end_nested_hash!(hash_state, nested_hash_state)
+    return hash_state
+end
+
+#####
+##### Basic data types
+#####
+
+function stable_hash_helper(str::AbstractString, hash_state, context, ::StructTypes.StringType)
+    update_hash!(hash_state, str, context)
+end
+
+function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
+    update_hash!(hash_state, string(str), context)
+end
+
+
+
+#####
+##### ================ Deprecated Hash Traits ================
 #####
 
 #####
