@@ -325,19 +325,45 @@ function stable_hash_helper(x::T, hash_state, context, ::StructTypes.DataType) w
 
     # hash the field names
     fields = fieldnames(T)
-    fieldhash, sorted_fields = get!(fieldcache(context), fields) do
+    fieldhash, sorted_fields = get!(cache(context, :fieldnames), fields) do
         sorted_fields = sort(fields)
         fieldhash = stable_hash_helper(sorted_fields, similar_hash_state(hash_state),
                                        context, StructType(fields_))
-        return fieldhash, sorted_fields
+        return compute_hash!(fieldhash), sorted_fields
     end
     nested_hash_state = stable_hash_helper(fieldhash, nested_hash_state, context, StructTypes.NumberType())
+
+    # TODO: start adding the `tag` field everywhere
+    # hash the field types (this means we don't have to mark types for individual fields
+    # yes, `transform` can yeidl different StructType results, but the main goal here is
+    # just to make sure that differently typed fields have a different hash, not that the
+    # type written matches the transformed result NOTE: think through/ verify this
+    # assumption)
+    # NOTE: think carefully through propagation of the tag and look at the elide branch
+    fieldtype_hash = get!(cache(context, :fieldtypes), T) do
+        tags = map(field -> type_tag(StructType(fieldtype(T, field))), sorted_fields)
+        if all(!ismissing, tags)
+            fieldtype_hash = similar_hash_state(hash_state)
+            for tag in tags
+                fieldtype_hash = update_hash!(fieldtype_hash, tag, context)
+            end
+            return compute_hash!(fieldtype_hash)
+        else
+            return nothing
+        end
+    end
+    fields_must_tag = true
+    if !isnothing(fieldtype_hash)
+        nested_hash_state = stable_hash_helper(fieldtype_hash, nested_hash_state, context,
+                                               StructTypes.NumberType())
+        fields_must_tag = false
+    end
 
     # hash the fields
     for field in sorted_fields
         val = getfield(x, field)
         tval = transform(val, context)
-        nested_hash_state = stable_hash_helper(tval, nested_hash_state, context, StructType(tval))
+        nested_hash_state = stable_hash_helper(tval, nested_hash_state, context, fields_must_tag, StructType(tval))
     end
 
     hash_state = end_nested_hash!(hash_state, nested_hash_state)
@@ -370,15 +396,34 @@ end
 ##### ArrayType
 #####
 
-function stable_hash_helper(array, hash_state, context, ::StructTypes.ArrayType)
-    nested_hash_state = start_nested_hash!(hash_state)
-    stable_hash_helper(@ConstantHash("ArrayType"), nested_hash_state, context,
-                       StructTypes.NumberType())
+eltype_(xs) = eltype_(xs, Base.IteratorEltype(xs))
+eltype_(_, _) = Any
+eltype_(x, ::Base.HasEltype) = eltype(x)
 
-    for value in array
-        tvalue = transform(value, context)
-        nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context,
-                                               StructType(tvalue))
+function iterator_can_hash_eltype(xs)
+    # `isdispatchtuple`: determine if T is a tuple of "leaf types"
+    # meaning it has no subtypes that could appear in a method call
+    # i.e. a concrete type
+    return isdispatchtuple(Tuple{eltype_(xs)}) || isdispatchtuple(typeof(xs))
+end
+
+function stable_hash_helper(xs, hash_state, context, tag, ::StructTypes.ArrayType)
+    nested_hash_state = start_nested_hash!(hash_state)
+    tag && (netsed_hash_state = stable_hash_helper(@ConstantHash("ArrayType"),
+                                                   nested_hash_state, context,
+                                                   StructTypes.NumberType()))
+
+    tag_children = tag
+    if iterator_can_hash_eltype(xs) && tag
+        tag = type_tag(StructType(eltype(xs)))
+        nested_hash_state = stable_hash_helper(tag, nested_hash_state, context, StructTypes.NumberType())
+        tag_children = false
+    end
+
+    for x in xs
+        tx = transform(x, context)
+        nested_hash_state = stable_hash_helper(tx, nested_hash_state, context, tag_children,
+                                               StructType(tx))
     end
 
     hash_state = end_nested_hash!(hash_state, nested_hash_state)
@@ -386,18 +431,43 @@ function stable_hash_helper(array, hash_state, context, ::StructTypes.ArrayType)
 end
 
 #####
+##### CustomStruct
+#####
+
+function stable_hash_helper(x, hash_state, context, tag, ::StructTypes.CustomStruct)
+    lowered = StructTypes.lower(x)
+    return stable_hash_helper(lowered, hash_state, context, tag, StructType(lowered))
+end
+
+#####
 ##### Basic data types
 #####
 
-function stable_hash_helper(str::AbstractString, hash_state, context, ::StructTypes.StringType)
-    update_hash!(hash_state, str, context)
+function stable_hash_helper(str::AbstractString, hash_state, context, tag, ::StructTypes.StringType)
+    tag && (hash_state = update_hash!(hash_state, @ConstantHash("StringType"), context))
+    return update_hash!(hash_state, str, context)
 end
 
-function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
-    update_hash!(hash_state, string(str), context)
+function stable_hash_helper(str, hash_state, context, tag, ::StructTypes.StringType)
+    tag && (hash_state = update_hash!(hash_state, @ConstantHash("StringType"), context))
+    return update_hash!(hash_state, string(str), context)
 end
 
+function stable_hash_helper(number::T, hash_state, context, tag, ::StructType.NumberType) where T
+    tag && (hash_state = update_hash!(hash_state, @ConstantHash("NumberType"), context))
+    U = StructType.numbertype(T)
+    return update_hash!(hash_state, U(number), context)
+end
 
+function stable_hash_helper(bool, hash_state, context, tag, ::StructType.BoolType)
+    tag && (hash_state = update_hash!(hash_state, @ConstantHash("BoolType"), context))
+    return update_hash!(hash_state, Bool(bool), context)
+end
+
+function stable_hash_helper(null, hash_state, context, tag, ::StructType.NullType)
+    tag && (hash_state = update_hash!(hash_state, @ConstantHash("NullType"), context))
+    return hash_state
+end
 
 #####
 ##### ================ Deprecated Hash Traits ================
