@@ -172,7 +172,10 @@ end
         if parsed isa Parsed && parsed.name == :Head &&
            endswith(parsed.args[1], "@NamedTuple")
             symbols_and_types = split_symbol_and_type.(parsed.args[2].args)
-            symbol_tuple = join(":" .* filter(!isempty, first.(symbols_and_types)), ",")
+            symbols = filter(!isempty, first.(symbols_and_types))
+            symbol_tuple = join(":" .* symbols, ",")
+            # single term tuples need an extra ","
+            length(symbols) == 1 && (symbol_tuple *= ",")
             types = map(t -> parse_walker(fn, t), last.(symbols_and_types))
             types_tuple = join(types, ",")
             prefix = replace(parsed.args[1], "@NamedTuple" => "")

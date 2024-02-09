@@ -80,7 +80,9 @@ include("setup_tests.jl")
                                 bytes2hex_(test_hash((1, (a=1, b=(x=1, y=2), c=(1, 2))))))
                 @test_reference("references/ref22_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash((;))))
-            end
+                @test_reference("references/ref23_$(V)_$(nameof(hashfn)).txt",
+                                bytes2hex_(test_hash((;a=1))))
+           end
             # verifies that transform can be called recursively
 
             @testset "FnHash" begin
