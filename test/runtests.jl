@@ -403,7 +403,7 @@ include("setup_tests.jl")
             @test cleanup_named_tuple_type("@NamedTuple{x::Int, y::Int}") ==
                   "NamedTuple{(:x,:y),Tuple{Int,Int}}"
             @test cleanup_named_tuple_type("@NamedTuple{x::Int}") ==
-                  "NamedTuple{(:x,),Tuple{Int,Int}}"
+                  "NamedTuple{(:x,),Tuple{Int}}"
             @test cleanup_named_tuple_type("FooBar{Baz{Float64, (custom, display(}, " *
                                            "@NamedTuple{x::Int, y::Int}}") ==
                   "FooBar{Baz{Float64, (custom, display(}, NamedTuple{(:x,:y),Tuple{Int,Int}}}"
