@@ -26,6 +26,11 @@ function cleanup_name(str)
     str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
     str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
 
+    # Base.Pairs in 1.9 is Base.Iterators.Pairs in 1.6 (it is part of the `name` of the
+    # object, and so we get some doubling up of stuff)
+    str = replace(str, "Iterators.Base.Iterators.Pairs" => "Base.Pairs")
+    str = replace(str, "Base.Iterators.Pairs" => "Base.Pairs")
+
     # cleanup pluto workspace names
 
     # TODO: eventually, when we create hash version 3 (which will generate strings from
