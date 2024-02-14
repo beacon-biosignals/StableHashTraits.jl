@@ -322,49 +322,58 @@ function struct_hashes_this_fields_type(x, k)
     return isdispatchtuple(Tuple{fieldtype(typeof(x), k)})
 end
 
-function stable_hash_helper(x::T, hash_state, context, tag, ::StructTypes.DataType) where {T}
+function stable_hash_helper(x::T, hash_state, context, tag, st::StructTypes.DataType) where {T}
     nested_hash_state = start_nested_hash!(hash_state)
     stable_hash_helper(@ConstantHash("DataType"), nested_hash_state, context,
-                       StructTypes.NumberType())
+                        StructTypes.NumberType())
 
     # hash the field names
-    if tag
+    fieldhash, ordered_fields = get!(cache(context, :fieldnames), T) do
         fields = fieldnames(T)
-        fieldhash, sorted_fields = get!(cache(context, :fieldnames), T) do
-            sorted_fields = sort(fields)
-            fieldhash = stable_hash_helper(sorted_fields, similar_hash_state(hash_state),
-                                        context, StructType(fields_))
-            return compute_hash!(fieldhash), sorted_fields
-        end
-        nested_hash_state = stable_hash_helper(fieldhash, nested_hash_state, context, StructTypes.NumberType())
+        ordered_fields = (st isa StructTypes.OrderedStruct) ? fields : sort_(fields)
 
-    # hash the field types (this means we don't have to mark types for individual fields
-    # yes, `transform` can yield different StructType results, but the main goal here is
-    # just to make sure that differently typed fields have a different hash, not that the
-    # type written matches the transformed result)
-    fieldtype_hash = get!(cache(context, :fieldtypes), T) do
-        tags = map(field -> type_tag(StructType(fieldtype(T, field))), sorted_fields)
-        if all(!ismissing, tags)
-            fieldtype_hash = similar_hash_state(hash_state)
-            for tag in tags
-                fieldtype_hash = update_hash!(fieldtype_hash, tag, context)
-            end
-            return compute_hash!(fieldtype_hash)
-        else
-            return nothing
-        end
+        fieldhash = stable_hash_helper(ordered_fields, similar_hash_state(hash_state),
+                                       context, StructType(fields_))
+        return compute_hash!(fieldhash), ordered_fields
     end
+
+    tvals = [transform(getfield(x, field), context) for field in ordered_fields]
+
     fields_must_tag = true
-    if !isnothing(fieldtype_hash)
-        nested_hash_state = stable_hash_helper(fieldtype_hash, nested_hash_state, context,
-                                               StructTypes.NumberType())
-        fields_must_tag = false
+    if tag
+        nested_hash_state = stable_hash_helper(fieldhash, nested_hash_state, context, false, StructTypes.NumberType())
+
+        # hash the field types
+        fieldtype_hash = get!(cache(context, :fieldtypes), T) do
+            tags = map(ordered_fields, tvals) do field, tval
+                if struct_hashes_this_fields_type(x, field)
+                    # NOTE: assumes type stability of `transform`
+                    return type_tag(StructType(tval))
+                else
+                    return nothing
+                end
+            end
+            if any(!isnothing, tags)
+                fieldtype_hash = similar_hash_state(hash_state)
+                for tag in tags
+                    if !isnothing(tag)
+                        fieldtype_hash = update_hash!(fieldtype_hash, tag, context)
+                    end
+                end
+                return compute_hash!(fieldtype_hash)
+            else
+                return nothing
+            end
+        end
+        if !isnothing(fieldtype_hash)
+            nested_hash_state = stable_hash_helper(fieldtype_hash, nested_hash_state, context,
+                                                   StructTypes.NumberType())
+            fields_must_tag = false
+        end
     end
 
     # hash the fields
-    for field in sorted_fields
-        val = getfield(x, field)
-        tval = transform(val, context)
+    for (field, tval) in zip(ordered_fields, tvals)
         tag = fields_must_tag || !struct_hashes_this_fields_type(x, field)
         nested_hash_state = stable_hash_helper(tval, nested_hash_state, context, tag, StructType(tval))
     end
@@ -385,9 +394,9 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     for (key, value) in StructTypes.keyvaluepairs(x)
         tkey = transform(key, context)
         tvalue = transform(value, context)
-        nested_hash_state = stable_hash_helper(tkey, nested_hash_state, context, tag,
+        nested_hash_state = stable_hash_helper(tkey, nested_hash_state, context, true,
                                                StructType(tkey))
-        nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context, tag,
+        nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context, true,
                                                StructType(tvalue))
     end
 
@@ -418,6 +427,7 @@ function stable_hash_helper(xs, hash_state, context, tag, ::StructTypes.ArrayTyp
                                                    StructTypes.NumberType())
     end
 
+    # TODO: handle transformed values as per structs
     tag_children = true
     if iterator_can_hash_eltype(xs) && tag
         # if this array's eltype is concrete, we can hash all elements's tags in one go
