@@ -127,7 +127,7 @@ end
 compute_hash!(x::RecursiveHashState) = x.val
 HashState(x::RecursiveHashState) = x
 similar_hash_state(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
-hash_type(::RecursiveHashState{<:Any, T}) where {T} = T
+hash_type(::RecursiveHashState{<:Any,T}) where {T} = T
 
 #####
 ##### BufferedHashState: wrapper that buffers bytes before passing them to the hash algorithm

@@ -46,24 +46,26 @@ benchmarks = [(; name="dataframes", a=data1, b=df);
 
 for hashfn in (crc, sha256)
     hstr = nameof(hashfn)
-    for (; name, a, b) in benchmarks
-        suite["$(name)_$hstr"] = BenchmarkGroup([name])
-        if name in ("strings", "symbols")
-            suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(str_to_data($a))
-        else
-            suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8,
-                                                                                  $a))
+    let V = 3 # TODO: run both V=3 and V=2
+        for (; name, a, b) in benchmarks
+            suite["$(name)_$hstr"] = BenchmarkGroup([name])
+            if name in ("strings", "symbols")
+                suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(str_to_data($a))
+            else
+                suite["$(name)_$hstr"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8,
+                                                                                      $a))
+            end
+            suite["$(name)_$hstr"]["trait"] = @benchmarkable $(stable_hash)($b,
+                                                                            HashVersion{V}();
+                                                                            alg=$(hashfn))
         end
-        suite["$(name)_$hstr"]["trait"] = @benchmarkable $(stable_hash)($b,
-                                                                        HashVersion{2}();
-                                                                        alg=$(hashfn))
     end
 end
 
 # If a cache of tuned parameters already exists, use it, otherwise, tune and cache
 # the benchmark parameters. Reusing cached parameters is faster and more reliable
 # than re-tuning `suite` every time the file is included.
-paramspath = joinpath(dirname(@__FILE__), "benchparams.json")
+paramspath = joinpath(dirname(@__FILE__), "benchparams3.json")
 
 if isfile(paramspath)
     loadparams!(suite, BenchmarkTools.load(paramspath)[1], :evals)

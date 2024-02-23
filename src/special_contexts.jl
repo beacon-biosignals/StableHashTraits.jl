@@ -28,7 +28,7 @@ function hash_method(x::T, m::TablesEq) where {T}
     return hash_method(x, parent_context(m))
 end
 
-function transform(x::T, context::TablesEq) where T
+function transform(x::T, context::TablesEq) where {T}
     if Tables.istable(T)
         cols = Tables.columns(x)
         keys = Tables.columnnames(cols)
@@ -53,7 +53,7 @@ value.
 struct ViewsEq{T}
     parent::T
     function ViewsEq(x::T) where {T}
-        Base.depwarn("`ViewsEq` is no longer necessary, as only the deprecated hash "*
+        Base.depwarn("`ViewsEq` is no longer necessary, as only the deprecated hash " *
                      "versions hash array views to un-equal values with arrays.", :ViewsEq)
         return new{T}(x)
     end

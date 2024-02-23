@@ -38,7 +38,8 @@ function transform(fn::Function, c::HashVersion{3})
     # functions can have fields if they are `struct MyFunctor <: Function` or if they are
     # closures
     fields = fieldnames(typeof(fn))
-    return @hash64("Base.Function"), qualified_name(fn), NamedTuple{fields}(getfield.(fn, fields))
+    return @hash64("Base.Function"), qualified_name(fn),
+           NamedTuple{fields}(getfield.(fn, fields))
 end
 
 function stable_hash_helper(T, hash_state, context, ::TypeType)
@@ -58,9 +59,9 @@ end
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
-function qualified_name_(x::T) where {T <: Type{<:Function}}
+function qualified_name_(x::T) where {T<:Type{<:Function}}
     if hasproperty(x, :instance)
-        "typeof("*qualified_name_(getproperty(x, :instance))*")"
+        "typeof(" * qualified_name_(getproperty(x, :instance)) * ")"
     else
         qname_(T, nameof)
     end
@@ -80,7 +81,7 @@ function stable_hash_helper(x, hash_state, context, st::StructTypes.DataType)
     # - fieldtypes
 
     # NOTE: fields are ordered or unordered according to the `StructType`
-    cache = context_cache(context, Tuple{hash_type(hash_state), NTuple{<:Any, Symbol}})
+    cache = context_cache(context, Tuple{hash_type(hash_state),NTuple{<:Any,Symbol}})
     type_structure_hash, ordered_fields = get!(cache, typeof(x)) do
         T = typeof(x)
         fields = fieldnames(T)
@@ -111,7 +112,6 @@ function stable_hash_helper(x, hash_state, context, st::StructTypes.DataType)
 
     hash_state = end_nested_hash!(hash_state, nested_hash_state)
     return hash_state
-
 end
 
 #####
@@ -120,9 +120,9 @@ end
 
 dict_eltype(x) = eltype(x)
 keytype(::Type{Pair{K,V}}) where {K,V} = K
-keytype(::Type{T}) where T = T
+keytype(::Type{T}) where {T} = T
 valtype(::Type{Pair{K,V}}) where {K,V} = V
-valtype(::Type{T}) where T = T
+valtype(::Type{T}) where {T} = T
 
 function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = StructTypes.keyvaluepairs(x)
@@ -146,7 +146,6 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
         nested_hash_state = stable_hash_helper(tkey, nested_hash_state, context,
                                                HashType(tkey, context))
         nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context,
-
                                                HashType(tvalue, context))
     end
 
@@ -236,7 +235,8 @@ end
 
 transform(x::Symbol) = @hash64(":"), String(x)
 
-function stable_hash_helper(str::AbstractString, hash_state, context, ::StructTypes.StringType)
+function stable_hash_helper(str::AbstractString, hash_state, context,
+                            ::StructTypes.StringType)
     hash_state = update_hash!(hash_state, @hash64("Base.AbstractString"), context)
     return update_hash!(hash_state, str, context)
 end
@@ -246,7 +246,8 @@ function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
     return update_hash!(hash_state, string(str), context)
 end
 
-function stable_hash_helper(number::T, hash_state, context, ::StructTypes.NumberType) where T
+function stable_hash_helper(number::T, hash_state, context,
+                            ::StructTypes.NumberType) where {T}
     U = StructTypes.numbertype(T)
     return update_hash!(hash_state, U(number), context)
 end
@@ -255,7 +256,7 @@ function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
     return update_hash!(hash_state, Bool(bool), context)
 end
 
-function stable_hash_helper(::T, hash_state, context, ::StructTypes.NullType) where T
+function stable_hash_helper(::T, hash_state, context, ::StructTypes.NullType) where {T}
     stable_hash_helper(T, hash_state, context, TypeType())
     return hash_state
 end
