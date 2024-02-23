@@ -53,9 +53,14 @@ function stable_hash(x, context; alg=sha256)
     else
         context = CachingContext(context)
         x_ = transform(x, context)
-        return compute_hash!(stable_hash_helper(x_, HashState(alg, context), context, HashType(x)))
+        return compute_hash!(stable_hash_helper(x_, HashState(alg, context), context,
+                                                HashType(x_, context)))
     end
 end
+
+HashType(x, context) = HashType(x, parent_context(context))
+HashType(x, ::Nothing) = HashType(x)
+HashType(x) = StructTypes.StructType(x)
 
 transform(x, context) = transform(x, parent_context(context))
 transform(x, ::Nothing) = transform(x)

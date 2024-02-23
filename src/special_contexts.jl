@@ -27,11 +27,13 @@ function hash_method(x::T, m::TablesEq) where {T}
     end
     return hash_method(x, parent_context(m))
 end
+
 function transform(x::T, context::TablesEq) where T
     if Tables.istable(T)
-        keys = Tables.columnnames(x)
         cols = Tables.columns(x)
-        return @hash64("Tables.istable"), keys, [Tables.getcolumn(cols, c) for c in keys]
+        keys = Tables.columnnames(cols)
+        return (@hash64("Tables.istable"), collect(keys),
+                [Tables.getcolumn(cols, c) for c in keys])
     else
         transform(x, parent_context(context))
     end
@@ -53,6 +55,7 @@ struct ViewsEq{T}
     function ViewsEq(x::T) where {T}
         Base.depwarn("`ViewsEq` is no longer necessary, as only the deprecated hash "*
                      "versions hash array views to un-equal values with arrays.", :ViewsEq)
+        return new{T}(x)
     end
 end
 ViewsEq() = ViewsEq(HashVersion{1}())
