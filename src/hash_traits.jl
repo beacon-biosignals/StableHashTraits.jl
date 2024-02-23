@@ -81,6 +81,13 @@ function stable_hash_helper(x, hash_state, context, st::StructTypes.DataType)
     # - fieldtypes
 
     # NOTE: fields are ordered or unordered according to the `StructType`
+    # NOTE: in my benchmarking, this remains the most time consuming piece;
+    # it increases time by a factor of about ~10
+    # I wonder if we could conditionally use generated functions so it works
+    # even when the generated part doesn't play out
+    # ALSO: we don't really need this to depend on the context at all in the
+    # generated function case
+    # (would this improve in speed with a function barrier?)
     cache = context_cache(context, Tuple{hash_type(hash_state),NTuple{<:Any,Symbol}})
     type_structure_hash, ordered_fields = get!(cache, typeof(x)) do
         T = typeof(x)
@@ -98,12 +105,12 @@ function stable_hash_helper(x, hash_state, context, st::StructTypes.DataType)
 
         return compute_hash!(type_structure_hash), ordered_fields
     end
-    type_structure_hash
+
     nested_hash_state = stable_hash_helper(type_structure_hash, nested_hash_state, context,
                                            StructTypes.NumberType())
 
     # hash the field values themselves
-    for field in ordered_fields
+    for field in fieldnames(typeof(x)) # ordered_fields
         val = getfield(x, field)
         tval = transform(val, context)
         nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
@@ -250,6 +257,14 @@ function stable_hash_helper(number::T, hash_state, context,
                             ::StructTypes.NumberType) where {T}
     U = StructTypes.numbertype(T)
     return update_hash!(hash_state, U(number), context)
+end
+
+# there are some cases where we have a raw bit array (e.g. when recursively hashing
+# `sha256`); in this situation we don't want to add any sort of header about the array of
+# numbers, just write the bytes to the hash buffer
+function stable_hash_helper(numbers::AbstractVector{T}, hash_state, context,
+                            ::StructTypes.NumberType) where {T}
+    return update_hash!(hash_state, reinterpret(UInt8, numbers), context)
 end
 
 function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)

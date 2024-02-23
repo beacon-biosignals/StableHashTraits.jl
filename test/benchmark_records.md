@@ -31,10 +31,10 @@ many of the issues when hashing low-level objects like numbers and strings. Anyt
 where the type of the objects is represented as a string for each value in an array
 remains quite slow.
 
-``` 
+```
  12×5 DataFrame
- Row │ benchmark   hash       base        trait       ratio     
-     │ SubStrin…   SubStrin…  String      String      Float64   
+ Row │ benchmark   hash       base        trait       ratio
+     │ SubStrin…   SubStrin…  String      String      Float64
 ─────┼──────────────────────────────────────────────────────────
    1 │ structs     crc        70.250 μs   49.386 ms   703.011
    2 │ symbols     crc        12.166 μs   5.328 ms    437.928
@@ -60,8 +60,8 @@ macros to guarantee that their hashes are computed at compile time.
 
 ```
 12×5 DataFrame
- Row │ benchmark   hash       base        trait       ratio     
-     │ SubStrin…   SubStrin…  String      String      Float64   
+ Row │ benchmark   hash       base        trait       ratio
+     │ SubStrin…   SubStrin…  String      String      Float64
 ─────┼──────────────────────────────────────────────────────────
    1 │ structs     crc        71.542 μs   1.116 ms    15.6027
    2 │ tuples      crc        71.459 μs   918.917 μs  12.8594
@@ -76,3 +76,50 @@ macros to guarantee that their hashes are computed at compile time.
   11 │ dataframes  sha256     543.125 μs  749.125 μs   1.37929
   12 │ numbers     sha256     270.958 μs  371.833 μs   1.37229
 ```
+
+# Version 1.2:
+
+```
+ 12×5 DataFrame
+ Row │ benchmark   hash       base        trait       ratio
+     │ SubStrin…   SubStrin…  String      String      Float64
+─────┼───────────────────────────────────────────────────────────
+   1 │ structs     crc        71.541 μs   15.374 ms   214.904
+   2 │ tuples      crc        71.375 μs   3.929 ms     55.0444
+   3 │ dataframes  crc        71.416 μs   800.500 μs   11.209
+   4 │ numbers     crc        35.791 μs   379.959 μs   10.616
+   5 │ symbols     crc        538.041 μs  4.564 ms      8.48286
+   6 │ strings     crc        538.500 μs  498.292 μs    0.925333
+   7 │ structs     sha256     549.250 μs  16.672 ms    30.3537
+   8 │ tuples      sha256     543.375 μs  6.046 ms     11.1271
+   9 │ symbols     sha256     1.385 ms    7.575 ms      5.46985
+  10 │ dataframes  sha256     543.417 μs  1.274 ms      2.34404
+  11 │ numbers     sha256     271.125 μs  613.875 μs    2.26418
+```
+
+Notes on implementation; when removing the type hash for structs
+we get the following:
+
+```
+ Row │ benchmark   hash       base        trait       ratio
+     │ SubStrin…   SubStrin…  String      String      Float64
+─────┼─────────────────────────────────────────────────────────
+   1 │ tuples      crc        70.167 μs   4.637 ms    66.0816
+   2 │ structs     crc        70.209 μs   1.728 ms    24.6194
+   3 │ dataframes  crc        70.000 μs   1.276 ms    18.2351
+   4 │ numbers     crc        35.166 μs   631.334 μs  17.953
+   5 │ symbols     crc        750.375 μs  5.245 ms     6.98939
+   6 │ strings     crc        767.875 μs  794.834 μs   1.03511
+   7 │ tuples      sha256     532.791 μs  5.946 ms    11.16
+   8 │ structs     sha256     532.792 μs  2.953 ms     5.54172
+   9 │ symbols     sha256     1.573 ms    7.475 ms     4.75124
+  10 │ dataframes  sha256     532.750 μs  1.261 ms     2.36657
+  11 │ numbers     sha256     265.792 μs  624.583 μs   2.34989
+  12 │ strings     sha256     1.592 ms    1.636 ms     1.02809
+```
+
+There are two possible solutions that would therefore get us back to reasonable speeds
+    1. hash less type information
+    2. use a generated function
+    3. see if we can make the hash solely a function of types and hope
+    it optimizes better

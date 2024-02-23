@@ -56,7 +56,7 @@ for hashfn in (crc, sha256)
                                                                                       $a))
             end
             suite["$(name)_$hstr"]["trait"] = @benchmarkable $(stable_hash)($b,
-                                                                            HashVersion{V}();
+                                                                            HashVersion{$(V)}();
                                                                             alg=$(hashfn))
         end
     end
