@@ -5,26 +5,26 @@
 bytes_of_val(f) = reinterpret(UInt8, [f;])
 bytes_of_val(f::Symbol) = codeunits(String(f))
 bytes_of_val(f::String) = codeunits(f)
-n_to_type = Dict(8 => UInt8, 16 => UInt16, 32 => UInt32, 64 => UInt64)
-function hash_to_bytes(x, n)
+n_to_type = Dict(1 => UInt8, 2 => UInt16, 4 => UInt32, 8 => UInt64)
+function hash(x, n=8)
     bytes = sha256(bytes_of_val(x))
     if !haskey(n_to_type, n)
         throw(ArgumentError("$n bytes is not a supported value"))
     end
-    # take the first 64 bytes of `bytes`
+    # take the first n bytes of `bytes`
     return first(reinterpret(n_to_type[n], bytes))
 end
 """
-    @hash_to_bytes(x, n)
+    @hash(x, n=8)
 
-Compute a hash of the given literal string, symbol or numeric value as a UInt of the
-appropriate number of bytes at compile time. This is a useful optimization to generate
+Compute a hash of the given literal string, symbol, or numeric value as a UInt of the
+given number of bytes at compile time. This is a useful optimization to generate
 unique tags based on some more verbose string and can be used inside, e.g.
-[`transform`](@ref). Internally this calls `sha256` and returns the first 64 bytes.
+[`transform`](@ref). Internally this calls `sha256` and returns the first n bytes.
 """
-macro hash(constant, n)
+macro hash(constant, n=8)
     if constant isa Symbol || constant isa String || constant isa Number
-        return hash_to_bytes(constant, n)
+        return hash(constant, n)
     else
         return :(throw(ArgumentError(string("Unexpected expression: ", $(string(constant))))))
     end
@@ -42,12 +42,12 @@ function transform(fn::Function, c::HashVersion{3})
     # functions can have fields if they are `struct MyFunctor <: Function` or if they are
     # closures
     fields = fieldnames(typeof(fn))
-    return @hash_to_bytes("Base.Function", 64), qualified_name(fn),
+    return @hash("Base.Function"), qualified_name(fn),
            NamedTuple{fields}(getfield.(fn, fields))
 end
 
 function stable_hash_helper(T, hash_state, context, ::TypeType)
-    hash_state = stable_hash_helper(@hash_to_bytes("TypeType", 64), hash_state, context,
+    hash_state = stable_hash_helper(@hash("TypeType"), hash_state, context,
                                     StructTypes.NumberType())
     return stable_hash_helper(qualified_name_(T), hash_state, context,
                               StructTypes.StringType())
@@ -77,40 +77,8 @@ end
 
 function stable_hash_helper(x, hash_state, context, st::StructTypes.DataType)
     nested_hash_state = start_nested_hash!(hash_state)
-
-    # hash components that depends only on the type of `x` and which denote the structure of
-    # x
-    # - tag indicating it's a `DataType` struct
-    # - fieldnames
-    # - fieldtypes
-
-    # NOTE: fields are ordered or unordered according to the `StructType`
-    # NOTE: in my benchmarking, this remains the most time consuming piece;
-    # it increases time by a factor of about ~10
-    # I wonder if we could conditionally use generated functions so it works
-    # even when the generated part doesn't play out
-    # ALSO: we don't really need this to depend on the context at all in the
-    # generated function case
-    # (would this improve in speed with a function barrier?)
-    cache = context_cache(context, Tuple{hash_type(hash_state),NTuple{<:Any,Symbol}})
-    type_structure_hash, ordered_fields = get!(cache, typeof(x)) do
-        T = typeof(x)
-        fields = fieldnames(T)
-        ordered_fields = (st isa StructTypes.OrderedStruct) ? fields : sort_(fields)
-
-        type_structure_hash = stable_hash_helper(@hash64("DataType"),
-                                                 similar_hash_state(hash_state), context,
-                                                 StructTypes.NumberType())
-        type_structure_hash = stable_hash_helper(ordered_fields, type_structure_hash,
-                                                 context, HashType(ordered_fields, context))
-        for k in ordered_fields
-            stable_hash_helper(fieldtype(T, k), type_structure_hash, context, TypeType())
-        end
-
-        return compute_hash!(type_structure_hash), ordered_fields
-    end
-
-    nested_hash_state = stable_hash_helper(type_structure_hash, nested_hash_state, context,
+    nested_hash_state = stable_hash_helper(@hash("DataType"),
+                                           nested_hash_state, context,
                                            StructTypes.NumberType())
 
     # hash the field values themselves
@@ -129,26 +97,11 @@ end
 ##### DictType
 #####
 
-dict_eltype(x) = eltype(x)
-keytype(::Type{Pair{K,V}}) where {K,V} = K
-keytype(::Type{T}) where {T} = T
-valtype(::Type{Pair{K,V}}) where {K,V} = V
-valtype(::Type{T}) where {T} = T
-
 function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = StructTypes.keyvaluepairs(x)
     nested_hash_state = start_nested_hash!(hash_state)
-    type_structure_hash = get!(context_cache(context, hash_type(hash_state)), typeof(x)) do
-        type_structure_hash = similar_hash_state(hash_state)
-        type_structure_hash = stable_hash_helper(@hash64("DictType"),
-                                                 type_structure_hash, context,
-                                                 StructTypes.NumberType())
-        type_structure_hash = stable_hash_helper(eltype(pairs), type_structure_hash,
-                                                 context, TypeType())
-
-        return compute_hash!(type_structure_hash)
-    end
-    nested_hash_state = stable_hash_helper(type_structure_hash, nested_hash_state, context,
+    nested_hash_state = stable_hash_helper(@hash("DictType"),
+                                           nested_hash_state, context,
                                            StructTypes.NumberType())
 
     for (key, value) in StructTypes.keyvaluepairs(x)
@@ -169,7 +122,7 @@ end
 #####
 
 function transform(x::AbstractArray, c::HashVersion{3})
-    return @hash64("Base.AbstractArray"), size(x), vec(x)
+    return @hash("Base.AbstractArray"), size(x), vec(x)
 end
 transform(x::AbstractVector, c::HashVersion{3}) = x
 HashType(x::AbstractRange, c::HashVersion{3}) = StructTypes.Struct()
@@ -177,48 +130,8 @@ HashType(x::AbstractRange, c::HashVersion{3}) = StructTypes.Struct()
 function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
     nested_hash_state = start_nested_hash!(hash_state)
 
-    type_structure_hash = get!(context_cache(context, hash_type(hash_state)), typeof(xs)) do
-        T = typeof(xs)
-        type_structure_hash = similar_hash_state(hash_state)
-        type_structure_hash = stable_hash_helper(@hash64("ArrayType"),
-                                                 type_structure_hash, context,
-                                                 StructTypes.NumberType())
-        type_structure_hash = stable_hash_helper(eltype(T), type_structure_hash, context,
-                                                 TypeType())
-        return compute_hash!(type_structure_hash)
-    end
-    nested_hash_state = stable_hash_helper(type_structure_hash, nested_hash_state, context,
-                                           StructTypes.NumberType())
-
-    for x in xs
-        tx = transform(x, context)
-        nested_hash_state = stable_hash_helper(tx, nested_hash_state, context,
-                                               HashType(tx, context))
-    end
-
-    hash_state = end_nested_hash!(hash_state, nested_hash_state)
-    return hash_state
-end
-
-#####
-##### Tuples
-#####
-
-function stable_hash_helper(xs::Tuple, hash_state, context, ::StructTypes.ArrayType)
-    nested_hash_state = start_nested_hash!(hash_state)
-    type_structure_hash = get!(context_cache(context, hash_type(hash_state)), typeof(xs)) do
-        T = typeof(xs)
-        type_structure_hash = similar_hash_state(hash_state)
-        type_structure_hash = stable_hash_helper(@hash64("Tuple.DataType"),
-                                                 type_structure_hash, context,
-                                                 StructTypes.NumberType())
-        for f in fieldnames(T)
-            type_structure_hash = stable_hash_helper(fieldtype(T, f), type_structure_hash,
-                                                     context, TypeType())
-        end
-        return compute_hash!(type_structure_hash)
-    end
-    nested_hash_state = stable_hash_helper(type_structure_hash, nested_hash_state, context,
+    tag = xs isa Tuple ? @hash("Base.Tuple") : @hash("ArrayType")
+    nested_hash_state = stable_hash_helper(tag, nested_hash_state, context,
                                            StructTypes.NumberType())
 
     for x in xs
@@ -244,38 +157,38 @@ end
 ##### Basic data types
 #####
 
-transform(x::Symbol) = @hash64(":"), String(x)
+transform(x::Symbol) = @hash(":"), String(x)
 
-function stable_hash_helper(str::AbstractString, hash_state, context,
+function stable_hash_helper(str, hash_state, context,
                             ::StructTypes.StringType)
-    hash_state = update_hash!(hash_state, @hash64("Base.AbstractString"), context)
-    return update_hash!(hash_state, str, context)
-end
-
-function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
-    hash_state = update_hash!(hash_state, @hash64("Base.AbstractString"), context)
-    return update_hash!(hash_state, string(str), context)
+    hash_state = update_hash!(hash_state, @hash("StringType"), context)
+    return update_hash!(hash_state, str isa AbstractString ? str : string(str), context)
 end
 
 function stable_hash_helper(number::T, hash_state, context,
                             ::StructTypes.NumberType) where {T}
     U = StructTypes.numbertype(T)
+    # for small sized numbers we want to hash no more than double `sizeof(U)` bytes
+    tag = if sizeof(U) == 1
+        @hash("NumberType", 1)
+    elseif sizeof(U) == 2
+        @hash("NumberType", 2)
+    elseif sizeof(U) == 4
+        @hash("NumberType", 4)
+    else
+        @hash("NumberType", 8)
+    end
+    hash_state = update_hash!(hash_state, tag, context)
     return update_hash!(hash_state, U(number), context)
 end
 
-# there are some cases where we have a raw bit array (e.g. when recursively hashing
-# `sha256`); in this situation we don't want to add any sort of header about the array of
-# numbers, just write the bytes to the hash buffer
-function stable_hash_helper(numbers::AbstractVector{T}, hash_state, context,
-                            ::StructTypes.NumberType) where {T}
-    return update_hash!(hash_state, reinterpret(UInt8, numbers), context)
-end
-
 function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
+    hash_state = update_hash!(hash_state, @hash("BoolType"), context)
     return update_hash!(hash_state, Bool(bool), context)
 end
 
 function stable_hash_helper(::T, hash_state, context, ::StructTypes.NullType) where {T}
+    hash_state = update_hash!(hash_state, @hash("NullType"), context)
     stable_hash_helper(T, hash_state, context, TypeType())
     return hash_state
 end

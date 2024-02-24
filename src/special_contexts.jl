@@ -32,7 +32,7 @@ function transform(x::T, context::TablesEq) where {T}
     if Tables.istable(T)
         cols = Tables.columns(x)
         keys = Tables.columnnames(cols)
-        return (@hash64("Tables.istable"), collect(keys),
+        return (@hash("Tables.istable"), collect(keys),
                 [Tables.getcolumn(cols, c) for c in keys])
     else
         transform(x, parent_context(context))

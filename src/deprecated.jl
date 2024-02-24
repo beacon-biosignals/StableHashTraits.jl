@@ -156,7 +156,7 @@ function qualified_type(x)
     return qualified_type_(x)
 end
 
-function hash64(values::Tuple)
+function hash(values::Tuple)
     sha = SHA.SHA2_256_CTX()
     for val in values
         SHA.update!(sha, bytes_of_val(val))
@@ -191,11 +191,11 @@ julia> stable_typename_id(["a", "b"])
     as their printing changes from Julia 1.6 -> 1.7.
 """
 stable_typename_id(x) = stable_id_helper(x, Val(:name))
-stable_id_helper(::Type{T}, of::Val) where {T} = hash64(qualified_(T, of))
+stable_id_helper(::Type{T}, of::Val) where {T} = hash(qualified_(T, of))
 @generated function stable_id_helper(x, of)
     T = x <: Function ? x.instance : x
     str = qualified_(T, of)
-    number = hash64(str)
+    number = hash(str)
     :(return $number)
 end
 
@@ -229,9 +229,9 @@ stable_type_id(x) = stable_id_helper(x, Val(:type))
 Returns a 64 bit hash that is the same for a given type so long as the set of field names
 remains unchanged.
 """
-stable_typefields_id(::Type{T}) where {T} = hash64(sort_(fieldnames(T)))
+stable_typefields_id(::Type{T}) where {T} = hash(sort_(fieldnames(T)))
 @generated function stable_typefields_id(x)
-    number = hash64(sort_(fieldnames(x)))
+    number = hash(sort_(fieldnames(x)))
     return :(return $number)
 end
 
@@ -254,14 +254,14 @@ PrivateConstantHash(val) = PrivateConstantHash{typeof(val),Nothing}(val, nothing
 get_value_(x, method::PrivateConstantHash) = method.constant
 
 function ConstantHash(constant, method=nothing)
-    Base.depwarn("`ConstantHash` has been deprecated, favor `@ConstantHash`.",
+    Base.depwarn("`ConstantHash` has been deprecated, favor ` ConstantHash`.",
                  :ConstantHash)
     return PrivateConstantHash(constant, method)
 end
 
 macro ConstantHash(constant)
     if constant isa Symbol || constant isa String || constant isa Number
-        return :(PrivateConstantHash($(hash64(constant)), WriteHash()))
+        return :(PrivateConstantHash($(hash(constant)), WriteHash()))
     else
         return :(throw(ArgumentError(string("Unexpected expression: ", $(string(constant))))))
     end
