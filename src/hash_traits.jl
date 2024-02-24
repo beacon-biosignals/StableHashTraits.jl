@@ -5,22 +5,26 @@
 bytes_of_val(f) = reinterpret(UInt8, [f;])
 bytes_of_val(f::Symbol) = codeunits(String(f))
 bytes_of_val(f::String) = codeunits(f)
-function hash64(x)
+n_to_type = Dict(8 => UInt8, 16 => UInt16, 32 => UInt32, 64 => UInt64)
+function hash_to_bytes(x, n)
     bytes = sha256(bytes_of_val(x))
+    if !haskey(n_to_type, n)
+        throw(ArgumentError("$n bytes is not a supported value"))
+    end
     # take the first 64 bytes of `bytes`
-    return first(reinterpret(UInt64, bytes))
+    return first(reinterpret(n_to_type[n], bytes))
 end
 """
-    @hash64(x)
+    @hash_to_bytes(x, n)
 
-Compute a hash of the given string, symbol or numeric literal as an Int64 at compile time.
-This is a useful optimization to generate unique tags based on some more verbose string and
-can be used inside, e.g. [`transform`](@ref). Internally this calls `sha256` and returns the
-first 64 bytes.
+Compute a hash of the given literal string, symbol or numeric value as a UInt of the
+appropriate number of bytes at compile time. This is a useful optimization to generate
+unique tags based on some more verbose string and can be used inside, e.g.
+[`transform`](@ref). Internally this calls `sha256` and returns the first 64 bytes.
 """
-macro hash64(constant)
+macro hash(constant, n)
     if constant isa Symbol || constant isa String || constant isa Number
-        return hash64(constant)
+        return hash_to_bytes(constant, n)
     else
         return :(throw(ArgumentError(string("Unexpected expression: ", $(string(constant))))))
     end
@@ -38,12 +42,12 @@ function transform(fn::Function, c::HashVersion{3})
     # functions can have fields if they are `struct MyFunctor <: Function` or if they are
     # closures
     fields = fieldnames(typeof(fn))
-    return @hash64("Base.Function"), qualified_name(fn),
+    return @hash_to_bytes("Base.Function", 64), qualified_name(fn),
            NamedTuple{fields}(getfield.(fn, fields))
 end
 
 function stable_hash_helper(T, hash_state, context, ::TypeType)
-    hash_state = stable_hash_helper(@hash64("TypeType"), hash_state, context,
+    hash_state = stable_hash_helper(@hash_to_bytes("TypeType", 64), hash_state, context,
                                     StructTypes.NumberType())
     return stable_hash_helper(qualified_name_(T), hash_state, context,
                               StructTypes.StringType())
