@@ -39,7 +39,7 @@ Instead of passing a context, you can instead pass a `version` keyword, that wil
 set the context to `HashVersion{version}()`.
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
-related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
+related function from `SHA` or any function of the form `hash64(x::AbstractArray{UInt8},
 [old_hash])`.
 
 The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
@@ -53,15 +53,20 @@ function stable_hash(x, context; alg=sha256)
                                                 hash_method(x, context)))
     else
         context = CachingContext(context)
-        x_ = transform(x, context)
-        return compute_hash!(stable_hash_helper(x_, HashState(alg, context), context,
-                                                HashType(x_, context)))
+        return compute_hash!(stable_hash_helper(x, HashState(alg, context), context,
+                                                HashType(x, context)))
     end
 end
 
-HashType(x, context) = HashType(x, parent_context(context))
-HashType(x, ::Nothing) = HashType(x)
-HashType(x) = StructTypes.StructType(x)
+struct TransformType{F,H}
+    fn::F
+    result_method::H # if non-nothing, apply to result of `fn`
+end
+TransformType(fn) = TransformType{typeof(fn),Nothing}(fn, nothing)
+
+@inline HashType(T::Type, context) = HashType(T, parent_context(context))
+@inline HashType(T::Type, ::Nothing) = HashType(T)
+@inline HashType(T::Type) = StructTypes.StructType(T)
 
 transform(x, context) = transform(x, parent_context(context))
 transform(x, ::Nothing) = transform(x)

@@ -32,7 +32,7 @@ function transform(x::T, context::TablesEq) where {T}
     if Tables.istable(T)
         cols = Tables.columns(x)
         keys = Tables.columnnames(cols)
-        return (@hash("Tables.istable"), collect(keys),
+        return (@hash64("Tables.istable"), collect(keys),
                 [Tables.getcolumn(cols, c) for c in keys])
     else
         transform(x, parent_context(context))
@@ -49,6 +49,10 @@ end
 Create a hash context where only the contents of an array or string determine its hash: that
 is, the type of the array or string (e.g. `SubString` vs. `String`) does not impact the hash
 value.
+
+!!! warn "Deprecated"
+    In HashVersion{3} this is already true, so there is no need for `ViewsEq`. This
+    does not change the behavior of `HashVersion{3}` or later.
 """
 struct ViewsEq{T}
     parent::T

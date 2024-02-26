@@ -100,7 +100,7 @@ similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
 hash_type(::T) where {T<:SHA.SHA_CTX} = Vector{UInt8}
 
 #####
-##### RecursiveHashState: handles a function of the form hash(bytes, [old_hash])
+##### RecursiveHashState: handles a function of the form hash64(bytes, [old_hash])
 #####
 
 function HashState(fn::Function, context)

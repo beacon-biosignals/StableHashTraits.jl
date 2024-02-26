@@ -6,9 +6,7 @@
 [![Code Style: YASGuide](https://img.shields.io/badge/code%20style-yas-violet.svg)](https://github.com/jrevels/YASGu)
 
 
-The aim of StableHashTraits is to make it easy to compute a stable hash of any Julia value
-with minimal boilerplate using trait-based dispatch; here, "stable" means the value will not
-change across Julia versions (or between Julia sessions).
+The aim of StableHashTraits is to make it easy to compute a stable hash of any Julia value with minimal boilerplate using trait-based dispatch; here, "stable" means the value will not change across Julia versions (or between Julia sessions).
 
 For example:
 
@@ -21,35 +19,34 @@ struct MyType
    metadata::Dict{Symbol, Any}
 end
 # ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
-StableHashTraits.stable_hash(::MyType) = FnHash(x -> x.data)
+StableHashTraits.transform(x::MyType) = @hash64("MyType"), x.data
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
-stable_hash(a; version=2) == stable_hash(b; version=2) # true
+stable_hash(a; version=3) == stable_hash(b; version=3) # true
 ```
 
-StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking
-versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an
-object's hash in this case would be considered a bug.
+The `transform` method is applied to an object before computing a hash. Useres can define a
+method of `transform` to customize how an object is hashed. Once transformed objects are
+generally hashed according to [`StructTypes`](https://github.com/JuliaData/StructTypes.jl)
+traits.
 
-> ⚠️ In Julia 1.10 the stability of hashes in `StableHashTraits` is broken; 1.1.5 corrects
-> this bug. Versions 1.1.4 are to be retroactively marked as incompatible with Julia 1.10.
-> Please use version 1.1.5, or a higher version, when using Julia 1.10. More precisely:
-> Hashes in 1 - 1.1.4 of StableHashTraits will generate the correct hashes on Julia 1.6 -
-> 1.9 but an incorrect hash in 1.10. Hashes in 1.1.5 will generate the correct hash for
-> Julia 1.6 - 1.10. (The cause of this bug was the change in the string representation of
-> named tuples, so any hashed objects that include the type of a named tuple changed).
+StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
-## Why use `stable_hash` instead of `Base.hash`?
+> ⚠️ Hash versions 3 constitutes a substantial redesign of StableHashTraits so as to avoid reliance on Julia internals. Hash versions 1 and 2 are deprecated and will be removed in a soon-to-be released StableHashTraits@2.0. Hash version 3 will remain unchanged in this 2.0 release
 
-This package can be useful any time one of the following holds:
+## Use Case and Design Rationale
 
-- you want to ensure the hash value will not change when you update Julia or start a new session
-- you want to compute a hash for an object that does not have `hash` defined
-- you want to customize how the hash works, within a specific scope
+StableHashTraits is designed to be used in cases where there is an object we wish to serialize in a content-addressed cache. In this situation one does not want the session or julai version to matter to the hash value. Furthermore, `StableHashTraits` generally considers hash collisions between two objects that would serialize to the same result (e.g. an `Array` and `SubArray`) acceptable. How and when objects collide should be predictable and well defined, so that the user can reliably define methods of `transform` to change this behavior.
 
-This is useful for content-addressed caching, in which e.g. some function of a value is stored at a location determined by a hash. Given the value, one can recompute the hash to determine where to look to see if the function evaluation on that value has already been cached.
+Since there are times where we may need to define a method of `transform` on an object the
+user doesn't own (e.g. one from `Base`) to correctly cache in a particular context, this should be possible to do without committing type piracy. In these cases you can define a two argument method of `transform` that accepts a second `context` object (see below for an example).
+
+## Example
 
 ## Details
+
+`StableHashTraits` the existing serialization infrastructure in [`StructTypes`](https://github.com/JuliaData/StructTypes.jl). Many packages already define traits from
+this package, meaning that `StableHashTraits` can leverage these declared serialization properties when computing a hash.
 
 You compute hashes using `stable_hash`. This is called on the object you want to hash, and
 (optionally) a second argument called the context. The context you use affects how hashing
