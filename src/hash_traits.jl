@@ -43,10 +43,10 @@ function transform(fn::Function, c::HashVersion{3})
            NamedTuple{fields}(getfield.(fn, fields))
 end
 
-function stable_hash_helper(T, hash_state, context, ::TypeType)
-    hash_state = stable_hash_helper(@hash64("TypeType"), hash_state, context,
+function stable_content_hash(T, hash_state, context, ::TypeType)
+    hash_state = stable_content_hash(@hash64("TypeType"), hash_state, context,
                                     StructTypes.NumberType())
-    return stable_hash_helper(qualified_name_(T), hash_state, context,
+    return stable_content_hash(qualified_name_(T), hash_state, context,
                               StructTypes.StringType())
 end
 
@@ -73,9 +73,25 @@ end
 ##### DataType
 #####
 
-function stable_hash_helper(x, hash_state, context, ::StructTypes.DataType)
+function stable_type_hash(x, hash_state, context, st::StructTypes.DataType)
     nested_hash_state = start_nested_hash!(hash_state)
-    nested_hash_state = stable_hash_helper(@hash64("DataType"),
+    T = typeof(x)
+    type_hash = get!(context, typeof(x)) do
+        fields = st isa StructTypes.UnorderedStruct ? fieldnames(T) :
+            sorted_field_names(T)
+        # we hash the fields and... their types???
+    end
+    hash_state = end_nested_hash!(hash_state, nested_hash_state)
+    return hash_state
+end
+
+@generated function sorted_field_names(T)
+    return TupleTools.sort(fieldnames(T); by=string)
+end
+
+function stable_content_hash(x, hash_state, context, st::StructTypes.DataType)
+    nested_hash_state = start_nested_hash!(hash_state)
+    nested_hash_state = stable_content_hash(@hash64("DataType"),
                                            nested_hash_state, context,
                                            StructTypes.NumberType())
 
@@ -95,10 +111,12 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DataType)
     # of caching
 
     # hash the field values themselves
-    for field in fieldnames(typeof(x)) # ordered_fields
+    fields = st isa StructTypes.UnorderedStruct ? sorted_field_names(typeof(x)) :
+        fieldnames(typeof(x))
+    for field in fields
         val = getfield(x, field)
         tval = transform(val, context)
-        nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
+        nested_hash_state = stable_content_hash(tval, nested_hash_state, context,
                                                HashType(tval, context))
     end
 
@@ -110,19 +128,24 @@ end
 ##### DictType
 #####
 
-function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
+sort_items_by(x) = nothing
+# TODO: implement order_matters(::OrderedDict) = string ∘ first etc...
+
+function stable_content_hash(x, hash_state, context, ::StructTypes.DictType)
     pairs = StructTypes.keyvaluepairs(x)
     nested_hash_state = start_nested_hash!(hash_state)
-    nested_hash_state = stable_hash_helper(@hash64("DictType"),
+    nested_hash_state = stable_content_hash(@hash64("DictType"),
                                            nested_hash_state, context,
                                            StructTypes.NumberType())
 
-    for (key, value) in StructTypes.keyvaluepairs(x)
+    pairs = isnothing(sorted_items_by(x)) ? StructTypes.keyvaluepairs(x) :
+        sort(StructTypes.keyvaluepairs(x); by=sort_items_by)
+    for (key, value) in pairs
         tkey = transform(key, context)
         tvalue = transform(value, context)
-        nested_hash_state = stable_hash_helper(tkey, nested_hash_state, context,
+        nested_hash_state = stable_content_hash(tkey, nested_hash_state, context,
                                                HashType(tkey, context))
-        nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context,
+        nested_hash_state = stable_content_hash(tvalue, nested_hash_state, context,
                                                HashType(tvalue, context))
     end
 
@@ -134,22 +157,26 @@ end
 ##### ArrayType
 #####
 
+sort_items_by(x) = nothing
+sort_items_by(::AbstractSet) = string
+
 function transform(x::AbstractArray, c::HashVersion{3})
     return @hash64("Base.AbstractArray"), size(x), vec(x)
 end
 transform(x::AbstractVector, c::HashVersion{3}) = x
 HashType(x::AbstractRange, c::HashVersion{3}) = StructTypes.Struct()
 
-function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
+function stable_content_hash(xs, hash_state, context, ::StructTypes.ArrayType)
     nested_hash_state = start_nested_hash!(hash_state)
 
     tag = xs isa Tuple ? @hash64("Base.Tuple") : @hash64("ArrayType")
-    nested_hash_state = stable_hash_helper(tag, nested_hash_state, context,
+    nested_hash_state = stable_content_hash(tag, nested_hash_state, context,
                                            StructTypes.NumberType())
 
+    items = order_matters(x) ? sort(xs; by=string) : xs
     for x in xs
         tx = transform(x, context)
-        nested_hash_state = stable_hash_helper(tx, nested_hash_state, context,
+        nested_hash_state = stable_content_hash(tx, nested_hash_state, context,
                                                HashType(tx, context))
     end
 
@@ -161,9 +188,9 @@ end
 ##### CustomStruct
 #####
 
-function stable_hash_helper(x, hash_state, context, ::StructTypes.CustomStruct)
+function stable_content_hash(x, hash_state, context, ::StructTypes.CustomStruct)
     lowered = StructTypes.lower(x)
-    return stable_hash_helper(lowered, hash_state, context, HashType(lowered, context))
+    return stable_content_hash(lowered, hash_state, context, HashType(lowered, context))
 end
 
 #####
@@ -172,13 +199,13 @@ end
 
 transform(x::Symbol) = @hash64(":"), String(x)
 
-function stable_hash_helper(str, hash_state, context,
+function stable_content_hash(str, hash_state, context,
                             ::StructTypes.StringType)
     hash_state = update_hash!(hash_state, @hash64("StringType"), context)
     return update_hash!(hash_state, str isa AbstractString ? str : string(str), context)
 end
 
-function stable_hash_helper(number::T, hash_state, context,
+function stable_content_hash(number::T, hash_state, context,
                             ::StructTypes.NumberType) where {T}
     U = StructTypes.numbertype(T)
     # for small sized numbers we want to hash no more than double `sizeof(U)` bytes
@@ -195,13 +222,13 @@ function stable_hash_helper(number::T, hash_state, context,
     return update_hash!(hash_state, U(number), context)
 end
 
-function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
+function stable_content_hash(bool, hash_state, context, ::StructTypes.BoolType)
     hash_state = update_hash!(hash_state, @hash64("BoolType"), context)
     return update_hash!(hash_state, Bool(bool), context)
 end
 
-function stable_hash_helper(::T, hash_state, context, ::StructTypes.NullType) where {T}
+function stable_content_hash(::T, hash_state, context, ::StructTypes.NullType) where {T}
     hash_state = update_hash!(hash_state, @hash64("NullType"), context)
-    stable_hash_helper(T, hash_state, context, TypeType())
+    stable_content_hash(T, hash_state, context, TypeType())
     return hash_state
 end

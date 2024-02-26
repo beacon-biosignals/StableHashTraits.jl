@@ -105,9 +105,6 @@ orderfields(::StructHash{<:Any,:ByName}, props) = sort_(props)
 sort_(x::Tuple) = TupleTools.sort(x; by=string)
 sort_(x::AbstractSet) = sort!(collect(x); by=string)
 sort_(x) = sort(x; by=string)
-@generated function sorted_field_names(T)
-    return sort_(fieldnames(T))
-end
 
 function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,S}) where {S}
     fieldsfn, getfieldfn = use.fnpair
