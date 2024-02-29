@@ -181,6 +181,8 @@ function end_nested_hash!(root::BufferedHashState, x::BufferedHashState)
 end
 
 function update_hash!(hasher::BufferedHashState, obj, context)
+    # TODO: when we remove `deprecated.jl`, change this to `Base.write` and remove the
+    # `context` parameters
     write(hasher.io, obj, context)
     flush_bytes!(hasher)
     return hasher

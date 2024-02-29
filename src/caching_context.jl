@@ -1,6 +1,6 @@
 struct CachingContext{T}
     parent::T
-    type_caches::IdDict{Type, Vector{UInt8}}
+    type_caches::IdDict{Type,Vector{UInt8}}
 end
 
 function CachingContext(parent, dict=IdDict{Type,IdDict}())
