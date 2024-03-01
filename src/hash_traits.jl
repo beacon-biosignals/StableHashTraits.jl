@@ -173,7 +173,7 @@ function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
     nested_hash_state = stable_hash_helper(tag, nested_hash_state, context,
                                            StructTypes.NumberType())
 
-    items = order_matters(x) ? sort(xs; by=string) : xs
+    items = !isnothing(sort_items_by(x)) ? sort(xs; by=sort_items_by(x)) : xs
     if has_concrete_eltype(items)
         x1 = first(items)
         stable_type_hash(x1, nested_hash_state, context, HashType(x1, content))
@@ -244,8 +244,7 @@ end
 
 # `string` ensures that the object can be ordered
 # NOTE: really we could sort by the hash and that would be consistent in all cases
-sort_items_by(x) = string ∘ first
-# TODO: implement sort_items_by(::OrderedDict) = nothing
+sort_items_by(x::AbstractDict) = string ∘ first
 
 keytype(::Pair{K,T}) where {K,T} = K
 valtype(::Pair{K,T}) where {K,T} = T
@@ -273,7 +272,7 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     nested_hash_state = start_nested_hash!(hash_state)
 
     pairs = isnothing(sorted_items_by(x)) ? StructTypes.keyvaluepairs(x) :
-            sort(StructTypes.keyvaluepairs(x); by=sort_items_by)
+            sort(StructTypes.keyvaluepairs(x); by=sort_items_by(x))
     if has_concrete_eltype(pairs)
         (key1, val1) = first(pairs)
         stable_type_hash(typeof(key1), nested_hash_state, context, HashType(key1, context))
@@ -328,7 +327,7 @@ end
 
 transform(x::Symbol) = @hash64(":"), String(x)
 
-function stable_type_hash(T, hash_state, context, ::StructType.StringType)
+function stable_type_hash(T, hash_state, context, ::StructTypes.StringType)
     return update_hash!(hash_state, @hash64("StringType"), context)
 end
 
@@ -339,7 +338,7 @@ function stable_hash_helper(str, hash_state, context,
     return end_nested_hash!(hash_state, nested_hash_state)
 end
 
-function stable_type_hash(T, hash_state, context, ::StructType.NumberType)
+function stable_type_hash(T, hash_state, context, ::StructTypes.NumberType)
     U = StructTypes.numbertype(T)
     bytes = get!(context, U) do
         type_context = HashVersion{3}()
@@ -359,7 +358,7 @@ function stable_hash_helper(number::T, hash_state, context,
     return update_hash!(hash_state, U(number), context)
 end
 
-function stable_type_hash(_, hash_state, context, ::StructType.BoolType)
+function stable_type_hash(_, hash_state, context, ::StructTypes.BoolType)
     return update_hash!(hash_state, @hash64("BoolType"), context)
 end
 
@@ -367,7 +366,7 @@ function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
     return update_hash!(hash_state, Bool(bool), context)
 end
 
-function stable_type_hash(_, hash_state, context, ::StructType.BoolType)
+function stable_type_hash(_, hash_state, context, ::StructTypes.BoolType)
     return update_hash!(hash_state, @hash64("NullType"), context)
 end
 
