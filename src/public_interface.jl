@@ -65,9 +65,13 @@ transform(x, context) = transform(x, parent_context(context))
 transform(x, ::Nothing) = transform(x)
 transform(x) = x
 
-stable_type_name(::Type, context, st::StructTypes.StructType) = qualified_name_(st)
-stable_type_name(x::Function, context, st::StructTypes.StructType) = qualified_name_(x)
-function stable_type_name(::Type{T}, context, st::StructTypes.StructType) where {T<:Function}
+# TODO: okay, I think the plan is to define a `transform` method for types and this looks
+# something like `qualified_name_(x), fieldtypes(x)` for most types and then there is just
+# one `stable_type_hash` method that manages caching of the hashes of these transformed
+# values
+stable_type_name(::Type{T}, context) where {T} = qualified_name_(StructTypes.StructType(T))
+stable_type_name(x::Function, context) = qualified_name_(x)
+function stable_type_name(::Type{T}, context) where {T<:Function}
     if hasproperty(T, :instance) && isdefined(T, :instance)
         qualified_name_(T.instance)
     else
