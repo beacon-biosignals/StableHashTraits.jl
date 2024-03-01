@@ -68,7 +68,8 @@ transform(x) = x
 # TODO: okay, I think the plan is to define a `transform` method for types and this looks
 # something like `qualified_name_(x), fieldtypes(x)` for most types and then there is just
 # one `stable_type_hash` method that manages caching of the hashes of these transformed
-# values
+# values; the trick will be that this needs to happen in a context where we don't recurse
+# forever (e.g. because we hash a string type when hashing the string of a type name)
 stable_type_name(::Type{T}, context) where {T} = qualified_name_(StructTypes.StructType(T))
 stable_type_name(x::Function, context) = qualified_name_(x)
 function stable_type_name(::Type{T}, context) where {T<:Function}
