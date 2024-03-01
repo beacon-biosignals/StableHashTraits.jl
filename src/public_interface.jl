@@ -53,20 +53,12 @@ function stable_hash(x, context; alg=sha256)
                                                 hash_method(x, context)))
     else
         context = CachingContext(context)
-        return compute_hash!(stable_hash_helper(x, HashState(alg, context), context,
-                                                HashType(x, context)))
+        hash_state = HashState(alg, context)
+        hash_state = stable_type_hash(typeof(x), hash_state, context, HashType(x, context))
+        hash_state = stable_hash_helper(x, hash_state, context, HashType(x, context))
+        return compute_hash!(hash_state)
     end
 end
-
-struct TransformType{F,H}
-    fn::F
-    result_method::H # if non-nothing, apply to result of `fn`
-end
-TransformType(fn) = TransformType{typeof(fn),Nothing}(fn, nothing)
-
-@inline HashType(T::Type, context) = HashType(T, parent_context(context))
-@inline HashType(T::Type, ::Nothing) = HashType(T)
-@inline HashType(T::Type) = StructTypes.StructType(T)
 
 transform(x, context) = transform(x, parent_context(context))
 transform(x, ::Nothing) = transform(x)
