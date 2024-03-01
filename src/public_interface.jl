@@ -65,7 +65,15 @@ transform(x, context) = transform(x, parent_context(context))
 transform(x, ::Nothing) = transform(x)
 transform(x) = x
 
-# TODO: support a method for givin a type a particular name
+stable_type_name(::Type, context, st::StructTypes.StructType) = qualified_name_(st)
+stable_type_name(x::Function, context, st::StructTypes.StructType) = qualified_name_(x)
+function stable_type_name(::Type{T}, context, st::StructTypes.StructType) where {T<:Function}
+    if hasproperty(T, :instance) && isdefined(T, :instance)
+        qualified_name_(T.instance)
+    else
+        qualified_name_(T)
+    end
+end
 
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *

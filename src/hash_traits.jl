@@ -34,7 +34,7 @@ struct TypeType end
 HashType(x) = StructType(x)
 HashType(::Type) = TypeType()
 HashType(::Module) = TypeType()
-HashType(::Function) = TypeType()
+HashType(::Function) = StructTypes.UnorderedStruct()
 
 function stable_type_hash(T, hash_state, context, ::TypeType)
     return update_hash!(hash_state, @hash64("TypeType"), context)
@@ -80,10 +80,14 @@ sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
     return TupleTools.sort(fieldnames(T); by=string)
 end
 
+function stable_type_hash(T::Type{<:DataType}, hash_state, context, ::StructTypes.DataType)
+    return update_hash!(hash_state, @hash64("TypeType"), context)
+end
+
 function stable_type_hash(T::Union{Type, Function}, hash_state, context, st::StructTypes.DataType)
     bytes = get!(context, T) do
         type_hash_state = similar_hash_state(hash_state)
-        type_hash_state = stable_hash_helper(qualified_name_(T), type_hash_state,
+        type_hash_state = stable_hash_helper(stable_type_name(T, context, st), type_hash_state,
                                              context, StructTypes.StringType())
         # NOTE: functions sometimes have fields (e.g. a closure or a struct <: Function) and
         # can be hashed as such; in any case `fieldnames` safely returns an empty tuple for
@@ -160,10 +164,10 @@ end
 
 asarray(x) = [x]
 asarray(x::AbstractArray) = x
-function stable_type_hash(T::Type, hash_state, context, ::StructTypes.ArrayType)
+function stable_type_hash(T::Type, hash_state, context, st::StructTypes.ArrayType)
     bytes = get!(context, T) do
         type_hash_state = similar_hash_state(hash_state)
-        type_hash_state = stable_hash_helper(qualified_name_(T), type_hash_state,
+        type_hash_state = stable_hash_helper(stable_type_name(T, context, st), type_hash_state,
                                              context, StructTypes.StringType())
         type_hash_state = stable_type_hash(eltype(T), type_hash_state, context,
                                            StructType(eltype(T)))
@@ -201,10 +205,10 @@ end
 ##### Tuples
 #####
 
-function stable_type_hash(T::Type{<:Tuple}, hash_state, context, ::StructTypes.ArrayType)
+function stable_type_hash(T::Type{<:Tuple}, hash_state, context, st::StructTypes.ArrayType)
     bytes = get!(context, T) do
         type_hash_state = similar_hash_state(hash_state)
-        type_hash_state = stable_hash_helper(qualified_name_(T), type_hash_state,
+        type_hash_state = stable_hash_helper(stable_type_name(T, context, st), type_hash_state,
                                              context, StructTypes.StringType())
 
         if !isabstracttype(T)
@@ -218,10 +222,10 @@ function stable_type_hash(T::Type{<:Tuple}, hash_state, context, ::StructTypes.A
     return update_hash!(hash_state, bytes, context)
 end
 
-function stable_type_hash(T::Type{<:NTuple}, hash_state, context, ::StructTypes.ArrayType)
+function stable_type_hash(T::Type{<:NTuple}, hash_state, context, st::StructTypes.ArrayType)
     bytes = get!(context, T) do
         type_hash_state = similar_hash_state(hash_state)
-        type_hash_state = stable_hash_helper(qualified_name_(T), type_hash_state,
+        type_hash_state = stable_hash_helper(stable_type_name(T, context, st), type_hash_state,
                                              context, StructTypes.StringType())
         type_hash_state = stable_type_hash(eltype(T), type_hash_state, context,
                                            StructType(eltype(T)))
@@ -261,17 +265,17 @@ end
 
 # `string` ensures that the object can be ordered
 # NOTE: really we could sort by the hash and that would be consistent in all cases
-sort_items_by(x::AbstractDict) = string ∘ first
+sort_items_by(x::AbstractDict) = string
 
 keytype(::Pair{K,T}) where {K,T} = K
 valtype(::Pair{K,T}) where {K,T} = T
 keytype(::T) where {T} = T
 valtype(::T) where {T} = T
 
-function stable_type_hash(T::Type, hash_state, context, ::StructTypes.DictType)
+function stable_type_hash(T::Type, hash_state, context, st::StructTypes.DictType)
     bytes = get!(context, T) do
         type_hash_state = similar_hash_state(hash_state)
-        type_hash_state = stable_hash_helper(qualified_name_(T), type_hash_state,
+        type_hash_state = stable_hash_helper(stable_type_name(T, context, st), type_hash_state,
                                              context, StructTypes.StringType())
         K = keytype(eltype(T))
         type_hash_state = stable_type_hash(K, type_hash_state, context, StructType(K))
@@ -286,7 +290,7 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = StructTypes.keyvaluepairs(x)
     nested_hash_state = start_nested_hash!(hash_state)
 
-    pairs = isnothing(sorted_items_by(x)) ? StructTypes.keyvaluepairs(x) :
+    pairs = isnothing(sort_items_by(x)) ? StructTypes.keyvaluepairs(x) :
             sort(StructTypes.keyvaluepairs(x); by=sort_items_by(x))
     if has_concrete_eltype(pairs)
         (key1, val1) = first(pairs)
@@ -353,11 +357,11 @@ function stable_hash_helper(str, hash_state, context,
     return end_nested_hash!(hash_state, nested_hash_state)
 end
 
-function stable_type_hash(T, hash_state, context, ::StructTypes.NumberType)
+function stable_type_hash(T, hash_state, context, st::StructTypes.NumberType)
     U = StructTypes.numbertype(T)
     bytes = get!(context, U) do
         type_hash_state = similar_hash_state(hash_state)
-        type_hash_state = stable_hash_helper(qualified_name_(U), type_hash_state, context,
+        type_hash_state = stable_hash_helper(stable_type_name(U, context, st), type_hash_state, context,
                                              StructTypes.StringType())
         return reinterpret(UInt8, asarray(compute_hash!(type_hash_state)))
     end
