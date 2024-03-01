@@ -65,6 +65,8 @@ transform(x, context) = transform(x, parent_context(context))
 transform(x, ::Nothing) = transform(x)
 transform(x) = x
 
+# TODO: support a method for givin a type a particular name
+
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *
                         "hashing object $x. The implementation of `hash_method` for this " *

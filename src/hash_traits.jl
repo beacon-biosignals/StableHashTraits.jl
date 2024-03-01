@@ -44,6 +44,14 @@ function stable_hash_helper(T, hash_state, context, ::TypeType)
     return stable_type_hash(T, hash_state, context, StructTypes.UnorderedStruct())
 end
 
+function stable_type_hash(::Type{T}, hash_state, context, ::StructTypes.NoStructType) where {T<:Function}
+    if hasproperty(T, :instance) && isdefined(T, :instance)
+        return stable_type_hash(T.instance, hash_state, context, StructTypes.UnorderedStruct())
+    else
+        return stable_type_hash(T, hash_state, context, StructTypes.UnorderedStruct())
+    end
+end
+
 function validate_name(str)
     if occursin("#", str)
         throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed " *
@@ -80,12 +88,13 @@ function stable_type_hash(T::Union{Type, Function}, hash_state, context, st::Str
         # NOTE: functions sometimes have fields (e.g. a closure or a struct <: Function) and
         # can be hashed as such; in any case `fieldnames` safely returns an empty tuple for
         # functions that do not have fields
-        if T isa DataType || T isa Function
+        if (T isa DataType || T isa Function) && !isabstracttype(T)
             for f in sorted_field_names(T)
                 type_hash_state = stable_hash_helper(String(f), type_hash_state,
                                                      context, StructTypes.StringType())
-                type_hash_state = stable_type_hash(fieldtype(T, f), type_hash_state,
-                                                   context, StructType(fieldtype(T, f)))
+                T_ = T isa Function ? typeof(T) : T
+                type_hash_state = stable_type_hash(fieldtype(T_, f), type_hash_state,
+                                                   context, StructType(fieldtype(T_, f)))
             end
         end
         return reinterpret(UInt8, asarray(compute_hash!(type_hash_state)))
@@ -265,10 +274,10 @@ function stable_type_hash(T::Type, hash_state, context, ::StructTypes.DictType)
         type_hash_state = stable_hash_helper(qualified_name_(T), type_hash_state,
                                              context, StructTypes.StringType())
         K = keytype(eltype(T))
-        type_hash_state = stable_type_hash(K, field_hash, context, StructType(K))
+        type_hash_state = stable_type_hash(K, type_hash_state, context, StructType(K))
         V = valtype(eltype(T))
-        type_hash_state = stable_type_hash(V, field_hash, context, StructType(V))
-        return compute_hash!(type_hash_state)
+        type_hash_state = stable_type_hash(V, type_hash_state, context, StructType(V))
+        return reinterpret(UInt8, asarray(compute_hash!(type_hash_state)))
     end
     return update_hash!(hash_state, bytes, context)
 end
