@@ -190,7 +190,6 @@ function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
             tx = transform(x, context)
             nested_hash_state = stable_hash_helper(tx, nested_hash_state, context,
                                                    HashType(tx))
-                                                   HashType(tx))
         end
     else
         for x in items

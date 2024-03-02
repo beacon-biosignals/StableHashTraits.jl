@@ -64,6 +64,43 @@ end
 transform(x, context) = transform(x, parent_context(context))
 transform(x, ::Nothing) = transform(x)
 transform(x) = x
+transform(::Type{T}) where {T} = transform_type(T, StructType(T))
+
+# this probably goes in `hash_traits.jl`
+function transform_type(::Type{T}, ::S) where {T,S<:StructTypes.DataType}
+    name = qualified_name_(S)
+    if !isabstracttype(T)
+        fields = T <: StructTypes.OrderedStruct ? sorted_field_names(T) : fieldnames(T)
+        return name, fields, map(f -> fieldtype(T, f), fields)
+    else
+        return name
+    end
+end
+
+function transform_type(::Type{T}, ::S) where {T,S<:StructTypes.ArrayType}
+    name = qualified_name_(S)
+    return name, eltype(T)
+end
+
+function transform_type(::Type{T}, ::S) where {T,S<:StructTypes.DictType}
+    name = qualified_name_(S)
+    return name, keytype(eltype(T)), valtype(eltype(T))
+end
+
+transform_type(::Type{T}, ::S) where {T, S} = qualified_name_(S)
+
+function transform(::Type{T}) where {T<:Function}
+    if hasproperty(T, :instance) && isdefined(T, :instances)
+        name = qualified_name_(T.instance)
+        if !isabstracttype(T)
+            fields = T <: StructTypes.OrderedStruct ? sorted_field_names(T) : fieldnames(T)
+            return name, fields, map(f -> fieldtype(T, f), fields)
+        end
+        return name
+    else
+        return qualified_name_(T)
+    end
+end
 
 # TODO: okay, I think the plan is to define a `transform` method for types and this looks
 # something like `qualified_name_(x), fieldtypes(x)` for most types and then there is just
