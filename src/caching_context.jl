@@ -5,6 +5,7 @@ struct CachingContext{T}
         return new{typeof(parent)}(parent, dict)
     end
 end
+CachingContext(x::CachingContext) = x
 
 # type_caches maps return-value types to individual dictionaries
 # each dictionary maps some type with its associated hash value of the given return value
