@@ -133,7 +133,7 @@ function stable_hash_helper(x, hash_state, context, st::StructTypes.DataType)
         # field types that are concrete have already been accounted for in the type hash of
         # `x` so we can skip them
         if !is_concrete_type(x, field)
-            stable_type_hash(typeof(val), hash_state, context, HashType(val))
+            stable_type_hash(typeof(val), hash_state, context)
         end
 
         tval = transform(val, context)
@@ -173,7 +173,7 @@ function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
     items = !isnothing(sort_items_by(xs)) ? sort(xs; by=sort_items_by(x)) : xs
     if has_concrete_eltype(items)
         x1 = first(items)
-        stable_type_hash(typeof(x1), nested_hash_state, context, HashType(x1))
+        stable_type_hash(typeof(x1), nested_hash_state, context)
         for x in items
             tx = transform(x, context)
             nested_hash_state = stable_hash_helper(tx, nested_hash_state, context,
@@ -181,7 +181,7 @@ function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
         end
     else
         for x in items
-            stable_type_hash(typeof(x), nested_hash_state, context, HashType(x))
+            stable_type_hash(typeof(x), nested_hash_state, context)
             tx = transform(x, context)
             nested_hash_state = stable_hash_helper(tx, nested_hash_state, context,
                                                    HashType(tx))
@@ -218,7 +218,7 @@ function stable_hash_helper(x::Tuple, hash_state, context, st::StructTypes.Array
         # field types that are concrete have already been accounted for in the type hash of
         # `x` so we can skip them
         if !is_concrete_type(x, field)
-            stable_type_hash(typeof(val), hash_state, context, HashType(val))
+            stable_type_hash(typeof(val), hash_state, context)
         end
 
         tval = transform(val, context)
@@ -256,8 +256,8 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
             sort(StructTypes.keyvaluepairs(x); by=sort_items_by(x))
     if has_concrete_eltype(pairs)
         (key1, val1) = first(pairs)
-        stable_type_hash(typeof(key1), nested_hash_state, context, HashType(key1))
-        stable_type_hash(typeof(val1), nested_hash_state, context, HashType(val1))
+        stable_type_hash(typeof(key1), nested_hash_state, context)
+        stable_type_hash(typeof(val1), nested_hash_state, context)
         for (key, value) in pairs
             tkey = transform(key, context)
             tvalue = transform(value, context)
@@ -270,10 +270,8 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
         for (key, value) in pairs
             tkey = transform(key, context)
             tvalue = transform(value, context)
-            stable_type_hash(typeof(key1), nested_hash_state, context,
-                             HashType(key1))
-            stable_type_hash(typeof(val1), nested_hash_state, context,
-                             HashType(val1))
+            stable_type_hash(typeof(key1), nested_hash_state, context)
+            stable_type_hash(typeof(val1), nested_hash_state, context)
             nested_hash_state = stable_hash_helper(tkey, nested_hash_state, context,
                                                    HashType(tkey))
             nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context,
