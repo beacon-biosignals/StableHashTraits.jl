@@ -67,25 +67,29 @@ struct TypeHashContext{T}
 end
 parent_context(x::TypeHashContext) = x.parent
 transform(::Type{T}, ::TypeHashContext) where {T} = qualified_name_(StructType(T))
+is_hashing_type(::TypeHashContext) = true
+is_hashing_type(::Nothing) = false
+is_hashing_type(x) = hashing_type(parent_context(x))
 
 asarray(x) = [x]
 asarray(x::AbstractArray) = x
 
-# without this no-op method, stable_hash would try to hash the types of any values returned
-# by `transform(T)`, which would lead to an infinite recursion
-stable_type_hash(::Type{T}, hash_state, ::TypeHashContext) where {T} = hash_state
 function stable_type_hash(::Type{T}, hash_state, context) where {T}
+    # without this `is_hashing_type` branch, stable_hash would try to hash the types of any
+    # values returned by `transform(T)`, which would lead to an infinite recursion
+    is_hashing_type(context) && return hash_state
     bytes = get!(context, T) do
         type_hash_state = similar_hash_state(hash_state)
         type_context = TypeHashContext(context)
-        tT = transform_type(T, StructType(T), type_context)
+        tT = transform(T, type_context)
         type_hash_state = stable_hash_helper(tT, type_hash_state, type_context, HashType(tT))
         return reinterpret(UInt8, asarray(compute_hash!(type_hash_state)))
     end
     return update_hash!(hash_state, bytes, context)
 end
+transform(::Type{T}, context) where {T} = transform(::Type{T}, StructType(T), context)
+transform(::Type{T}, trait, context) where {T} = qualified_name_(T)
 
-transform_type(::Type{T}, _, context) where {T} = transform(T, context)
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
@@ -97,6 +101,29 @@ function validate_name(str)
     end
     return str
 end
+
+# when transforming a type we often encode the eltype or the fieldtypes of a type in the
+# `transformed` value. We need to be able to signal to downstream hashing machinery that
+# this has been down, so that it can avoid hashing those types again
+# we encode this information in a `Hashed` wrapper that wraps the output of
+# `transform(T)` and the traits returned by `HashType`
+
+# wait: does this really need to be lifted to the type domain? we're caching
+# type hashes so maybe it makes more sense to store these as boolean flags...
+struct Hashed{S,T}
+    wrapped::T
+end
+HasEltype(x) = Hashed{(:eltype,),typeof(x)}(x)
+HasFieldtypes(x) = Hashed{(:fieldtypes,),typeof(x)}(x)
+HasEltype(x::Hashed{(:eltype,)}) = x
+HasEltype(x::Hashed{(:fieldtypes,)}) = Hashed({(:eltype,:fieldtypes),typeof(x)})
+HasFieldtypes(x::Hashed{(:fieldtypes,)}) = x
+HasFieldtypes(x::Hashed{(:eltype,)}) = Hashed({(:eltype,:fieldtypes),typeof(x)})
+
+eltype_hashed(x) = false
+eltype_hashed(x::Hashed{S}) where {S} = :eltype in S
+fieldtypes_hashed(x) = false
+fieldtypes_hashed(x::Hashed{S}) where {S} = :fieldtypes in S
 
 # types as values
 
@@ -153,17 +180,18 @@ sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
     return TupleTools.sort(fieldnames(T); by=string)
 end
 
-function transform_type(::Type{T}, ::S, context) where {T,S<:StructTypes.DataType}
-    tT = transform(T, context)
+function encode_fieldtypes(T, context)
     if isconcretetype(T)
         fields = T <: StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
-        return tT, fields, map(fields) do field
+        return fields, map(fields) do field
             F = fieldtype(T, field)
-            return transform_type(F, StructType(F), context)
+            return transform(F, context)
         end
-    else
-        return tT
     end
+end
+
+function transform(::Type{T}, ::S, context) where {T,S<:StructTypes.DataType}
+    tT = transform(T, context)
 end
 
 function stable_hash_helper(x, hash_state, context, st::StructTypes.DataType)
