@@ -117,6 +117,11 @@ include("setup_tests.jl")
                       test_hash([(; x=i, y=i) for i in 1:10])
                 @test test_hash([(; x=i, y=i) for i in 1:10]) !=
                       test_hash(DataFrame(; x=1:10, y=1:10))
+                # this bit is tricky because the eltypes differ which would normally matter
+                # to the structure of the type we really want the type hash *post*
+                # transformation in this case (but note that this isn't really feasible,
+                # since we only have the type at the type we're hashing type information,
+                # and for good reason)
                 @test test_hash((; x=collect(1:10), y=collect(1:10)), TablesEq(ctx)) ==
                       test_hash([(; x=i, y=i) for i in 1:10], TablesEq(ctx))
                 @test test_hash([(; x=i, y=i) for i in 1:10], TablesEq(ctx)) ==
@@ -131,7 +136,6 @@ include("setup_tests.jl")
             @testset "Contexts" begin
                 @test test_hash(CustomHashObject(1:5, 1:10)) !=
                       test_hash(BasicHashObject(1:5, 1:10))
-                @test test_hash(Set(1:20)) == test_hash(Set(reverse(1:20)))
                 @test test_hash([]) != test_hash([(), (), ()])
                 @test_throws ArgumentError test_hash("bob", BadRootContext())
                 @test test_hash(1, BadRootContext()) isa Union{Unsigned,Vector{UInt8}}
@@ -158,6 +162,7 @@ include("setup_tests.jl")
                 @test test_hash(1:10) != test_hash(collect(1:10))
                 @test test_hash([1, 2, 3]) != test_hash([3, 2, 1])
                 @test test_hash((1, 2, 3)) != test_hash([1, 2, 3])
+                @test test_hash(Set(1:20)) == test_hash(Set(reverse(1:20)))
             end
 
             @testset "Version Strings" begin
@@ -199,6 +204,7 @@ include("setup_tests.jl")
                 @test test_hash(Float64) != test_hash("Base.Float64")
                 @test test_hash(Float64) != test_hash(Int)
                 @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
+                @test test_hash(Array{Int}) != test_hash(Array{Float64})
             end
 
             @testset "Custom hash_method" begin

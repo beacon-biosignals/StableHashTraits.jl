@@ -64,8 +64,6 @@ end
 transform(x, context) = transform(x, parent_context(context))
 transform(x, ::Nothing) = transform(x)
 transform(x) = x
-transform(fn::Function) = qualified_name_(fn)
-transform(::Type{T}) where T = qualified_name_(T)
 
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *

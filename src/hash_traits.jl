@@ -50,16 +50,13 @@ end
 
 # There are two cases where we want to hash types:
 #
-#   1. when we are hashing the type of an object we're hashing (the type hash)
-#   2. when a value we're hashing is itself a type (type as value hash)
+#   1. when we are hashing the type of an object we're hashing (`TypeHashContext`)
+#   2. when a value we're hashing is itself a type (`TypeAsValueContext`)
 #
-# These are handled as separate contexts, with the former being the `TypeHashContext` and
-# the latter being the default context. By default, in the `TypeHashContext` we only has the
-# "structure" of types; names of structures don't matter only the recursive hash of the
-# contained types and the `StructType(T)` of the type.
-#
-# Users can override how types are hashed in the context by overloading
-# `transform(::Type{<:MyType}, ::TypeHashContext{<:MyContext})``
+# These are handled as separate contexts as the kind of value we want to generate from the
+# type may differ in these context. By default only the structure of types matters when hash
+# an objects type, e.g. that it is a data type with fields of the given names and types.
+# When a type is hashed as a value, its actual also name matters.
 
 # type hash
 
@@ -106,37 +103,44 @@ end
 struct TypeAsValue end
 HashType(::Type) = TypeAsValue()
 
+struct TypeAsValueContext{T}
+    parent::T
+    TypeAsValueContext(x::CachingContext) = new{typeof(x.parent)}(x.parent)
+    TypeAsValueContext(x) = new{typeof(x)}(x)
+end
+parent_context(x::TypeAsValueContext) = x.parent
+transform(::Type{T}, ::TypeAsValueContext) where {T} = qualified_name_(T)
+stable_type_hash(::Type{T}, hash_state, ::TypeAsValueContext) where {T} = hash_state
+
 function stable_type_hash(::Type{<:DataType}, hash_state, context)
     return update_hash!(hash_state, @hash64("Base.DataType"), context)
 end
 function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where {T}
-    tT = transform_type(T, StructType(T), context)
-    return stable_hash_helper(tT, type_hash_state, context, HashType(tT))
+    type_context = TypeAsValueContext(context)
+    tT = transform_type(T, StructType(T), type_context)
+    return stable_hash_helper(tT, hash_state, type_context, HashType(tT))
 end
 
 #####
 ##### Function Hashes
 #####
 
-function transform_type(::Type{T}, st, context) where {T<:Function}
+# remember: functions can have fields
+transform(fn::Function) = WithStructType(fn, StructTypes.UnorderedStruct())
+function transform(::Type{T}, ::TypeHashContext) where {T<:Function}
     if hasproperty(T, :instance) && isdefined(T, :instance)
-        tT = transform(T.instance, context)
-        if isconcretetype(T)
-            fields = T <: StructTypes.OrderedStruct ? sorted_field_names(T) : fieldnames(T)
-            return tT, fields, map(f -> fieldtype(T, f), fields)
-        end
-        return tT
+        return qualified_name_(T.instance)
     else
-        return transform(T, context)
+        return qualified_name_(T)
     end
 end
 
-function stable_hash_helper(fn::Function, hash_state, context, ::StructTypes.NoStructType)
-    if isconcretetype(typeof(fn))
-        # remember: functions can have fields
-        return stable_hash_helper(fn, hash_state, context, StructTypes.Struct())
+# hashing a function type as a value...
+function transform(::Type{T}, context) where {T<:Function}
+    if hasproperty(T, :instance) && isdefined(T, :instance)
+        return "typeof($(qualified_name(T.instance)))"
     else
-        return hash_state
+        return qualified_name_(T)
     end
 end
 
@@ -152,7 +156,7 @@ end
 function transform_type(::Type{T}, ::S, context) where {T,S<:StructTypes.DataType}
     tT = transform(T, context)
     if isconcretetype(T)
-        fields = T <: StructTypes.OrderedStruct ? sorted_field_names(T) : fieldnames(T)
+        fields = T <: StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
         return tT, fields, map(fields) do field
             F = fieldtype(T, field)
             return transform_type(F, StructType(F), context)
@@ -189,12 +193,28 @@ end
 ##### ArrayType
 #####
 
-sort_items_by(x) = nothing
-sort_items_by(::AbstractSet) = string
+is_ordered(x) = true
+is_ordered(::AbstractSet) = false
+order_by(::Symbol) = String
+order_by(x) = identity
 
 # without `SizedArray` transform would fall into an infinite recurse
 struct SizedArray{T}
     val::T
+end
+function transform(::Type{T}, ::TypeHashContext) where {T<:AbstractArray}
+    if isconcretetype(T)
+        return qualified_name_(StructType(T)), ndims(T)
+    else
+        return qualified_name_(StructType(T))
+    end
+end
+function transform(::Type{T}, ::TypeAsValueContext) where {T<:AbstractArray}
+    if isconcretetype(T)
+        return qualified_name_(StructType(T)), ndims(T)
+    else
+        return qualified_name_(StructType(T))
+    end
 end
 transform(x::AbstractArray, ::HashVersion{3}) = size(x), SizedArray(x)
 transform(x::SizedArray, ::HashVersion{3}) = x.val
@@ -209,7 +229,7 @@ end
 function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
     nested_hash_state = start_nested_hash!(hash_state)
 
-    items = !isnothing(sort_items_by(xs)) ? sort(xs; by=sort_items_by(x)) : xs
+    items = !is_ordered(xs) ? sort!(collect(xs), by=order_by) : xs
     if isconcretetype(eltype(items))
         x1 = first(items)
         stable_type_hash(typeof(x1), nested_hash_state, context)
@@ -283,17 +303,19 @@ end
 # be sorted without this)
 # NOTE: we could sort by the written bytes to hash to prevent `string` from messing us up
 # but that would be a bit complicated to implement
-sort_items_by(x::AbstractDict) = string
+is_ordered(x::AbstractDict) = false
 
 keytype(::Type{<:Pair{K,T}}) where {K,T} = K
 valtype(::Type{<:Pair{K,T}}) where {K,T} = T
-keytype(::Type{<:T}) where {T} = T
-valtype(::Type{<:T}) where {T} = T
+# if the pre-transformed type isn't a dictionary, we need to encode the post-transformed
+# types
+keytype(::Type{T}) where {T} = Any
+valtype(::Type{T}) where {T} = Any
 
 function transform_type(::Type{T}, ::S, context) where {T,S<:StructTypes.DictType}
-    tT = transform(T, context)
-    K = keytype(eltype(T))
-    V = valtype(eltype(T))
+    @show tT = transform(T, context)
+    @show K = keytype(eltype(T))
+    @show V = valtype(eltype(T))
     return tT, transform_type(K, StructType(K), context), transform_type(V, StructType(V), context)
 end
 
@@ -301,8 +323,11 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = StructTypes.keyvaluepairs(x)
     nested_hash_state = start_nested_hash!(hash_state)
 
-    pairs = isnothing(sort_items_by(x)) ? StructTypes.keyvaluepairs(x) :
-            sort(StructTypes.keyvaluepairs(x); by=sort_items_by(x))
+    pairs = if is_ordered(x)
+        StructTypes.keyvaluepairs(x)
+    else
+        sort!(collect(StructTypes.keyvaluepairs(x)); by=order_by(x))
+    end
     if isconcretetype(eltype(pairs))
         (key1, val1) = first(pairs)
         stable_type_hash(typeof(key1), nested_hash_state, context)
@@ -319,8 +344,8 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
         for (key, value) in pairs
             tkey = transform(key, context)
             tvalue = transform(value, context)
-            stable_type_hash(typeof(key1), nested_hash_state, context)
-            stable_type_hash(typeof(val1), nested_hash_state, context)
+            stable_type_hash(typeof(key), nested_hash_state, context)
+            stable_type_hash(typeof(val), nested_hash_state, context)
             nested_hash_state = stable_hash_helper(tkey, nested_hash_state, context,
                                                    HashType(tkey))
             nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context,

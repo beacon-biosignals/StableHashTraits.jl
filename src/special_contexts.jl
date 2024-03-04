@@ -28,12 +28,22 @@ function hash_method(x::T, m::TablesEq) where {T}
     return hash_method(x, parent_context(m))
 end
 
+# TODO: what we need to get this to work with type hoisting is to express what types need to
+# be represetend and what have been (via hoisting or not); I think rather than having two
+# types of transform functions there should probably just be one `transform(T)` method that
+# includes the structure, THEN we need to express this structure in some way that can be
+# reflected on e.g. qualified_name(T), Eltype(eltype(T)) and then the trait can indicate if
+# the Eltype has been represented.
+struct TableColumns{T}
+    pairs::T
+end
+StructTypes.keyvaluepairs(x::TableColumns) = x.pairs
+is_ordered(::TableColumns) = true
 function transform(x::T, context::TablesEq) where {T}
     if Tables.istable(T)
         cols = Tables.columns(x)
         keys = Tables.columnnames(cols)
-        return (@hash64("Tables.istable"), @show(collect(keys)),
-                @show([Tables.getcolumn(cols, c) for c in keys]))
+        return TableColumns(keys .=> (Tables.getcolumn(cols, c) for c in keys))
     else
         transform(x, parent_context(context))
     end
