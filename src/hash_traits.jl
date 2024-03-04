@@ -60,33 +60,6 @@ end
 
 # type hash
 
-struct TypeHashContext{T}
-    parent::T
-    TypeHashContext(x::CachingContext) = new{typeof(x.parent)}(x.parent)
-    TypeHashContext(x) = new{typeof(x)}(x)
-end
-parent_context(x::TypeHashContext) = x.parent
-transform(::Type{T}, ::TypeHashContext) where {T} = qualified_name_(StructType(T))
-is_hashing_type(::TypeHashContext) = true
-is_hashing_type(::Nothing) = false
-is_hashing_type(x) = hashing_type(parent_context(x))
-
-asarray(x) = [x]
-asarray(x::AbstractArray) = x
-
-function stable_type_hash(::Type{T}, hash_state, context) where {T}
-    # without this `is_hashing_type` branch, stable_hash would try to hash the types of any
-    # values returned by `transform(T)`, which would lead to an infinite recursion
-    is_hashing_type(context) && return hash_state
-    bytes = get!(context, T) do
-        type_hash_state = similar_hash_state(hash_state)
-        type_context = TypeHashContext(context)
-        tT = transform(T, type_context)
-        type_hash_state = stable_hash_helper(tT, type_hash_state, type_context, HashType(tT))
-        return reinterpret(UInt8, asarray(compute_hash!(type_hash_state)))
-    end
-    return update_hash!(hash_state, bytes, context)
-end
 transform(::Type{T}, context) where {T} = transform(::Type{T}, StructType(T), context)
 transform(::Type{T}, trait, context) where {T} = qualified_name_(T)
 
@@ -101,29 +74,6 @@ function validate_name(str)
     end
     return str
 end
-
-# when transforming a type we often encode the eltype or the fieldtypes of a type in the
-# `transformed` value. We need to be able to signal to downstream hashing machinery that
-# this has been down, so that it can avoid hashing those types again
-# we encode this information in a `Hashed` wrapper that wraps the output of
-# `transform(T)` and the traits returned by `HashType`
-
-# wait: does this really need to be lifted to the type domain? we're caching
-# type hashes so maybe it makes more sense to store these as boolean flags...
-struct Hashed{S,T}
-    wrapped::T
-end
-HasEltype(x) = Hashed{(:eltype,),typeof(x)}(x)
-HasFieldtypes(x) = Hashed{(:fieldtypes,),typeof(x)}(x)
-HasEltype(x::Hashed{(:eltype,)}) = x
-HasEltype(x::Hashed{(:fieldtypes,)}) = Hashed({(:eltype,:fieldtypes),typeof(x)})
-HasFieldtypes(x::Hashed{(:fieldtypes,)}) = x
-HasFieldtypes(x::Hashed{(:eltype,)}) = Hashed({(:eltype,:fieldtypes),typeof(x)})
-
-eltype_hashed(x) = false
-eltype_hashed(x::Hashed{S}) where {S} = :eltype in S
-fieldtypes_hashed(x) = false
-fieldtypes_hashed(x::Hashed{S}) where {S} = :fieldtypes in S
 
 # types as values
 
@@ -183,18 +133,22 @@ end
 function encode_fieldtypes(T, context)
     if isconcretetype(T)
         fields = T <: StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
-        return fields, map(fields) do field
+        fieldtypes = map(fields) do field
             F = fieldtype(T, field)
-            return transform(F, context)
+            tt = transform(F, context)::TransformedType
+            return tt.encoding
         end
+        return TransformedType((fields, fieldtypes), hashes_fieldtypes)
+    else
+        return TransformedTypeIdentity()
     end
 end
 
 function transform(::Type{T}, ::S, context) where {T,S<:StructTypes.DataType}
-    tT = transform(T, context)
+    qualified_name_(T) * transform_fieldtypes(T, context)
 end
 
-function stable_hash_helper(x, hash_state, context, st::StructTypes.DataType)
+function stable_hash_helper(x, hash_state, context, flags, st::StructTypes.DataType)
     nested_hash_state = start_nested_hash!(hash_state)
 
     # hash the field values
@@ -204,8 +158,12 @@ function stable_hash_helper(x, hash_state, context, st::StructTypes.DataType)
         val = getfield(x, field)
         # field types that are concrete have already been accounted for in the type hash of
         # `x` so we can skip them
-        if !isconcretetype(fieldtype(typeof(x), field))
-            stable_type_hash(typeof(val), hash_state, context)
+        if !isconcretetype(fieldtype(typeof(x), field)) || Int(hashes_fieldtypes) ∉ flags
+            hash_state, field_flags = hash_type!(typeof(val), hash_state, context)
+        else
+            # ... oh dear, this is where I need to know what the flags would be
+            # if they were *were* run (and do so without running them)
+            field_flags = forfield(flags, field) # can I implement this???
         end
 
         tval = transform(val, context)

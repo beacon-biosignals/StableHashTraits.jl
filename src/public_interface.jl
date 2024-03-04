@@ -54,9 +54,9 @@ function stable_hash(x, context; alg=sha256)
     else
         context = CachingContext(context)
         hash_state = HashState(alg, context)
-        hash_state = stable_type_hash(typeof(x), hash_state, context)
+        hash_state, type_hash_flags = stable_type_hash(typeof(x), hash_state, context)
         tx = transform(x, context)
-        hash_state = stable_hash_helper(tx, hash_state, context, HashType(tx))
+        hash_state = stable_hash_helper(tx, hash_state, context, type_hash_flags, HashType(tx))
         return compute_hash!(hash_state)
     end
 end
