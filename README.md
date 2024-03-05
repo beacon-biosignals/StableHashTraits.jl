@@ -19,16 +19,17 @@ struct MyType
    metadata::Dict{Symbol, Any}
 end
 # ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
-StableHashTraits.transform(x::MyType) = @hash64("MyType"), x.data
+StableHashTraits.transformer(::Type{<:MyType}) = PreserveStructure(x -> x.data)
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 stable_hash(a; version=3) == stable_hash(b; version=3) # true
 ```
 
-The `transform` method is applied to an object before computing a hash. Useres can define a
-method of `transform` to customize how an object is hashed. Once transformed objects are
-generally hashed according to [`StructTypes`](https://github.com/JuliaData/StructTypes.jl)
-traits.
+The `transformer` method is used to provide function that transforms any object before
+computing a hash (`PreserveStructure` is an optional optimization you can read about below).
+Useres can define a method of `transformer` to customize how an object is hashed. Once
+transformed objects are generally hashed according to
+[`StructTypes`](https://github.com/JuliaData/StructTypes.jl) traits.
 
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
@@ -36,12 +37,18 @@ StableHashTraits aims to guarantee a stable hash so long as you only upgrade to 
 
 ## Use Case and Design Rationale
 
-StableHashTraits is designed to be used in cases where there is an object we wish to serialize in a content-addressed cache. In this situation one does not want the session or julai version to matter to the hash value. Furthermore, `StableHashTraits` generally considers hash collisions between two objects that would serialize to the same result (e.g. an `Array` and `SubArray`) acceptable. How and when objects collide should be predictable and well defined, so that the user can reliably define methods of `transform` to change this behavior.
+StableHashTraits is designed to be used in cases where there is an object we wish to
+serialize in a content-addressed cache. In this situation one does not want the session or
+julai version to matter to the hash value. Furthermore, `StableHashTraits` generally
+considers hash collisions between two objects that would serialize to the same result (e.g.
+an `Array` and `SubArray`) acceptable. How and when objects collide is meant to be
+predictable and well defined, so that the user can reliably define methods of `transformer`
+to change this behavior.
 
-Since there are times where we may need to define a method of `transform` on an object the
-user doesn't own (e.g. one from `Base`) to correctly cache in a particular context, this should be possible to do without committing type piracy. In these cases you can define a two argument method of `transform` that accepts a second `context` object (see below for an example).
-
-## Example
+Since there are times where we may need to define a method of `transformer` on an object you
+don't own (e.g. one from `Base`) to correctly cache in a particular context, `transformer`
+accepts an additional object called the `context`, which you should own (see below for
+details).
 
 ## Details
 

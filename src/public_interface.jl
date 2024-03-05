@@ -54,16 +54,26 @@ function stable_hash(x, context; alg=sha256)
     else
         context = CachingContext(context)
         hash_state = HashState(alg, context)
-        hash_state, type_hash_flags = stable_type_hash(typeof(x), hash_state, context)
+        transform = transformer(typeof(x), context)
         tx = transform(x, context)
-        hash_state = stable_hash_helper(tx, hash_state, context, type_hash_flags, HashType(tx))
+        hash_state = type_hash!(typeof(tx), hash_state, context)
+        hash_state = stable_hash_helper(tx, hash_state, context, HashType(tx))
         return compute_hash!(hash_state)
     end
 end
 
-transform(x, context) = transform(x, parent_context(context))
-transform(x, ::Nothing) = transform(x)
-transform(x) = x
+preserves_types(::typeof(identity)) = true
+struct PreservesTypes{F}
+    fn::F
+end
+preserves_types(::PreservesTypes) = true
+(p::PreservesTypes)(x) = p.fn(x)
+preserves_types(::Function) = false
+preserves_types(x) = throw(ArgumentError("Expected `transformer` to return a function."))
+
+transformer(::Type, context) = transformer(x, parent_context(context))
+transformer(::Type, ::Nothing) = transformer(x)
+transformer(::Type) = PreservesTypes((x, c) -> x)
 
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *
