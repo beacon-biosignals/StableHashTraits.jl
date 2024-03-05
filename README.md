@@ -19,16 +19,21 @@ struct MyType
    metadata::Dict{Symbol, Any}
 end
 # ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
-StableHashTraits.transformer(::Type{<:MyType}) = PreserveStructure(x -> x.data)
+StableHashTraits.transformer(::Type{<:MyType}) = PreservesTypes(x -> x.data)
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 stable_hash(a; version=3) == stable_hash(b; version=3) # true
 ```
 
-The `transformer` method is used to provide function that transforms any object before
-computing a hash (`PreserveStructure` is an optional optimization you can read about below).
+The `transformer` method should return a function that transforms the object, before a hash
+is computed; it should accept the object to transform and an optional context that can be
+used to specialize dispatch on that context (see below); this argument can be safely ignored
+for simple use cases. (The `PreservesType` wrapper shown above is an optional modifier of
+the function that can be used to further optimize performance of your transformer in some
+cases, see below).
+
 Useres can define a method of `transformer` to customize how an object is hashed. Once
-transformed objects are generally hashed according to
+transformed, objects are hashed based on their
 [`StructTypes`](https://github.com/JuliaData/StructTypes.jl) traits.
 
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
@@ -37,40 +42,18 @@ StableHashTraits aims to guarantee a stable hash so long as you only upgrade to 
 
 ## Use Case and Design Rationale
 
-StableHashTraits is designed to be used in cases where there is an object we wish to
-serialize in a content-addressed cache. In this situation one does not want the session or
-julai version to matter to the hash value. Furthermore, `StableHashTraits` generally
-considers hash collisions between two objects that would serialize to the same result (e.g.
-an `Array` and `SubArray`) acceptable. How and when objects collide is meant to be
-predictable and well defined, so that the user can reliably define methods of `transformer`
-to change this behavior.
+StableHashTraits is designed to be used in cases where there is an object we wish to serialize in a content-addressed cache. In this situation one does not want the session or julai version to matter to the hash value. Furthermore, `StableHashTraits` generally considers hash collisions between two objects that would serialize to the same result (e.g. an `Array` and `SubArray`) acceptable. How and when objects collide is meant to be predictable and well defined, so that the user can reliably define methods of `transformer` to change this behavior.
 
-Since there are times where we may need to define a method of `transformer` on an object you
-don't own (e.g. one from `Base`) to correctly cache in a particular context, `transformer`
-accepts an additional object called the `context`, which you should own (see below for
-details).
+Since there are times where we may need to define a method of `transformer` on an object you don't own (e.g. one from `Base`) to correctly cache in a particular context, `transformer` accepts an additional object called the `context`, which you should own (see below for details).
 
 ## Details
 
 `StableHashTraits` the existing serialization infrastructure in [`StructTypes`](https://github.com/JuliaData/StructTypes.jl). Many packages already define traits from
 this package, meaning that `StableHashTraits` can leverage these declared serialization properties when computing a hash.
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and
-(optionally) a second argument called the context. The context you use affects how hashing
-occurs (it defaults to `HashVersion{1}()`). It is generally recommended that you avoid
-`HashVersion{1}()`, favoring `HashVersion{2}()` as it includes substantial speed
-improvements. See the final section below for details on
-how you can implement your own contexts. When you do not need to include a custom context, a short-hand for specifying
-`HashVersion{2}()` is to call `stable_hash(x; version=2)`.
+You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`). It is generally recommended that you avoid `HashVersion{1}()` or `HashVersion{2}()`, favoring `HashVersion{3}()` as it includes substantial speed improvements. See the final section below for details on how you can implement your own contexts. When you do not need to include a custom context, a short-hand for specifying `HashVersion{2}()` is to call `stable_hash(x; version=2)`. There are sensible defaults for `stable_hash` that aim to ensure that if two values are different, the input to the hash algorithm will differ.
 
-There are sensible defaults for `stable_hash` that aim to ensure that if two values are
-different, the input to the hash algorithm will differ.
-
-You can customize the hash behavior for particular types by implementing the trait
-`StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional
-second argument, the context. If you define a method that does not accept a context, it will
-be used in all contexts. Any method of `hash_method` should simply return one of the
-following values, typically based only on the *type* of its input.
+You can customize the hash behavior for particular types by implementing the trait `StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional second argument, the context. If you define a method that does not accept a context, it will be used in all contexts. Any method of `hash_method` should simply return one of the following values, typically based only on the *type* of its input.
 
 <!-- The text between START_ and END_ comments are extracted from this readme and inserted into julia docstrings -->
 <!-- START_HASH_TRAITS -->

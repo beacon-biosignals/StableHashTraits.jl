@@ -62,18 +62,18 @@ function stable_hash(x, context; alg=sha256)
     end
 end
 
-preserves_types(::typeof(identity)) = true
 struct PreservesTypes{F}
     fn::F
 end
 preserves_types(::PreservesTypes) = true
-(p::PreservesTypes)(x) = p.fn(x)
+preserves_types(::typeof(identity)) = true
 preserves_types(::Function) = false
 preserves_types(x) = throw(ArgumentError("Expected `transformer` to return a function."))
+(p::PreservesTypes)(x) = p.fn(x)
 
 transformer(::Type, context) = transformer(x, parent_context(context))
 transformer(::Type, ::Nothing) = transformer(x)
-transformer(::Type) = PreservesTypes((x, c) -> x)
+transformer(::Type) = identity
 
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *

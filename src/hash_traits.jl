@@ -60,10 +60,11 @@ end
 
 # type hash
 
-transformer(::Type{<:DataType}, context) = transform_type
+transformer(::Type{<:DataType}, context) = Base.Fix2(transform_type, context)
 function transform_type(::Type{T}, context) where {T}
-    qualified_name_(StructType(T)), type_structure(T, StructType(T), context)
+    qualified_name_(StructType(T)), type_structure(T, context)
 end
+type_structure(::Type{T}, context) where {T} = type_structure(T, StructType(T), context)
 type_structure(::Type, trait, context) = nothing
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
@@ -91,14 +92,14 @@ function hash_type!(hash_state, context::CachingContext, ::Type{<:Type})
 end
 
 function transform_type(::Type{T}, context::TypeAsValueContext) where {T}
-    qualified_name_(T), type_structure(T, context)
+    qualified_name_(T), type_structure(T, StructType(T), context)
 end
 
 hash_type!(hash_state, ::TypeAsValueContext, T) = hash_state
 function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where T
     transform = transformer(typeof(T), context)
     type_context = TypeAsValueContext(context)
-    tT = transform(T, type_context)
+    tT = transform(T)
     return stable_hash_helper(tT, hash_type_state, type_context, HashType(tT))
 end
 
@@ -106,10 +107,10 @@ end
 ##### Function Hashes
 #####
 
-# remember: functions can have fields in general StructTypes doesn't assume these are
+# remember: functions can have fields; in general StructTypes doesn't assume these are
 # serialized but here we want that to happen by default
 function transformer(::Type{<:Function}, context)
-    return PreservesTypes((fn, c) -> WithStructType(fn, StructTypes.UnorderedStruct()))
+    return PreservesTypes(fn -> WithStructType(fn, StructTypes.UnorderedStruct()))
 end
 
 function transform_type(::Type{T}, context) where {T<:Function}
@@ -123,6 +124,10 @@ end
 #####
 ##### DataType
 #####
+
+# NOTE: there are really just two patterns: eltype-like and fieldtype-like
+# (dict is just an eltype-like of pairs)
+# we can greatly reduce the amount of code below by taking advantage of that
 
 sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
 @generated function sorted_field_names(T)
@@ -150,11 +155,11 @@ function stable_hash_helper(x, hash_state, context, parent_preserves_types,
         # can we optimize away the field's type_hash?
         transform = transformer(typeof(val), context)
         if isconcretetype(fieldtype(typeof(x), field)) && preserves_types(transform)
-            tval = transform(val, context)
+            tval = transform(val)
             nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
                                                    HashType(tval))
         else
-            tval = transform(val, context)
+            tval = transform(val)
             nested_hash_state = hash_type!(typeof(tval), nested_hash_state, context)
             nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
                                                    HashType(tval))
@@ -199,14 +204,14 @@ function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
         x1 = first(items)
         nested_hash_state = type_hash!(typeof(x1), nested_hash_state, context)
         for x in items
-            tx = transform(x, context)
+            tx = transform(x)
             nested_hash_state = stable_hash_helper(tx, nested_hash_state, context,
                                                    HashType(tx))
         end
     else
         for x in items
             transform = transformer(typeof(x), context)
-            tx = transform(x, context)
+            tx = transform(x)
             nested_hash_state, preserves_types = type_hash!(typeof(tx), nested_hash_state,
                                                             context)
             nested_hash_state = stable_hash_helper(tx, nested_hash_state, context,
@@ -244,11 +249,11 @@ function stable_hash_helper(x::Tuple, hash_state, context, ::StructTypes.ArrayTy
         # can we optimize away the field's type_hash?
         transform = transformer(typeof(val), context)
         if isconcretetype(fieldtype(typeof(x), field)) && preserves_types(transform)
-            tval = transform(val, context)
+            tval = transform(val)
             nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
                                                    HashType(tval))
         else
-            tval = transform(val, context)
+            tval = transform(val)
             nested_hash_state = hash_type!(typeof(tval), nested_hash_state, context)
             nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
                                                    HashType(tval))
@@ -291,8 +296,8 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
         hash_type!(nested_hash_state, context, keytype(eltype(x)))
         hash_type!(nested_hash_state, context, valtype(eltype(x)))
         for (key, value) in pairs
-            tkey = ktransform(key, context)
-            tvalue = vtransform(value, context)
+            tkey = ktransform(key)
+            tvalue = vtransform(value)
             nested_hash_state = stable_hash_helper(tkey, nested_hash_state, context,
                                                    HashType(tkey))
             nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context,
@@ -302,8 +307,8 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
         for (key, value) in pairs
             ktransform = transformer(typeof(key), context)
             vtransform = transformer(typeof(val), context)
-            tkey = ktransform(key, context)
-            tvalue = vtransform(value, context)
+            tkey = ktransform(key)
+            tvalue = vtransform(value)
             hash_type!(nested_hash_state, context, typeof(key))
             hash_type!(nested_hash_state, context, typeof(val))
             nested_hash_state = stable_hash_helper(tkey, nested_hash_state, context,
@@ -333,7 +338,7 @@ end
 ##### Basic data types
 #####
 
-transform(x::Symbol) = @hash64(":"), String(x)
+transformer(::Type{<:Symbol}) = PreserveTypes(x -> @hash64(":"), String(x))
 
 function stable_hash_helper(str, hash_state, context,
                             ::StructTypes.StringType)
