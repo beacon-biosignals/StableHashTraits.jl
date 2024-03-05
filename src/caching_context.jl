@@ -1,40 +1,16 @@
-# when transforming a type we often encode the eltype or the fieldtypes of a type in the
-# `transformed` value. We need to be able to signal to downstream hashing machinery that
-# this has been down, so that it can avoid hashing those types again
-# we encode this information in a `Hashed` wrapper that wraps the output of
-# `transform(T)` and the traits returned by `HashType`
-
-@enum HashEncoding::Int begin
-    hashes_eltype
-    hashes_fieldtypes
-end
-
-struct TransformedType{T}
+struct TransformResult{T}
     value::T
-    encodings::BitSet
+    preserves_structure::Bool
 end
-function TransformedType(vals, flags::HashEncoding...)
-    return TransformedType(vals, BitSet((Int(flags),)))
-end
-function Base.:(*)(x::TransformedType, y::TransformedType)
-    return TransformedType((x.value, y.value), union(x.encodings, y.encodings))
-end
-function Base.:(*)(x, y::TransformedType)
-    return TransformedTYpe((x, y.value), union(x.encodings, y.encodings))
-end
-struct TransformedTypeIdentity end
-Base.:(*)(x::TransformedType, y::TransformedTypeIdentity) = x
-Base.:(*)(x, y::TransformedTypeIdentity) = TransformedType(x)
-
-struct CachedTypeHash
-    bytes::Vector{UInt8}
-    flags::BitSet
-end
+with_type_structure(val, ::Type{T}) = transform_structure(val, T, StructType(T))
+with_type_structure(val, ::Type{T}, trait) = TransformResult(val, false)
+handle_transform(x::TransformResult) = x.value, x.preserves_structure
+handle_transform(x) = x, false
 
 struct CachingContext{T}
     parent::T
-    type_caches::IdDict{Type,CachedTypeHash}
-    function CachingContext(parent, dict=IdDict{Type,CachedTypeHash}())
+    type_caches::IdDict{Type,Tuple{Vector{UInt8},Bool}}
+    function CachingContext(parent, dict=IdDict{Type,Tuple{Vector{UInt8},Bool}}())
         return new{typeof(parent)}(parent, dict)
     end
 end
@@ -44,16 +20,18 @@ parent_context(x::CachingContext) = x.parent
 hash_type!(fn, x, key) = hash_type!(fn, parent_context(x), key)
 hash_type!(fn, ::Nothing, key) = throw(ArgumentError("`hash_type! is not supported"))
 function hash_type!(hash_state, x::CachingContext, key::Type)
-    bytes, encodings = return get!(x.type_caches, key) do
+    bytes, preserves_structure = return get!(x.type_caches, key) do
+        tT, preserves_structure = handle_transform(transform(T, context))
+
         hash_type_state = similar_hash_state(hash_state)
         type_context = TypeHashContext(context)
-        tT = transform(T, type_context)::TransformedType
-        hash_type_state = stable_hash_helper(tT.value, hash_type_state, type_context,
+        hash_type_state = stable_hash_helper(tT, hash_type_state, type_context,
                                              BitSet(), HashType(tT))
         bytes = reinterpret(UInt8, asarray(compute_hash!(hash_type_state)))
-        return bytes, tT.encodings
+
+        return bytes, preserves_structure
     end
-    return update_hash!(hash_state, bytes), encodings
+    return update_hash!(hash_state, bytes), preserves_structure
 end
 
 struct TypeHashContext{T}
@@ -63,7 +41,7 @@ struct TypeHashContext{T}
 end
 parent_context(x::TypeHashContext) = x.parent
 transform(::Type{T}, ::TypeHashContext) where {T} = qualified_name_(StructType(T))
-hash_type!(fn, hash_state, key) = hash_state, BitSet()
+hash_type!(fn, hash_state, key) = hash_state, true
 
 asarray(x) = [x]
 asarray(x::AbstractArray) = x

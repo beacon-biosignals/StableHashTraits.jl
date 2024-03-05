@@ -60,9 +60,7 @@ end
 
 # type hash
 
-transform(::Type{T}, context) where {T} = transform(::Type{T}, StructType(T), context)
-transform(::Type{T}, trait, context) where {T} = qualified_name_(T)
-
+transform(::Type{T}, context) where {T} = with_type_structure(qualified_name(T), T)
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
@@ -130,25 +128,23 @@ sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
     return TupleTools.sort(fieldnames(T); by=string)
 end
 
-function encode_fieldtypes(T, context)
+function with_type_structure(val, ::Type{T}, ::StructTypes.DataType)
     if isconcretetype(T)
         fields = T <: StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
+        preserve_structure = true
         fieldtypes = map(fields) do field
             F = fieldtype(T, field)
-            tt = transform(F, context)::TransformedType
-            return tt.encoding
+            tt, field_preserved_structure = handle_transform(transform(F, context))
+            preserve_structure &= field_preserved_structure
+            return tt
         end
-        return TransformedType((fields, fieldtypes), hashes_fieldtypes)
+        return TransformResult((val, fields, fieldtypes), preserve_structure)
     else
-        return TransformedTypeIdentity()
+        return TransformResult(val, true)
     end
 end
 
-function transform(::Type{T}, ::S, context) where {T,S<:StructTypes.DataType}
-    qualified_name_(T) * transform_fieldtypes(T, context)
-end
-
-function stable_hash_helper(x, hash_state, context, flags, st::StructTypes.DataType)
+function stable_hash_helper(x, hash_state, context, structure_preserved, st::StructTypes.DataType)
     nested_hash_state = start_nested_hash!(hash_state)
 
     # hash the field values
@@ -156,21 +152,24 @@ function stable_hash_helper(x, hash_state, context, flags, st::StructTypes.DataT
              fieldnames(typeof(x))
     for field in fields
         val = getfield(x, field)
-        # field types that are concrete have already been accounted for in the type hash of
-        # `x` so we can skip them
-        if !isconcretetype(fieldtype(typeof(x), field)) || Int(hashes_fieldtypes) ∉ flags
-            hash_state, field_flags = hash_type!(typeof(val), hash_state, context)
+        if isconcretetype(fieldtype(typeof(x), field)) && structure_preserved
+            tval, t_structure_preserved = handle_transform(transform(val, context))
+            if t_structure_preserved
+                nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
+                                                       structure_preserved, HashType(tval))
+            else
+                hash_state, structure_preserved = hash_type!(typeof(tval), hash_state,
+                                                             context)
+                nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
+                                                       structure_preserved, HashType(tval))
+            end
         else
-            # ... oh dear, this is where I need to know what the flags would be
-            # if they were *were* run (and do so without running them)
-            field_flags = forfield(flags, field) # can I even implement this???
-            # what we need to know is if `transform` alters `field_flags`
-            # or not
+            tval, _ = handle_transform(transform(val, context))
+            hash_state, structure_preserved = hash_type!(typeof(tval), hash_state, context)
+            nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
+                                                   structure_preserved,
+                                                   HashType(tval))
         end
-
-        tval = transform(val, context)
-        nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
-                                               HashType(tval))
     end
 
     hash_state = end_nested_hash!(hash_state, nested_hash_state)
@@ -186,20 +185,27 @@ is_ordered(::AbstractSet) = false
 order_by(::Symbol) = String
 order_by(x) = identity
 
-# without `SizedArray` transform would fall into an infinite recurse
-struct SizedArray{T}
-    val::T
+function with_type_structure(val, ::Type{T}, ::StructTypes.ArrayType)
+    if isconcretetype(T)
+        E = eltype(T)
+        tE, eltype_preserves_structure = handle_transform(transform(E, context))
+        return TransformResult((val, tE), eltype_preserves_structure)
+    else
+        return TransformResult(val, true)
+    end
 end
+
+# without `SizedArray` transform would fall into an infinite recurse
 function transform(::Type{T}, ::TypeHashContext) where {T<:AbstractArray}
     if isconcretetype(T)
-        return qualified_name_(StructType(T)), ndims(T)
+        return with_type_structure((qualified_name_(StructType(T)), ndims(T)), T)
     else
         return qualified_name_(StructType(T))
     end
 end
 function transform(::Type{T}, ::TypeAsValueContext) where {T<:AbstractArray}
     if isconcretetype(T)
-        return qualified_name_(StructType(T)), ndims(T)
+        return with_type_structure((qualified_name_(StructType(T)), ndims(T)), T)
     else
         return qualified_name_(StructType(T))
     end
@@ -208,30 +214,29 @@ transform(x::AbstractArray, ::HashVersion{3}) = size(x), SizedArray(x)
 transform(x::SizedArray, ::HashVersion{3}) = x.val
 transform(x::AbstractRange, ::HashVersion{3}) = WithStructType(x, StructTypes.Struct())
 
-function transform_type(::Type{T}, ::StructTypes.ArrayType, context) where {T}
-    tT = transform(T, context)
-    E = eltype(T)
-    return tT, transform_type(E, StructType(E), context)
-end
-
-function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
+function stable_hash_helper(xs, hash_state, context, preserves_structure, ::StructTypes.ArrayType)
     nested_hash_state = start_nested_hash!(hash_state)
 
     items = !is_ordered(xs) ? sort!(collect(xs), by=order_by) : xs
-    if isconcretetype(eltype(items))
+    if isconcretetype(eltype(items)) && preserves_structure
         x1 = first(items)
-        stable_type_hash(typeof(x1), nested_hash_state, context)
+        nested_hash_state = type_hash!(typeof(x1), nested_hash_state, context)
         for x in items
-            tx = transform(x, context)
+            tx, t_preserves_structure = handle_transform(transform(x, context))
+            element_preserves_structure = true
+            if !t_preserves_structure
+                nested_hash_state, element_preserves_structure = type_hash!(typeof(tx), nested_hash_state, context)
+            end
             nested_hash_state = stable_hash_helper(tx, nested_hash_state, context,
+                                                   element_preserves_structure,
                                                    HashType(tx))
         end
     else
         for x in items
-            stable_type_hash(typeof(x), nested_hash_state, context)
-            tx = transform(x, context)
+            tx, _ = handle_transform(transform(x, context))
+            nested_hash_state, preserves_structure = type_hash!(typeof(tx), nested_hash_state, context)
             nested_hash_state = stable_hash_helper(tx, nested_hash_state, context,
-                                                   HashType(tx))
+                                                   preserves_structure, HashType(tx))
         end
     end
 
