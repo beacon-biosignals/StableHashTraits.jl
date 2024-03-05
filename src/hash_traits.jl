@@ -163,7 +163,9 @@ function stable_hash_helper(x, hash_state, context, flags, st::StructTypes.DataT
         else
             # ... oh dear, this is where I need to know what the flags would be
             # if they were *were* run (and do so without running them)
-            field_flags = forfield(flags, field) # can I implement this???
+            field_flags = forfield(flags, field) # can I even implement this???
+            # what we need to know is if `transform` alters `field_flags`
+            # or not
         end
 
         tval = transform(val, context)

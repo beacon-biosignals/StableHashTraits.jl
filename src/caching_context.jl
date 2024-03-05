@@ -14,7 +14,7 @@ struct TransformedType{T}
     encodings::BitSet
 end
 function TransformedType(vals, flags::HashEncoding...)
-    TransformedType(vals, BitSet((Int(flags),)))
+    return TransformedType(vals, BitSet((Int(flags),)))
 end
 function Base.:(*)(x::TransformedType, y::TransformedType)
     return TransformedType((x.value, y.value), union(x.encodings, y.encodings))
@@ -40,18 +40,16 @@ struct CachingContext{T}
 end
 CachingContext(x::CachingContext) = x
 
-# type_caches maps return-value types to individual dictionaries
-# each dictionary maps some type with its associated hash value of the given return value
 parent_context(x::CachingContext) = x.parent
 hash_type!(fn, x, key) = hash_type!(fn, parent_context(x), key)
-hash_type!(fn, ::Nothing, key) = throw(ArgumentError("`cache! is not supported"))
+hash_type!(fn, ::Nothing, key) = throw(ArgumentError("`hash_type! is not supported"))
 function hash_type!(hash_state, x::CachingContext, key::Type)
     bytes, encodings = return get!(x.type_caches, key) do
         hash_type_state = similar_hash_state(hash_state)
         type_context = TypeHashContext(context)
         tT = transform(T, type_context)::TransformedType
         hash_type_state = stable_hash_helper(tT.value, hash_type_state, type_context,
-            BitSet(), HashType(tT))
+                                             BitSet(), HashType(tT))
         bytes = reinterpret(UInt8, asarray(compute_hash!(hash_type_state)))
         return bytes, tT.encodings
     end
