@@ -1,4 +1,5 @@
-# NOTE: all of this code is copy pasted from the old `StableHashTraits.jl`
+# NOTE: all of this code is copy pasted from the old `StableHashTraits.jl` modulo some
+# changes to names
 function hash_method end
 
 # recurse up to the parent until a method is defined or we hit the root (with parent `nothing`)
@@ -14,7 +15,7 @@ hash_method(_) = NotImplemented()
 is_implemented(::NotImplemented) = false
 is_implemented(_) = true
 
-function stable_hash_helper(x, hash_state, context, method::NotImplemented)
+function deprecated_hash_helper(x, hash_state, context, method::NotImplemented)
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects" *
                         " of type `$(typeof(x))` in context of type `$(typeof(context))`."))
     return nothing
@@ -47,7 +48,8 @@ See also: [`StableHashTraits.hash_method`](@ref).
 write(io, x, context) = write(io, x)
 write(io, x) = Base.write(io, x)
 
-function stable_hash_helper(x, hash_state, context, ::WriteHash)
+# TODO: add deprecations for StructHash etc...
+function deprecated_hash_helper(x, hash_state, context, ::WriteHash)
     return update_hash!(hash_state, x, context)
 end
 
@@ -56,7 +58,7 @@ end
 #####
 
 struct IterateHash end
-function stable_hash_helper(xs, hash_state, context, ::IterateHash)
+function deprecated_hash_helper(xs, hash_state, context, ::IterateHash)
     return hash_foreach(hash_state, context, xs) do x
         return x, hash_method(x, context)
     end
@@ -71,7 +73,7 @@ function hash_foreach_old(fn, hash_state, context, xs)
     for x in xs
         f_x, method = fn(x)
         inner_state = start_nested_hash!(hash_state)
-        inner_state = stable_hash_helper(f_x, inner_state, context, method)
+        inner_state = deprecated_hash_helper(f_x, inner_state, context, method)
         hash_state = end_nested_hash!(hash_state, inner_state)
     end
     return hash_state
@@ -81,7 +83,7 @@ function hash_foreach_new(fn, hash_state, context, xs)
     inner_state = start_nested_hash!(hash_state)
     for x in xs
         f_x, method = fn(x)
-        inner_state = stable_hash_helper(f_x, inner_state, context, method)
+        inner_state = deprecated_hash_helper(f_x, inner_state, context, method)
     end
     hash_state = end_nested_hash!(hash_state, inner_state)
     return hash_state
@@ -106,11 +108,11 @@ sort_(x::Tuple) = TupleTools.sort(x; by=string)
 sort_(x::AbstractSet) = sort!(collect(x); by=string)
 sort_(x) = sort(x; by=string)
 
-function stable_hash_helper(x, hash_state, context, use::StructHash{<:Any,S}) where {S}
+function deprecated_hash_helper(x, hash_state, context, use::StructHash{<:Any,S}) where {S}
     fieldsfn, getfieldfn = use.fnpair
     if root_version(context) > 1 && fieldsfn isa typeof(fieldnames_)
         # NOTE: hashes the field names at compile time if possible (~x10 speed up)
-        hash_state = stable_hash_helper(stable_typefields_id(x), hash_state, context,
+        hash_state = deprecated_hash_helper(stable_typefields_id(x), hash_state, context,
                                         WriteHash())
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
         fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
@@ -236,11 +238,6 @@ end
 ##### FnHash
 #####
 
-struct FnHash{F,H}
-    fn::F
-    result_method::H # if non-nothing, apply to result of `fn`
-end
-FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
 get_value_(x, method::FnHash) = method.fn(x)
 
 struct PrivateConstantHash{T,H}
@@ -264,7 +261,7 @@ macro ConstantHash(constant)
     end
 end
 
-function stable_hash_helper(x, hash_state, context,
+function deprecated_hash_helper(x, hash_state, context,
                             method::Union{FnHash,PrivateConstantHash})
     y = get_value_(x, method)
     new_method = @something(method.result_method, hash_method(y, context))
@@ -277,14 +274,14 @@ function stable_hash_helper(x, hash_state, context,
         throw(ArgumentError(replace(msg, r"\s+" => " ")))
     end
 
-    return stable_hash_helper(y, hash_state, context, new_method)
+    return deprecated_hash_helper(y, hash_state, context, new_method)
 end
 
 #####
 ##### Tuples
 #####
 
-function stable_hash_helper(x, hash_state, context, methods::Tuple)
+function deprecated_hash_helper(x, hash_state, context, methods::Tuple)
     return hash_foreach(hash_state, context, methods) do method
         return x, method
     end
@@ -326,8 +323,8 @@ struct HashAndContext{F,M}
     parent::M
     contextfn::F
 end
-function stable_hash_helper(x, hash_state, context, method::HashAndContext)
-    return stable_hash_helper(x, hash_state, method.contextfn(context), method.parent)
+function deprecated_hash_helper(x, hash_state, context, method::HashAndContext)
+    return deprecated_hash_helper(x, hash_state, method.contextfn(context), method.parent)
 end
 
 #####

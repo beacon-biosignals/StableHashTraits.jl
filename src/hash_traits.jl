@@ -41,7 +41,7 @@ end
 HashType(x::WithStructType) = x
 
 function stable_hash_helper(x::WithStructType, hash_state, context, ::WithStructType)
-    stable_hash_helper(x.val, hash_state, context, x.st)
+    return stable_hash_helper(x.val, hash_state, context, x.st)
 end
 
 #####
@@ -62,10 +62,13 @@ end
 
 transformer(::Type{<:DataType}, context) = Base.Fix2(transform_type, context)
 function transform_type(::Type{T}, context) where {T}
-    qualified_name_(StructType(T)), type_structure(T, context)
+    return qualified_name_(StructType(T)), type_structure(T, context)
 end
 type_structure(::Type{T}, context) where {T} = type_structure(T, StructType(T), context)
-type_structure(::Type, trait, context) = nothing
+function type_structure(::Type{T}, trait, context) where {T}
+    return type_structure(T, trait, parent_context(context))
+end
+type_structure(::Type{T}, trait, ::Nothing) where {T} = nothing
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
 qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
@@ -88,15 +91,15 @@ end
 parent_context(x::TypeAsValueContext) = x.parent
 
 function hash_type!(hash_state, context::CachingContext, ::Type{<:Type})
-    update_hash!(hash_state, @hash64("Base.Type"), context)
+    return update_hash!(hash_state, @hash64("Base.Type"), context)
 end
 
 function transform_type(::Type{T}, context::TypeAsValueContext) where {T}
-    qualified_name_(T), type_structure(T, StructType(T), context)
+    return qualified_name_(T), type_structure(T, StructType(T), context)
 end
 
 hash_type!(hash_state, ::TypeAsValueContext, T) = hash_state
-function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where T
+function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where {T}
     transform = transformer(typeof(T), context)
     type_context = TypeAsValueContext(context)
     tT = transform(T)
@@ -150,24 +153,28 @@ function stable_hash_helper(x, hash_state, context, parent_preserves_types,
     # hash the field values
     fields = st isa StructTypes.UnorderedStruct ? sorted_field_names(x) :
              fieldnames(typeof(x))
+    nested_hash_state = hash_fields(x, fields, nested_hash_state, context)
+    hash_state = end_nested_hash!(hash_state, nested_hash_state)
+    return hash_state
+end
+
+function hash_fields(x, fields, hash_state, context)
     for field in fields
         val = getfield(x, field)
         # can we optimize away the field's type_hash?
-        transform = transformer(typeof(val), context)
-        if isconcretetype(fieldtype(typeof(x), field)) && preserves_types(transform)
+        transform, preserves_types, traitfn = unwrap(hash_method(typeof(val), context))
+        if isconcretetype(fieldtype(typeof(x), field)) && preserves_types
             tval = transform(val)
-            nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
-                                                   HashType(tval))
+            hash_state = stable_hash_helper(tval, hash_state, context,
+                                            traitfn(tval))
         else
+            # TODO: do we need to hash both pre and post transformed types?
             tval = transform(val)
-            nested_hash_state = hash_type!(typeof(tval), nested_hash_state, context)
-            nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
-                                                   HashType(tval))
+            hash_state = hash_type!(typeof(tval), hash_state, context)
+            hash_state = stable_hash_helper(tval, hash_state, context,
+                                            traitfn(tval))
         end
     end
-
-    hash_state = end_nested_hash!(hash_state, nested_hash_state)
-    return hash_state
 end
 
 #####
@@ -198,28 +205,29 @@ function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
     nested_hash_state = start_nested_hash!(hash_state)
 
     items = !is_ordered(xs) ? sort!(collect(xs); by=order_by) : xs
-    transform = transformer(eltype(items), context)
+    nested_hash_state = hash_elements(items, nested_hash_state, context)
+
+    hash_state = end_nested_hash!(hash_state, nested_hash_state)
+    return hash_state
+end
+
+function hash_elements(items, hash_state, context)
+    transform, preserves_types, traitfn = unwrap(hash_method(eltype(items), context))
     # can we optimize away the element type hash?
     if isconcretetype(eltype(items)) && preserves_types(transform)
-        x1 = first(items)
-        nested_hash_state = type_hash!(typeof(x1), nested_hash_state, context)
+        hash_state = type_hash!(eltype(items), hash_state, context)
         for x in items
             tx = transform(x)
-            nested_hash_state = stable_hash_helper(tx, nested_hash_state, context,
-                                                   HashType(tx))
+            hash_state = stable_hash_helper(tx, hash_state, context, traitfn(tx))
         end
     else
         for x in items
-            transform = transformer(typeof(x), context)
+            transform, _, traitfn = unwrap(hash_method(eltype(x), context))
             tx = transform(x)
-            nested_hash_state, preserves_types = type_hash!(typeof(tx), nested_hash_state,
-                                                            context)
-            nested_hash_state = stable_hash_helper(tx, nested_hash_state, context,
-                                                   HashType(tx))
+            hash_state, = type_hash!(typeof(tx), hash_state, context)
+            hash_state = stable_hash_helper(tx, hash_state, context, traitfn(tx))
         end
     end
-
-    hash_state = end_nested_hash!(hash_state, nested_hash_state)
     return hash_state
 end
 
@@ -227,39 +235,24 @@ end
 ##### Tuples
 #####
 
-function type_structure(::Type{T}, hash_state, context, ::StructTypes.ArrayType) where {T<:Tuple}
+function type_structure(::Type{T}, hash_state, context,
+                        ::StructTypes.ArrayType) where {T<:Tuple}
     if isconcretetype(T)
         fields = T <: StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
-        return fields, map(field -> fieldtype(T,field), fields)
+        return fields, map(field -> fieldtype(T, field), fields)
     else
         return nothing
     end
 end
 
-function type_structure(::Type{T}, hash_state, context, ::StructTypes.ArrayType) where {T<:NTuple}
+function type_structure(::Type{T}, hash_state, context,
+                        ::StructTypes.ArrayType) where {T<:NTuple}
     return eltype(T)
 end
 
 function stable_hash_helper(x::Tuple, hash_state, context, ::StructTypes.ArrayType)
     nested_hash_state = start_nested_hash!(hash_state)
-
-    # hash the tuple field values themselves
-    for field in fieldnames(typeof(x))
-        val = getfield(x, field)
-        # can we optimize away the field's type_hash?
-        transform = transformer(typeof(val), context)
-        if isconcretetype(fieldtype(typeof(x), field)) && preserves_types(transform)
-            tval = transform(val)
-            nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
-                                                   HashType(tval))
-        else
-            tval = transform(val)
-            nested_hash_state = hash_type!(typeof(tval), nested_hash_state, context)
-            nested_hash_state = stable_hash_helper(tval, nested_hash_state, context,
-                                                   HashType(tval))
-        end
-    end
-
+    nested_hash_state = hash_fields(x, fieldnames(typeof(x)), nested_hash_state, context)
     hash_state = end_nested_hash!(hash_state, nested_hash_state)
     return hash_state
 end
@@ -290,33 +283,7 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     else
         sort!(collect(StructTypes.keyvaluepairs(x)); by=order_by(x))
     end
-    ktransform = transformer(keytype(eltype(x)), context)
-    vtransform = transformer(valtype(eltype(x)), context)
-    if isconcretetype(eltype(pairs)) && preserves_types(ktransform) && preserves_types(vtransform)
-        hash_type!(nested_hash_state, context, keytype(eltype(x)))
-        hash_type!(nested_hash_state, context, valtype(eltype(x)))
-        for (key, value) in pairs
-            tkey = ktransform(key)
-            tvalue = vtransform(value)
-            nested_hash_state = stable_hash_helper(tkey, nested_hash_state, context,
-                                                   HashType(tkey))
-            nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context,
-                                                   HashType(tvalue))
-        end
-    else
-        for (key, value) in pairs
-            ktransform = transformer(typeof(key), context)
-            vtransform = transformer(typeof(val), context)
-            tkey = ktransform(key)
-            tvalue = vtransform(value)
-            hash_type!(nested_hash_state, context, typeof(key))
-            hash_type!(nested_hash_state, context, typeof(val))
-            nested_hash_state = stable_hash_helper(tkey, nested_hash_state, context,
-                                                   HashType(tkey))
-            nested_hash_state = stable_hash_helper(tvalue, nested_hash_state, context,
-                                                   HashType(tvalue))
-        end
-    end
+    hash_elements(pairs, nested_hash_state, context)
 
     hash_state = end_nested_hash!(hash_state, nested_hash_state)
     return hash_state
@@ -338,7 +305,9 @@ end
 ##### Basic data types
 #####
 
-transformer(::Type{<:Symbol}) = PreserveTypes(x -> @hash64(":"), String(x))
+# the type 'structure' of a symbol is to differentiate it from a string
+type_structure(::Type{<:Symbol}, ::StructTypes.StringType, context) = @hash64(":")
+hash_method(::Type{<:Symbol}) = HashFn(String; preserves_types=true)
 
 function stable_hash_helper(str, hash_state, context,
                             ::StructTypes.StringType)

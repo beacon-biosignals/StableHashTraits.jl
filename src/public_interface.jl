@@ -49,27 +49,35 @@ third argument to [`StableHashTraits.write`](@ref)
 stable_hash(x; alg=sha256, version=1) = return stable_hash(x, HashVersion{version}(); alg)
 function stable_hash(x, context; alg=sha256)
     if root_version(context) < 3
-        return compute_hash!(stable_hash_helper(x, HashState(alg, context), context,
-                                                hash_method(x, context)))
+        return compute_hash!(deprecated_hash_helper(x, HashState(alg, context), context,
+                                                    hash_method(x, context)))
     else
         context = CachingContext(context)
         hash_state = HashState(alg, context)
-        transform = transformer(typeof(x), context)
-        tx = transform(x, context)
+        transform, _, traitfn = unwrap(hash_method(typeof(x), context))
+        tx = transform(x)
         hash_state = type_hash!(typeof(tx), hash_state, context)
-        hash_state = stable_hash_helper(tx, hash_state, context, HashType(tx))
+        hash_state = stable_hash_helper(tx, hash_state, context, traitfn(tx))
         return compute_hash!(hash_state)
     end
 end
 
-struct PreservesTypes{F}
+struct FnHash{F,H}
     fn::F
+    result_method::H # if non-nothing, apply to result of `fn`
+    preserves_types::Bool
+    function FnHash(fn::Function, method=nothing;
+                    preserves_types=StableHashTraits.preserves_types(fn))
+        return new(fn, result_method, preserves_types)
+    end
 end
-preserves_types(::PreservesTypes) = true
+FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
+unwrap(x::FnHash{<:Any,Nothing}) = x.fn, HashType, x.preserve_types
+unwrap(x::FnHash) = x.fn, _ -> x.result_method, x.preserve_types
+unwrap(x) = identity, _ -> x, true
+
 preserves_types(::typeof(identity)) = true
 preserves_types(::Function) = false
-preserves_types(x) = throw(ArgumentError("Expected `transformer` to return a function."))
-(p::PreservesTypes)(x) = p.fn(x)
 
 transformer(::Type, context) = transformer(x, parent_context(context))
 transformer(::Type, ::Nothing) = transformer(x)
