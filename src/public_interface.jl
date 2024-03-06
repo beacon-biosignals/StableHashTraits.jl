@@ -75,20 +75,12 @@ preserves_types(::typeof(identity)) = true
 preserves_types(::Function) = false
 (tr::Transformer)(x) = tr.fn(x)
 HashType(x::Transformer, y) = x.result_method
-HashType(x::Transformer{<:Any,Nothing}, y) = HashType(y)
+HashType(::Transformer{<:Any,Nothing}, y) = HashType(y)
 HashType(x) = StructType(x)
-transformer(::Type, ::HashVersion{3}) = Transformer()
-
-# TODO: I should probably rename FnHash above, and return the old FnHash to deprecated
-
-# TODO: throw error if hash method is passed a value in hash version 3
-
-preserves_types(::typeof(identity)) = true
-preserves_types(::Function) = false
 
 transformer(::Type, context) = transformer(x, parent_context(context))
 transformer(::Type, ::Nothing) = transformer(x)
-transformer(::Type) = identity
+transformer(::Type) = Transformer()
 
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *

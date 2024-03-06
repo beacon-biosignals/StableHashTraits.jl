@@ -263,6 +263,11 @@ end
 ##### FnHash
 #####
 
+struct FnHash{F,H}
+    fn::F
+    result_method::H # if non-nothing, apply to result of `fn`
+end
+FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
 get_value_(x, method::FnHash) = method.fn(x)
 
 struct PrivateConstantHash{T,H}
