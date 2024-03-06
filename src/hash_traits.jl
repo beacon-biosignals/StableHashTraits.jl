@@ -1,50 +1,4 @@
 #####
-##### Helper Functions
-#####
-
-bytes_of_val(f) = reinterpret(UInt8, [f;])
-bytes_of_val(f::Symbol) = codeunits(String(f))
-bytes_of_val(f::String) = codeunits(f)
-function hash64(x)
-    bytes = sha256(bytes_of_val(x))
-    # take the first 64 bytes of `bytes`
-    return first(reinterpret(UInt64, bytes))
-end
-"""
-    @hash64(x)
-
-Compute a hash of the given string, symbol or numeric literal as an Int64 at compile time.
-This is a useful optimization to generate unique tags based on some more verbose string and
-can be used inside, e.g. [`transform`](@ref). Internally this calls `sha256` and returns the
-first 64 bytes.
-"""
-macro hash64(constant)
-    if constant isa Symbol || constant isa String || constant isa Number
-        return hash64(constant)
-    else
-        return :(throw(ArgumentError(string("Unexpected expression: ", $(string(constant))))))
-    end
-end
-
-# internally we always call StructType on the value when we want its struct type; if we see
-# a type it means we are trying to hash a type as a value (e.g. stable_hash((Int, Int)))
-HashType(x) = StructType(x)
-
-#####
-##### WithStructType
-#####
-
-struct WithStructType{T,S}
-    val::T
-    st::S
-end
-HashType(x::WithStructType) = x
-
-function stable_hash_helper(x::WithStructType, hash_state, context, ::WithStructType)
-    return stable_hash_helper(x.val, hash_state, context, x.st)
-end
-
-#####
 ##### Type Hashes
 #####
 
@@ -54,14 +8,15 @@ end
 #   2. when a value we're hashing is itself a type (`TypeAsValueContext`)
 #
 # These are handled as separate contexts as the kind of value we want to generate from the
-# type may differ in these context. By default only the structure of types matters when hash
-# an objects type, e.g. that it is a data type with fields of the given names and types.
-# When a type is hashed as a value, its actual also name matters.
+# type may differ in these contexts. By default only the structure of types matters when
+# hashing an objects type, e.g. that it is a data type with fields of the given names and
+# types matters but not what type it is. When a type is hashed as a value, its actual also
+# name matters.
 
 # type hash
 
-transformer(::Type{<:DataType}, context) = Base.Fix2(transform_type, context)
-function transform_type(::Type{T}, context) where {T}
+transformer(::Type{<:Type}, context) = Transformer(Base.Fix2(transform_type, context))
+function transform_type(::Type{T}, context::TypeHashContext) where {T}
     return qualified_name_(StructType(T)), type_structure(T, context)
 end
 type_structure(::Type{T}, context) where {T} = type_structure(T, StructType(T), context)
@@ -82,6 +37,7 @@ function validate_name(str)
 end
 
 # types as values
+
 struct TypeAsValue end
 HashType(::Type) = TypeAsValue()
 
@@ -91,7 +47,7 @@ end
 parent_context(x::TypeAsValueContext) = x.parent
 
 function hash_type!(hash_state, context::CachingContext, ::Type{<:Type})
-    return update_hash!(hash_state, @hash64("Base.Type"), context)
+    return update_hash!(hash_state, "Base.Type", context)
 end
 
 function transform_type(::Type{T}, context::TypeAsValueContext) where {T}
@@ -103,7 +59,11 @@ function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where
     transform = transformer(typeof(T), context)
     type_context = TypeAsValueContext(context)
     tT = transform(T)
-    return stable_hash_helper(tT, hash_type_state, type_context, HashType(tT))
+    return stable_hash_helper(tT, hash_type_state, type_context, HashType(transform, tT))
+end
+
+function stable_hash_helper(::Type{T}, hash_state, context::TypeHashContext, ::TypeAsValue) where {T}
+    return hash_type!(hash_state, context, T)
 end
 
 #####
@@ -113,7 +73,7 @@ end
 # remember: functions can have fields; in general StructTypes doesn't assume these are
 # serialized but here we want that to happen by default
 function transformer(::Type{<:Function}, context)
-    return PreservesTypes(fn -> WithStructType(fn, StructTypes.UnorderedStruct()))
+    return Transformer(identity, StructTypes.UnorderedStruct())
 end
 
 function transform_type(::Type{T}, context) where {T<:Function}
@@ -146,8 +106,7 @@ function type_structure(::Type{T}, ::StructTypes.DataType, context) where {T}
     end
 end
 
-function stable_hash_helper(x, hash_state, context, parent_preserves_types,
-                            st::StructTypes.DataType)
+function stable_hash_helper(x, hash_state, context, st::StructTypes.DataType)
     nested_hash_state = start_nested_hash!(hash_state)
 
     # hash the field values
@@ -162,17 +121,15 @@ function hash_fields(x, fields, hash_state, context)
     for field in fields
         val = getfield(x, field)
         # can we optimize away the field's type_hash?
-        transform, preserves_types, traitfn = unwrap(hash_method(typeof(val), context))
-        if isconcretetype(fieldtype(typeof(x), field)) && preserves_types
+        transform = transformer(typeof(val), context)
+        if isconcretetype(fieldtype(typeof(x), field)) && transform.preserves_types
             tval = transform(val)
             hash_state = stable_hash_helper(tval, hash_state, context,
-                                            traitfn(tval))
+                                            HashType(transform, tval))
         else
-            # TODO: do we need to hash both pre and post transformed types?
             tval = transform(val)
             hash_state = hash_type!(typeof(tval), hash_state, context)
-            hash_state = stable_hash_helper(tval, hash_state, context,
-                                            traitfn(tval))
+            hash_state = stable_hash_helper(tval, hash_state, context, HashType(transform, tval))
         end
     end
 end
@@ -183,22 +140,27 @@ end
 
 is_ordered(x) = true
 is_ordered(::AbstractSet) = false
-order_by(::Symbol) = String
-order_by(x) = identity
+order_by(x::Symbol) = String(x)
+order_by(x) = x
 
 function type_structure(::Type{T}, hash_state, context, ::StructTypes.ArrayType) where {T}
     return eltype(T)
 end
 
 # include ndims in type hash where possible
+struct SizedArray{T}
+    val::T
+end
+HashType(::SizedArray) = StructTypes.ArrayType()
+
 function transformer(::Type{<:AbstractArray}, ::HashVersion{3})
-    return PreservesStructure(x -> size(x), SizedArray(x))
+    return Transformer(x -> (size(x), SizedArray(x)); preserves_types=true)
 end
 function transformer(::Type{<:SizedArray}, ::HashVersion{3})
-    return PreservesStructure(x -> x.val)
+    return Transformer(x -> x.val; preserves_types=true)
 end
 function transformer(::Type{<:AbstractRange}, ::HashVersion{3})
-    return PreservesStructure(x -> WithStructType(x, StructTypes.Struct()))
+    return Transformer(x, StructTypes.Struct(); preserves_types=true)
 end
 
 function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
@@ -212,20 +174,20 @@ function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
 end
 
 function hash_elements(items, hash_state, context)
-    transform, preserves_types, traitfn = unwrap(hash_method(eltype(items), context))
+    transform = transformer(eltype(items), context)
     # can we optimize away the element type hash?
-    if isconcretetype(eltype(items)) && preserves_types(transform)
+    if isconcretetype(eltype(items)) && transform.preserves_types
         hash_state = type_hash!(eltype(items), hash_state, context)
         for x in items
             tx = transform(x)
-            hash_state = stable_hash_helper(tx, hash_state, context, traitfn(tx))
+            hash_state = stable_hash_helper(tx, hash_state, context, HashType(transformer, tx))
         end
     else
         for x in items
-            transform, _, traitfn = unwrap(hash_method(eltype(x), context))
+            transform = transformer(typeof(x), context)
             tx = transform(x)
-            hash_state, = type_hash!(typeof(tx), hash_state, context)
-            hash_state = stable_hash_helper(tx, hash_state, context, traitfn(tx))
+            hash_state = type_hash!(typeof(tx), hash_state, context)
+            hash_state = stable_hash_helper(tx, hash_state, context, HashType(transformer, tx))
         end
     end
     return hash_state
@@ -261,17 +223,13 @@ end
 ##### DictType
 #####
 
-# `string` aims to ensure that the object can be ordered (e.g. Symbols can't
-# be sorted without this)
-# NOTE: we could sort by the written bytes to hash to prevent `string` from messing us up
-# but that would be a bit complicated to implement
 is_ordered(x::AbstractDict) = false
 
 keytype(::Type{<:Pair{K,T}}) where {K,T} = K
 valtype(::Type{<:Pair{K,T}}) where {K,T} = T
 
 function type_structure(::Type{T}, hash_state, context, ::StructTypes.DictType) where {T}
-    return keytype(eltype(T)), valtype(eltype(T))
+    return eltype(T)
 end
 
 function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
@@ -281,7 +239,7 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = if is_ordered(x)
         StructTypes.keyvaluepairs(x)
     else
-        sort!(collect(StructTypes.keyvaluepairs(x)); by=order_by(x))
+        sort!(collect(StructTypes.keyvaluepairs(x)); by=order_by)
     end
     hash_elements(pairs, nested_hash_state, context)
 
@@ -293,12 +251,14 @@ end
 ##### CustomStruct
 #####
 
-# unforuntately there's not much we can do to avoid hashing the type for every instance when
-# we have a CustomStruct; `lowered` could be anything
+# we need to hash the type for every instance when we have a CustomStruct; `lowered` could
+# be anything
 function stable_hash_helper(x, hash_state, context, ::StructTypes.CustomStruct)
     lowered = StructTypes.lower(x)
-    hash_type!(hash_state, context, typeof(lowered))
-    return stable_hash_helper(lowered, hash_state, context, HashType(lowered))
+    transform = transformer(typeof(lowered), context)
+    tval = transform(lowered)
+    hash_type!(hash_state, context, typeof(tval))
+    return stable_hash_helper(tval, hash_state, context, HashType(transform, tval))
 end
 
 #####
@@ -306,11 +266,10 @@ end
 #####
 
 # the type 'structure' of a symbol is to differentiate it from a string
-type_structure(::Type{<:Symbol}, ::StructTypes.StringType, context) = @hash64(":")
-hash_method(::Type{<:Symbol}) = HashFn(String; preserves_types=true)
+type_structure(::Type{<:Symbol}, ::StructTypes.StringType, context) = ":"
+transformer(::Type{<:Symbol}) = Transformer(String; preserves_types=true)
 
-function stable_hash_helper(str, hash_state, context,
-                            ::StructTypes.StringType)
+function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
     nested_hash_state = start_nested_hash!(hash_state)
     update_hash!(nested_hash_state, str isa AbstractString ? str : string(str), context)
     return end_nested_hash!(hash_state, nested_hash_state)
@@ -326,7 +285,7 @@ function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
     return update_hash!(hash_state, Bool(bool), context)
 end
 
-# null types are encoded purely by their type
+# null types are encoded purely by their type hash
 function stable_hash_helper(_, hash_state, context, ::StructTypes.NullType)
     return hash_state
 end

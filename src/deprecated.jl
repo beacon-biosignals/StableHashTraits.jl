@@ -18,7 +18,14 @@ is_implemented(_) = true
 function deprecated_hash_helper(x, hash_state, context, method::NotImplemented)
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects" *
                         " of type `$(typeof(x))` in context of type `$(typeof(context))`."))
-    return nothing
+    return
+end
+
+function deprecated_hash_helper(x, hash_state, context, method)
+    throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *
+                        "hashing object $x. The implementation of `hash_method` for this " *
+                        "object is invalid."))
+    return
 end
 
 #####
@@ -155,6 +162,16 @@ function qualified_type(x)
     return qualified_type_(x)
 end
 
+bytes_of_val(f) = reinterpret(UInt8, [f;])
+bytes_of_val(f::Symbol) = codeunits(String(f))
+bytes_of_val(f::String) = codeunits(f)
+
+function hash64(x)
+    bytes = sha256(bytes_of_val(x))
+    # take the first 64 bytes of `bytes`
+    return first(reinterpret(UInt64, bytes))
+end
+
 function hash64(values::Tuple)
     sha = SHA.SHA2_256_CTX()
     for val in values
@@ -163,6 +180,14 @@ function hash64(values::Tuple)
     bytes = SHA.digest!(sha)
     # take the first 64 bytes of our hash
     return first(reinterpret(UInt64, bytes))
+end
+
+macro hash64(constant)
+    if constant isa Symbol || constant isa String || constant isa Number
+        return hash64(constant)
+    else
+        return :(throw(ArgumentError(string("Unexpected expression: ", $(string(constant))))))
+    end
 end
 
 # NOTE: using stable_{typename|type}_id increases speed by ~x10-20 vs. `qualified_name`

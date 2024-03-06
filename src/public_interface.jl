@@ -54,27 +54,34 @@ function stable_hash(x, context; alg=sha256)
     else
         context = CachingContext(context)
         hash_state = HashState(alg, context)
-        transform, _, traitfn = unwrap(hash_method(typeof(x), context))
+        transform = transformer(typeof(x), context)
         tx = transform(x)
         hash_state = type_hash!(typeof(tx), hash_state, context)
-        hash_state = stable_hash_helper(tx, hash_state, context, traitfn(tx))
+        hash_state = stable_hash_helper(tx, hash_state, context, HashType(transform, tx))
         return compute_hash!(hash_state)
     end
 end
 
-struct FnHash{F,H}
+struct Transformer{F,H}
     fn::F
     result_method::H # if non-nothing, apply to result of `fn`
     preserves_types::Bool
-    function FnHash(fn::Function, method=nothing;
+    function Transformer(fn::Base.Callable=identity, method=nothing;
                     preserves_types=StableHashTraits.preserves_types(fn))
-        return new(fn, result_method, preserves_types)
+        return new{typeof(fn), typeof(result_method)}(fn, result_method, preserves_types)
     end
 end
-FnHash(fn) = FnHash{typeof(fn),Nothing}(fn, nothing)
-unwrap(x::FnHash{<:Any,Nothing}) = x.fn, HashType, x.preserve_types
-unwrap(x::FnHash) = x.fn, _ -> x.result_method, x.preserve_types
-unwrap(x) = identity, _ -> x, true
+preserves_types(::typeof(identity)) = true
+preserves_types(::Function) = false
+(tr::Transformer)(x) = tr.fn(x)
+HashType(x::Transformer, y) = x.result_method
+HashType(x::Transformer{<:Any,Nothing}, y) = HashType(y)
+HashType(x) = StructType(x)
+transformer(::Type, ::HashVersion{3}) = Transformer()
+
+# TODO: I should probably rename FnHash above, and return the old FnHash to deprecated
+
+# TODO: throw error if hash method is passed a value in hash version 3
 
 preserves_types(::typeof(identity)) = true
 preserves_types(::Function) = false
@@ -85,7 +92,7 @@ transformer(::Type) = identity
 
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *
-                        "hashing object $x. The implementation of `hash_method` for this " *
+                        "hashing object $x. The implementation of `transformer` for this " *
                         "object is invalid."))
-    return nothing
+    return
 end

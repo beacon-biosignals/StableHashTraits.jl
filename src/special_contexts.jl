@@ -29,7 +29,7 @@ function hash_method(x::T, m::TablesEq) where {T}
 end
 
 function transformer(::Type{T}, c::TablesEq) where {T}
-    Tables.istable(T) && return columntable
+    Tables.istable(T) && return Transformer(columntable)
     return transformer(T, parent_context(c))
 end
 
