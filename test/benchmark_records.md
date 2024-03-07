@@ -83,17 +83,17 @@ macros to guarantee that their hashes are computed at compile time.
 12×5 DataFrame
  Row │ benchmark   hash       base        trait       ratio
      │ SubStrin…   SubStrin…  String      String      Float64
-─────┼─────────────────────────────────────────────────────────
-   1 │ structs     crc        75.500 μs   1.707 ms    22.6065
-   2 │ tuples      crc        76.458 μs   1.565 ms    20.4753
-   3 │ dataframes  crc        75.333 μs   883.291 μs  11.7252
-   4 │ numbers     crc        37.791 μs   433.083 μs  11.46
-   5 │ symbols     crc        944.792 μs  1.972 ms     2.0867
-   6 │ strings     crc        875.750 μs  421.875 μs   0.48173
-   7 │ structs     sha256     568.333 μs  3.734 ms     6.57046
-   8 │ tuples      sha256     567.417 μs  3.596 ms     6.33683
-   9 │ dataframes  sha256     567.750 μs  1.905 ms     3.35469
-  10 │ numbers     sha256     285.875 μs  947.458 μs   3.31424
-  11 │ symbols     sha256     1.758 ms    4.682 ms     2.66329
-  12 │ strings     sha256     1.758 ms    1.634 ms     0.92959
+─────┼──────────────────────────────────────────────────────────
+   1 │ structs     crc        70.042 μs   704.792 μs  10.0624
+   2 │ tuples      crc        70.166 μs   599.167 μs   8.53928
+   3 │ dataframes  crc        70.125 μs   238.750 μs   3.40463
+   4 │ numbers     crc        35.209 μs   116.042 μs   3.29581
+   5 │ symbols     crc        528.834 μs  1.364 ms     2.57879
+   6 │ strings     crc        547.708 μs  354.459 μs   0.647168
+   7 │ structs     sha256     532.958 μs  1.681 ms     3.15316
+   8 │ tuples      sha256     533.000 μs  1.473 ms     2.76438
+   9 │ symbols     sha256     1.373 ms    2.715 ms     1.97646
+  10 │ dataframes  sha256     532.959 μs  816.667 μs   1.53233
+  11 │ numbers     sha256     266.083 μs  407.375 μs   1.53101
+  12 │ strings     sha256     1.356 ms    1.719 ms     1.26783
 ```

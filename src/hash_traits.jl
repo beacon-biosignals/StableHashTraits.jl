@@ -13,6 +13,9 @@
 # types matters but not what type it is. When a type is hashed as a value, its actual also
 # name matters.
 
+# TODO: dispatching for the different type contexts doesn't quite work
+# we probably need different methods
+
 # type hash
 
 transformer(::Type{<:Type}, context) = Transformer(Base.Fix2(transform_type, context))
@@ -90,7 +93,7 @@ function transform_type(::Type{T}, context::TypeAsValueContext) where {T<:Functi
     transform_function_type(T)
 end
 
-function transform_type(::Type{T}, context::TypeHashContext) where {T}
+function transform_type(::Type{T}, context::TypeHashContext) where {T<:Function}
     transform_function_type(T)
 end
 
