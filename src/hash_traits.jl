@@ -217,11 +217,11 @@ function hash_elements(items, hash_state, context)
     else
         for x in items
             transform = transformer(typeof(x), context)
-            if transform.preserves_type
+            if transform.preserves_structure
                 hash_state = hash_type!(hash_state, context, typeof(x))
             end
             tx = transform(x)
-            if !transform.preserves_type
+            if !transform.preserves_structure
                 hash_state = hash_type!(hash_state, context, typeof(tx))
             end
             hash_state = stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
@@ -267,6 +267,8 @@ function type_structure(::Type{T}, ::StructTypes.DictType, hash_state) where {T}
     return eltype(T)
 end
 
+transformer(::Type{<:Pair}) = Transformer(((a, b),) -> (a, b); preserves_structure=true)
+
 function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = StructTypes.keyvaluepairs(x)
     nested_hash_state = start_nested_hash!(hash_state)
@@ -300,13 +302,7 @@ end
 ##### Basic data types
 #####
 
-# the type 'structure' of a symbol is to differentiate it from a string
-struct SymbolString
-    str::Symbol
-end
-transformer(::Type{<:Symbol}) = Transformer(SymbolString; preserves_structure=true)
-hash_trait(::SymbolString) = StructTypes.StringType()
-transformer(::Type{<:SymbolString}) = Transformer(String; preserves_structure=true)
+transformer(::Type{<:Symbol}) = Transformer(String; preserves_structure=true)
 
 function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
     nested_hash_state = start_nested_hash!(hash_state)

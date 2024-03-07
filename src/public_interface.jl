@@ -55,7 +55,14 @@ function stable_hash(x, context; alg=sha256)
         context = CachingContext(context)
         hash_state = HashState(alg, context)
         transform = transformer(typeof(x), context)
+        if transform.preserves_structure
+            hash_state = hash_type!(hash_state, context, typeof(x))
+        end
         tx = transform(x)
+        if !transform.preserves_structure
+            hash_state = hash_type!(hash_state, context, typeof(tx))
+        end
+
         hash_state = hash_type!(hash_state, context, typeof(tx))
         hash_state = stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
         return compute_hash!(hash_state)
