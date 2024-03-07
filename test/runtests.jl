@@ -83,12 +83,14 @@ include("setup_tests.jl")
             end
             # verifies that transform can be called recursively
 
-            @testset "FnHash" begin
-                @test test_hash(GoodTransform(2)) == test_hash(GoodTransform("-0.2"))
-                @test test_hash(GoodTransform(3)) != test_hash(GoodTransform("-0.2"))
+            if V <= 2
+                @testset "FnHash" begin
+                    @test test_hash(GoodTransform(2)) == test_hash(GoodTransform("-0.2"))
+                    @test test_hash(GoodTransform(3)) != test_hash(GoodTransform("-0.2"))
 
-                # various (in)equalities
-                @test_throws ArgumentError test_hash(BadTransform())
+                    # various (in)equalities
+                    @test_throws ArgumentError test_hash(BadTransform())
+                end
             end
 
             # dictionary like
@@ -96,7 +98,11 @@ include("setup_tests.jl")
                 @test test_hash(Dict(:a => 1, :b => 2)) == test_hash(Dict(:b => 2, :a => 1))
                 @test ((; kwargs...) -> test_hash(kwargs))(; a=1, b=2) ==
                       ((; kwargs...) -> test_hash(kwargs))(; b=2, a=1)
-                @test test_hash((; a=1, b=2)) != test_hash((; b=2, a=1))
+                if V <= 2
+                    @test test_hash((; a=1, b=2)) != test_hash((; b=2, a=1))
+                else
+                    @test test_hash((; a=1, b=2)) == test_hash((; b=2, a=1))
+                end
                 @test test_hash((; a=1, b=2)) != test_hash((; a=2, b=1))
                 # Validate that badly printed types properly error, rather than silently
                 # producing a bad typestring with an unstable type id. NOTE: One might want
@@ -104,7 +110,7 @@ include("setup_tests.jl")
                 # function (`qualified_type_`) because otherwise this runs into confusing
                 # compilation issues during CI because of the way that generated functions
                 # work.
-                if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
+                if V == 1 && VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
                     @test_throws(StableHashTraits.StableNames.ParseError,
                                  StableHashTraits.qualified_type_((; a=1,
                                                                    b=BadShowSyntax())))
