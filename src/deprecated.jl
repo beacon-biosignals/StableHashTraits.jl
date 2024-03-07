@@ -7,13 +7,6 @@ hash_method(x, context) = hash_method(x, parent_context(context))
 # if we hit the root context, we call the one-argument form, which could be extended by a
 # user
 hash_method(x, ::Nothing) = hash_method(x)
-# we signal that a method specific to a type is not available using `NotImplemented`; we
-# need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext) where T
-# below for details
-struct NotImplemented end
-hash_method(_) = NotImplemented()
-is_implemented(::NotImplemented) = false
-is_implemented(_) = true
 
 function deprecated_hash_helper(x, hash_state, context, method::NotImplemented)
     throw(ArgumentError("There is no appropriate `hash_method` defined for objects" *

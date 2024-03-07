@@ -86,8 +86,22 @@ hash_trait(::Transformer{<:Any,Nothing}, y) = hash_trait(y)
 hash_trait(x) = StructType(x)
 
 transformer(::Type{T}, context) where {T} = transformer(T, parent_context(context))
+function transformer(::Type{T}, ::HashVersion{3}) where {T}
+    result = transform(T)
+    is_implemented(result) && return result
+    return Transformer()
+end
 transformer(::Type{T}, ::Nothing) where {T} = transformer(T)
-transformer(::Type) = Transformer()
+transform(x) = NotImplemented()
+hash_method(_) = NotImplemented()
+is_implemented(::NotImplemented) = false
+is_implemented(_) = true
+
+# we signal that a method specific to a type is not available using `NotImplemented`; we
+# need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext) where T
+# below for details
+struct NotImplemented end
+
 
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *

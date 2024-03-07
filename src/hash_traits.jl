@@ -18,17 +18,15 @@
 
 # type hash
 
-transformer(::Type{<:Type}, context) = Transformer(Base.Fix2(transform_type, context))
-transform_type(::Type{Union{}}, context::TypeHashContext) = nothing
-
-function transform_type(::Type{T}, context::TypeHashContext) where {T}
-    return qualified_name_(StructType(T)), type_structure(T, context)
+function transformer(::Type{<:Type}, context::TypeHashContext)
+    return Transformer(Base.Fix2(transform_type, context))
 end
 transform_type(::Type{T}, context) where {T} = transform_type(T, parent_context(context))
-function transform_type(::Type{T}, ::Nothing) where {T}
-    throw(ArgumentError("No valid `transform_type` method defined for `$T`"))
+transform_type(::Type{Union{}}, context::HashVersion{3}) = nothing
+
+function transform_type(::Type{T}, context::HashVersion{3}) where {T}
+    return qualified_name_(StructType(T)), type_structure(T, context)
 end
-transform_type(::Type{T}, context::HashVersion{3}) where {T} = T
 
 type_structure(::Type{T}, context) where {T} = type_structure(T, StructType(T), context)
 function type_structure(::Type{T}, trait, context) where {T}
@@ -62,10 +60,14 @@ function hash_type!(hash_state, context::CachingContext, ::Type{<:Type})
     return update_hash!(hash_state, "Base.Type", context)
 end
 
-function transform_type(::Type{T}, context::TypeAsValueContext) where {T}
+function transformer(::Type{<:Type}, context::TypeAsValueContext)
+    return Transformer(Base.Fix2(transform_type_value, context))
+end
+transform_type_value(::Type{T}, context) where {T} = transform_type_value(T, parent_context(context))
+transform_type_value(::Type{Union{}}, context::HashVersion{3}) = "Base.Union{}"
+function transform_type_value(::Type{T}, context::HashVersion{3}) where {T}
     return qualified_name_(T), type_structure(T, StructType(T), context)
 end
-transform_type(::Type{Union{}}, context::TypeAsValueContext) = "Base.Union{}"
 
 hash_type!(hash_state, ::TypeAsValueContext, T) = hash_state
 function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where {T}
@@ -89,11 +91,11 @@ function transformer(::Type{<:Function}, context::HashVersion{3})
     return Transformer(identity, StructTypes.UnorderedStruct())
 end
 
-function transform_type(::Type{T}, context::TypeAsValueContext) where {T<:Function}
+function transform_type(::Type{T}, context::HashVersion{3}) where {T<:Function}
     transform_function_type(T)
 end
 
-function transform_type(::Type{T}, context::TypeHashContext) where {T<:Function}
+function transform_type_value(::Type{T}, context::HashVersion{3}) where {T<:Function}
     transform_function_type(T)
 end
 
@@ -108,10 +110,6 @@ end
 #####
 ##### DataType
 #####
-
-# NOTE: there are really just two patterns: eltype-like and fieldtype-like
-# (dict is just an eltype-like of pairs)
-# we can greatly reduce the amount of code below by taking advantage of that
 
 sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
 @generated function sorted_field_names(T)
@@ -174,6 +172,7 @@ function type_structure(::Type{T}, ::StructTypes.ArrayType, context) where {T}
     return eltype(T)
 end
 
+# include ndims in type hash where possible
 function type_structure(::Type{T}, ::StructTypes.ArrayType, context) where {T<:AbstractArray}
     if isconcretetype(T)
         return eltype(T), ndims(T)
@@ -182,7 +181,6 @@ function type_structure(::Type{T}, ::StructTypes.ArrayType, context) where {T<:A
     end
 end
 
-# include ndims in type hash where possible
 struct SizedArray{T}
     val::T
 end
@@ -296,8 +294,13 @@ end
 function stable_hash_helper(x, hash_state, context, ::StructTypes.CustomStruct)
     lowered = StructTypes.lower(x)
     transform = transformer(typeof(lowered), context)
+    if transform.preserves_structure
+        hash_type!(hash_state, context, typeof(val))
+    end
     tval = transform(lowered)
-    hash_type!(hash_state, context, typeof(tval))
+    if !transform.preserves_structure
+        hash_type!(hash_state, context, typeof(tval))
+    end
     return stable_hash_helper(tval, hash_state, context, hash_trait(transform, tval))
 end
 

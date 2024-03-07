@@ -97,6 +97,7 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = IterateHash()
 struct ExtraTypeParams{P,T}
     value::T
 end
+type_structure(::Type{<:ExtraTypeParams{P,T}}, trait, ::HashVersion{3}) where {P,T} = (P, T)
 
 struct BadHashMethod end
 StableHashTraits.hash_method(::BadHashMethod) = "garbage"
@@ -104,6 +105,7 @@ StableHashTraits.hash_method(::BadHashMethod) = "garbage"
 struct BadRootContext end
 StableHashTraits.parent_context(::BadRootContext) = nothing
 StableHashTraits.hash_method(::Int, ::BadRootContext) = WriteHash()
+StableHashTraits.transformer(::Type{Int}, ::BadRootContext) = Transformer()
 
 mutable struct CountedBufferState
     state::StableHashTraits.BufferedHashState

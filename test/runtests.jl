@@ -140,16 +140,21 @@ include("setup_tests.jl")
 
             # test out HashAndContext
             @testset "Contexts" begin
-                @test test_hash(CustomHashObject(1:5, 1:10)) !=
-                      test_hash(BasicHashObject(1:5, 1:10))
-                @test test_hash([]) != test_hash([(), (), ()])
+                if V <= 2
+                    @test test_hash(CustomHashObject(1:5, 1:10)) !=
+                        test_hash(BasicHashObject(1:5, 1:10))
+                end
                 @test_throws ArgumentError test_hash("bob", BadRootContext())
                 @test test_hash(1, BadRootContext()) isa Union{Unsigned,Vector{UInt8}}
             end
 
             @testset "Sequences" begin
                 @test test_hash([1 2; 3 4]) != test_hash(vec([1 2; 3 4]))
-                @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4]')
+                if V <= 2
+                    @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4]')
+                else
+                    @test test_hash([1 2; 3 4]) == test_hash([1 3; 2 4]')
+                end
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4])
                 @test test_hash([1 2; 3 4], ViewsEq(ctx)) !=
                       test_hash(vec([1 2; 3 4]), ViewsEq(ctx))
@@ -158,10 +163,15 @@ include("setup_tests.jl")
                 @test test_hash([1 2; 3 4], ViewsEq(ctx)) !=
                       test_hash([1 3; 2 4], ViewsEq(ctx))
                 @test test_hash(reshape(1:10, 2, 5)) != test_hash(reshape(1:10, 5, 2))
-                @test test_hash(view(collect(1:5), 1:2)) != test_hash([1, 2])
+                if V <= 2
+                    @test test_hash(view(collect(1:5), 1:2)) != test_hash([1, 2])
+                else
+                    @test test_hash(view(collect(1:5), 1:2)) == test_hash([1, 2])
+                end
                 @test test_hash(view(collect(1:5), 1:2), ViewsEq(ctx)) ==
                       test_hash([1, 2], ViewsEq(ctx))
 
+                @test test_hash([]) != test_hash([(), (), ()])
                 @test test_hash([(), ()]) != test_hash([(), (), ()])
 
                 @test test_hash(1:10) != test_hash((; start=1, stop=10))
@@ -180,16 +190,23 @@ include("setup_tests.jl")
                 @test test_hash("foo") != test_hash("bar")
                 @test test_hash(("a", "b")) != test_hash("ab")
                 @test test_hash(["ab"]) != test_hash(["a", "b"])
-                @test test_hash(:foo) != test_hash("foo")
+                if V <= 2
+                    @test test_hash(:foo) != test_hash("foo")
+                else
+                    @test test_hash(:foo) == test_hash("foo")
+                end
                 @test test_hash(:foo) != test_hash(:bar)
-                @test test_hash(view("bob", 1:2)) != test_hash("bo")
+                if V <= 2
+                    @test test_hash(view("bob", 1:2)) != test_hash("bo")
+                else
+                    @test test_hash(view("bob", 1:2)) == test_hash("bo")
+                end
                 @test test_hash(view("bob", 1:2), ViewsEq(ctx)) ==
                       test_hash("bo", ViewsEq(ctx))
                 @test test_hash(S3Path("s3://foo/bar")) != test_hash(S3Path("s3://foo/baz"))
             end
 
             @testset "Functions" begin
-                # TODO: this is where I stopped!!
                 @test test_hash(sin) != test_hash(cos)
                 @test test_hash(sin) != test_hash(:sin)
                 @test test_hash(sin) != test_hash("sin")
@@ -218,6 +235,7 @@ include("setup_tests.jl")
                 @test @ConstantHash(5).constant isa UInt64
                 @test @ConstantHash("foo").constant isa UInt64
                 @test_throws ArgumentError @ConstantHash(1 + 2)
+                # TODO: debugging this bit
                 @test test_hash(ExtraTypeParams{:A,Int}(2)) !=
                       test_hash(ExtraTypeParams{:B,Int}(2))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType(1, 2))
