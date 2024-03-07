@@ -183,11 +183,11 @@ include("setup_tests.jl")
             end
 
             @testset "Functions" begin
+                # TODO: this is where I stopped!!
                 @test test_hash(sin) != test_hash(cos)
                 @test test_hash(sin) != test_hash(:sin)
                 @test test_hash(sin) != test_hash("sin")
                 @test test_hash(sin) != test_hash("Base.sin")
-                @test test_hash(Int) != test_hash("Base.Int")
                 @test test_hash(==("foo")) == test_hash(==("foo"))
                 @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 1))
                 if V > 1
@@ -202,6 +202,7 @@ include("setup_tests.jl")
 
             @testset "Types" begin
                 @test test_hash(Float64) != test_hash("Base.Float64")
+                @test test_hash(Int) != test_hash("Base.Int")
                 @test test_hash(Float64) != test_hash(Int)
                 @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
                 @test test_hash(Array{Int}) != test_hash(Array{Float64})

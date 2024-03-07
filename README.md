@@ -19,26 +19,28 @@ struct MyType
    metadata::Dict{Symbol, Any}
 end
 # ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
-StableHashTraits.hash_method(::Type{<:MyType}) = FnHash(x -> x.data; preserves_types=true)
+StableHashTraits.transformer(::Type{<:MyType}) = Transformer(x -> (; x.data);
+                                                             preserves_structure=true)
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 stable_hash(a; version=3) == stable_hash(b; version=3) # true
 ```
 
-Useres can define a method of `hash_method` to customize how an object is hashed.
-The `hash_method` in this case is `FnHash` which transforms the object before computing its
-hash. (The `preserve_types` keyword shown above is an optional flag that can be used to
-further optimize performance of your transformer in some cases, see below).
+Useres can define a method of `transformer` to customize how an object is hashed. It should
+return a function wrapped in `Transformer`. During hashing, this function is called and its
+result is the value that is actually hashed. (The `preserves_structure` keyword shown above
+is an optional flag that can be used to further optimize performance of your transformer in
+some cases, see below for details).
 
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
-> ⚠️ Hash versions 3 constitutes a substantial redesign of StableHashTraits so as to avoid reliance on Julia internals. Hash versions 1 and 2 are deprecated and will be removed in a soon-to-be released StableHashTraits@2.0. Hash version 3 will remain unchanged in this 2.0 release
+> ⚠️ Hash versions 3 constitutes a substantial redesign of StableHashTraits so as to avoid reliance on some unstable Julia internals. Hash versions 1 and 2 are deprecated and will be removed in a soon-to-be released StableHashTraits@2.0. Hash version 3 will remain unchanged in this 2.0 release
 
 ## Use Case and Design Rationale
 
 StableHashTraits is designed to be used in cases where there is an object we wish to serialize in a content-addressed cache. In this situation one does not want the session or julia version to matter to the hash value. Furthermore, `StableHashTraits` generally considers hash collisions between two objects that would serialize to the same result (e.g. an `Array` and `SubArray`) acceptable. How and when objects collide is meant to be predictable and well defined, so that the user can reliably define methods of `transformer` to change this behavior.
 
-Since there are times where we may need to define a method of `transformer` on an object you don't own (e.g. one from `Base`) to correctly cache in a particular context, `transformer` accepts an additional object called the `context`, which you should own (see below for details).
+Since there are times where we may need to define a method of `transformer` on an object you don't own (e.g. one from `Base`) to correctly cache in a particular context, `transformer` accepts an additional, arbitrary object called the `context`, which the caller should own (see below for details).
 
 ## Details
 

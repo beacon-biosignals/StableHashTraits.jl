@@ -56,8 +56,8 @@ function stable_hash(x, context; alg=sha256)
         hash_state = HashState(alg, context)
         transform = transformer(typeof(x), context)
         tx = transform(x)
-        hash_state = type_hash!(typeof(tx), hash_state, context)
-        hash_state = stable_hash_helper(tx, hash_state, context, HashType(transform, tx))
+        hash_state = hash_type!(hash_state, context, typeof(tx))
+        hash_state = stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
         return compute_hash!(hash_state)
     end
 end
@@ -65,21 +65,21 @@ end
 struct Transformer{F,H}
     fn::F
     result_method::H # if non-nothing, apply to result of `fn`
-    preserves_types::Bool
-    function Transformer(fn::Base.Callable=identity, method=nothing;
-                    preserves_types=StableHashTraits.preserves_types(fn))
-        return new{typeof(fn), typeof(result_method)}(fn, result_method, preserves_types)
+    preserves_structure::Bool
+    function Transformer(fn::Base.Callable=identity, result_method=nothing;
+                         preserves_structure=StableHashTraits.preserves_structure(fn))
+        return new{typeof(fn),typeof(result_method)}(fn, result_method, preserves_structure)
     end
 end
-preserves_types(::typeof(identity)) = true
-preserves_types(::Function) = false
+preserves_structure(::typeof(identity)) = true
+preserves_structure(::Function) = false
 (tr::Transformer)(x) = tr.fn(x)
-HashType(x::Transformer, y) = x.result_method
-HashType(::Transformer{<:Any,Nothing}, y) = HashType(y)
-HashType(x) = StructType(x)
+hash_trait(x::Transformer, y) = x.result_method
+hash_trait(::Transformer{<:Any,Nothing}, y) = hash_trait(y)
+hash_trait(x) = StructType(x)
 
-transformer(::Type, context) = transformer(x, parent_context(context))
-transformer(::Type, ::Nothing) = transformer(x)
+transformer(::Type{T}, context) where {T} = transformer(T, parent_context(context))
+transformer(::Type{T}, ::Nothing) where {T} = transformer(T)
 transformer(::Type) = Transformer()
 
 function stable_hash_helper(x, hash_state, context, method)
