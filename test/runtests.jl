@@ -162,6 +162,8 @@ include("setup_tests.jl")
                     @test test_hash(view(collect(1:5), 1:2)) != test_hash([1, 2])
                 else
                     @test test_hash(view(collect(1:5), 1:2)) == test_hash([1, 2])
+                    @test test_hash(view(collect(1:5), 1:2), WithTypeNames(ctx)) !=
+                          test_hash([1, 2], WithTypeNames(ctx))
                 end
                 @test test_hash(view(collect(1:5), 1:2), ViewsEq(ctx)) ==
                       test_hash([1, 2], ViewsEq(ctx))
@@ -189,12 +191,16 @@ include("setup_tests.jl")
                     @test test_hash(:foo) != test_hash("foo")
                 else
                     @test test_hash(:foo) == test_hash("foo")
+                    @test test_hash(:foo, WithTypeNames(ctx)) !=
+                          test_hash("foo", WithTypeNames(ctx))
                 end
                 @test test_hash(:foo) != test_hash(:bar)
                 if V <= 2
                     @test test_hash(view("bob", 1:2)) != test_hash("bo")
                 else
                     @test test_hash(view("bob", 1:2)) == test_hash("bo")
+                    @test test_hash(view("bob", 1:2), WithTypeNames(ctx)) !=
+                          test_hash("bo", WithTypeNames(ctx))
                 end
                 @test test_hash(view("bob", 1:2), ViewsEq(ctx)) ==
                       test_hash("bo", ViewsEq(ctx))

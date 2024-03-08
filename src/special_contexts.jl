@@ -1,6 +1,23 @@
 # NOTE: same code as old `StableHashTraits.jl` excepting new `transform` implementation
 
 #####
+##### WithTypeNames
+#####
+
+"""
+    WithTypeNames(parent_context)
+
+In this hash context, not only the structure, but also the name of the type (e.g. `Array`
+vs. `SubArray`) affects the hashed value.
+"""
+struct WithTypeNames{T}
+    parent::T
+end
+WithTypeNames() = TablesEq(HashVersion{1}())
+parent_context(x::WithTypeNames) = x.parent
+type_hash_name(::Type{T}, trait, c::WithTypeNames) where {T} = type_name(T, trait, c)
+
+#####
 ##### TablesEq
 #####
 
