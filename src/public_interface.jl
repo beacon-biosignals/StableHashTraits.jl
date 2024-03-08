@@ -53,18 +53,7 @@ function stable_hash(x, context; alg=sha256)
                                                     hash_method(x, context)))
     else
         context = CachingContext(context)
-        hash_state = HashState(alg, context)
-        transform = transformer(typeof(x), context)::Transformer
-        if transform.preserves_structure
-            hash_state = hash_type!(hash_state, context, typeof(x))
-        end
-        tx = transform(x)
-        if !transform.preserves_structure
-            hash_state = hash_type!(hash_state, context, typeof(tx))
-        end
-
-        hash_state = hash_type!(hash_state, context, typeof(tx))
-        hash_state = stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
+        hash_state = hash_type_and_value(HashState(alg, context), hash_state, context)
         return compute_hash!(hash_state)
     end
 end
@@ -107,7 +96,6 @@ transformer(::Type{<:TransformIdentity}, ::HashVersion{3}) = Transformer(x -> x.
 # we signal that a method specific to a type is not available using `NotImplemented`; we
 # need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext) where T
 # below for details
-
 
 function stable_hash_helper(x, hash_state, context, method)
     throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *
