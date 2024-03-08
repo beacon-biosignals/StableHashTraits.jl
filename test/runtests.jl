@@ -234,6 +234,7 @@ include("setup_tests.jl")
                 @test test_hash(Int) != test_hash("Base.Int")
                 @test test_hash(Float64) != test_hash(Int)
                 @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
+                @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
                 @test test_hash(Array{Int}) != test_hash(Array{Float64})
             end
 
@@ -331,6 +332,8 @@ include("setup_tests.jl")
                                     strip(nb.cells[6].output.body, '"'))
                 end
             end
+
+            # TODO: test both hoisted and unhoisted versions of hashing
 
             if V > 1 && hashfn == sha256
                 @testset "Hash-invariance to buffer size" begin

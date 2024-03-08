@@ -10,8 +10,11 @@ The aim of StableHashTraits is to make it easy to compute a stable hash of any J
 
 For example:
 
+<!--The START_ and STOP_ comments are used to extract content that is also repeated in the documentation-->
+<!--START_EXAMPLE-->
 ```julia
 using StableHashTraits
+using StableHashTraits: Transformer
 using Dates
 
 struct MyType
@@ -25,71 +28,56 @@ a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 stable_hash(a; version=3) == stable_hash(b; version=3) # true
 ```
+<!--STOP_EXAMPLE-->
 
 Useres can define a method of `transformer` to customize how an object is hashed. It should
 return a function wrapped in `Transformer`. During hashing, this function is called and its
 result is the value that is actually hashed. (The `preserves_structure` keyword shown above
 is an optional flag that can be used to further optimize performance of your transformer in
-some cases, see below for details).
+some cases; you can do this any time the function is type stable, but some type-instable
+functions are also possible. See the documentation for details).
 
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
-> ⚠️ Hash versions 3 constitutes a substantial redesign of StableHashTraits so as to avoid reliance on some unstable Julia internals. Hash versions 1 and 2 are deprecated and will be removed in a soon-to-be released StableHashTraits@2.0. Hash version 3 will remain unchanged in this 2.0 release
+> ⚠️ Hash versions 3 constitutes a substantial redesign of StableHashTraits so as to avoid reliance on some unstable Julia internals. Hash versions 1 and 2 are deprecated and will be removed in a soon-to-be released StableHashTraits@2.0. Hash version 3 will remain unchanged in this 2.0 release. Hash version 1 is the default version if you don't specify a version.
 
+<!--The START_ and STOP_ comments are used to extract content that is also repeated in the documentation-->
+<!--START_OVERVIEW-->
 ## Use Case and Design Rationale
 
-StableHashTraits is designed to be used in cases where there is an object we wish to serialize in a content-addressed cache. In this situation one does not want the session or julia version to matter to the hash value. Furthermore, `StableHashTraits` generally considers hash collisions between two objects that would serialize to the same result (e.g. an `Array` and `SubArray`) acceptable. How and when objects collide is meant to be predictable and well defined, so that the user can reliably define methods of `transformer` to change this behavior.
+StableHashTraits is designed to be used in cases where there is an object you wish to serialize in a content-addressed cache. How and when objects collide is meant to be predictable and well defined, so that the user can reliably define methods of `transformer` to change this behavior.
 
-Since there are times where we may need to define a method of `transformer` on an object you don't own (e.g. one from `Base`) to correctly cache in a particular context, `transformer` accepts an additional, arbitrary object called the `context`, which the caller should own (see below for details).
+## What gets hashed?
 
-## Details
+By default, an object is hashed according to its `StructType` (ala
+(SructTypes)[https://github.com/JuliaData/StructTypes.jl]), and can be customized using
+(`StableHashTraits.transformer`)[https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer].
 
-`StableHashTraits` the existing serialization infrastructure in [`StructTypes`](https://github.com/JuliaData/StructTypes.jl). Many packages already define traits from
-this package, meaning that `StableHashTraits` can leverage these declared serialization properties when computing a hash.
+These methods all make use of `stable_name` which is a hash of `string(T)` for type `T`,
+with a few additional regularizations to ensure e.g. `Core.` values become `Base.` values
+(as this differs across julia versions).
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and (optionally) a second argument called the context. The context you use affects how hashing occurs (it defaults to `HashVersion{1}()`). It is generally recommended that you avoid `HashVersion{1}()` or `HashVersion{2}()`, favoring `HashVersion{3}()` as it includes substantial speed improvements. See the final section below for details on how you can implement your own contexts. When you do not need to include a custom context, a short-hand for specifying `HashVersion{2}()` is to call `stable_hash(x; version=2)`. There are sensible defaults for `stable_hash` that aim to ensure that if two values are different, the input to the hash algorithm will differ.
+- `Type`: when hashing the type of an object or its contained types, only the name of `stable_name(StructType(T))` is hashed along with any structure as determined by the particular return value of `StructType(T)` (e.g. `eltype` for `ArrayType`). If you hash a type as a value (e.g. `stable_hash(Int)`) the `stable_name` of the type itself, rather than `StructType(T)` is used.
 
-You can customize the hash behavior for particular types by implementing the trait `StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional second argument, the context. If you define a method that does not accept a context, it will be used in all contexts. Any method of `hash_method` should simply return one of the following values, typically based only on the *type* of its input.
+- `StructType.DataType` — the fieldnames, fieldtypes and field values are hashed, and if this is a `StructType.UnorderedStruct` those are all sorted in lexicographic order of the fieldnames. `StructType.Struct` is the default sturct-type trait so this is how most objects get hashed.
 
-<!-- The text between START_ and END_ comments are extracted from this readme and inserted into julia docstrings -->
-<!-- START_HASH_TRAITS -->
-1. `WriteHash()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
-    and takes a hash of that. `StableHashTraits.write(io, x)`
-    falls back to `Base.write(io, x)` if no specialized methods are defined for x.
-2. `IterateHash()`: assumes the object is iterable and finds a hash of all elements
-3. `StructHash([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
-    the object as defined by a sequence of pairs. How precisely this occurs is determined by
-    the two arguments:
-      - `pair` Defines how fields are extracted; the default is
-        `fieldnames ∘ typeof => getfield`
-        but this could be changed to e.g. `propertynames => getproperty` or
-        `Tables.columnnames => Tables.getcolumn`. The first element of the pair is a
-        function used to compute a list of keys and the second element is a two argument
-        function used to extract the keys from the object.
-      - `order` can be `:ByOrder` (the default)—which sorts by the order returned by
-        `pair[1]`—or `:ByName`—which sorts by lexigraphical order.
-4. `FnHash(fn, [method])`: hash the result of applying `fn` to the given object. Optionally,
-   use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result to
-   determine how to hash it. There are two built-in functions commonly used with
-   `FnHash`.
-    - `stable_typename_id`: Get the qualified name of an object's type, e.g. `Base.String` and return 64 bit hash of this string
-    - `stable_type_id`: Get the qualified name and type parameters of a type, e.g.
-       `Base.Vector{Int}`, and return a 64 bit hash of this string.
-5. `@ConstantHash(x)`: at compile time, hash the literal (constant) string or number using
-    `sha256` and include the first 64 bits as a constant number that is recursively hashed
-    using the `WriteHash` method.
-6. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
-    results. For example: `(@ConstantHash("header"), StructHash())` would compute a hash for
-    both the string `"header"` and the fields of the object, and then recursively hash
-    these two hashes.
+- `StructType.ArrayType` — the eltype is hashed and elements are hashed using `iterate`
 
-Your hash will be stable if the output for the given method remains the same: e.g. if
-`write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
-fields are the same for `StructHash`, the hash will be the same; etc...
+- `StructType.DictType` — the eltype and the keys and values are hashed by iterating over `StructTypes.keyvaluepairs`
 
-Missing from the above list is one final, advanced, trait: `HashAndContext` which can be used to change the context within the scope of a given object. You can learn more about contexts below.
+- `StructType.CustomStruct` - the object is first `StructType.lower`ed and the result is hashed according to its `StructType`.
 
-<!-- END_HASH_TRAITS -->
+- `StructType.NullType`, `StructType.SingletonType`: in this case the `stable_name` of the
+  type is hashed, not just its `StructType`.
+
+- `StructType.NumberType`, `StructType.StringType`, `StructType.BoolType`: the
+  the type of the object is hashed along with its bytes
+
+- `Function`: functions are a special case and their `stable_name` is hashed
+  along with their fieldnames, fieldtypes and fieldvalues. Functions have
+  fields when they are curried, e.g. `==(2)` or when they are defined
+  via a `struct` definition.
+<!--STOP_OVERVIEW-->
 
 ## Breaking changes
 

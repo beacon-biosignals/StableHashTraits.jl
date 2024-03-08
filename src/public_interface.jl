@@ -52,12 +52,28 @@ function stable_hash(x, context; alg=sha256)
         return compute_hash!(deprecated_hash_helper(x, HashState(alg, context), context,
                                                     hash_method(x, context)))
     else
-        context = CachingContext(context)
-        hash_state = hash_type_and_value(HashState(alg, context), hash_state, context)
+        hash_state = hash_type_and_value(x, HashState(alg, context),
+                                         CachingContext(context))
         return compute_hash!(hash_state)
     end
 end
 
+"""
+    StableHashTraits.Transformer(fn=identity, result_method=nothing;
+                                 preserves_structure=StableHashTraits.preserves_structure(fn))
+
+Wraps the function used to transform values before they are hashed.
+The function is applied (`fn(x)`), and then its result is hashed according to
+the trait `@something result_method StructType(fn(x))`.
+
+The flag `preserves_structure` indicates if it is safe to hoist type hashes
+outside of loops, such as when `fn` is type stable. See the documentation
+manual for more details.
+
+## See Also
+
+[`transformer`](@ref)
+"""
 struct Transformer{F,H}
     fn::F
     result_method::H # if non-nothing, apply to result of `fn`
@@ -67,13 +83,26 @@ struct Transformer{F,H}
         return new{typeof(fn),typeof(result_method)}(fn, result_method, preserves_structure)
     end
 end
+
+"""
+    StableHashTraits.preserves_structure(fn)
+
+Returns true if it is known that `fn` preservess structure ala [`Transformer`](@ref)
+This is false by default for all functions but `identity`. You can define a method of this
+function for your own fn's to signal that they their results can be safely optimized
+during hashing.
+"""
 preserves_structure(::typeof(identity)) = true
 preserves_structure(::Function) = false
 (tr::Transformer)(x) = tr.fn(x)
-hash_trait(x::Transformer, y) = x.result_method
-hash_trait(::Transformer{<:Any,Nothing}, y) = hash_trait(y)
-hash_trait(x) = StructType(x)
 
+"""
+    StableHashTraits.transformer(::Type{T}, [context]) where {T}
+
+Return [`Transformer`](@ref) indicating how to modify an object of type `T` before
+hashing it. Methods without a `context` are called if no method for that type
+exists for any specific `context` object.
+"""
 transformer(::Type{T}, context) where {T} = transformer(T, parent_context(context))
 function transformer(::Type{T}, ::HashVersion{3}) where {T}
     result = transformer(T)

@@ -124,6 +124,7 @@ mutable struct CountedBufferState
 end
 CountedBufferState(x::StableHashTraits.BufferedHashState) = CountedBufferState(x, Int[])
 StableHashTraits.HashState(x::CountedBufferState, ctx) = x
+StableHashTraits.similar_hash_state(x::CountedBufferState) = CountedBufferState(StableHashTraits.similar_hash_state(x.state), Int[])
 
 function StableHashTraits.update_hash!(x::CountedBufferState, args...)
     x.state = StableHashTraits.update_hash!(x.state, args...)
