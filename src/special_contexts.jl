@@ -28,11 +28,11 @@ function hash_method(x::T, m::TablesEq) where {T}
     return hash_method(x, parent_context(m))
 end
 
-function transform_type(::Type{T}, context::TablesEq) where {T}
+function type_hash_name(::Type{T}, ::StructTypes.DataType, context::TablesEq) where {T}
     if Tables.istable(T)
         return "Tables.istable"
     else
-        transform_type(T, parent_context(context))
+        type_hash_name(T, parent_context(context))
     end
 end
 

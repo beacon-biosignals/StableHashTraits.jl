@@ -123,11 +123,6 @@ include("setup_tests.jl")
                       test_hash([(; x=i, y=i) for i in 1:10])
                 @test test_hash([(; x=i, y=i) for i in 1:10]) !=
                       test_hash(DataFrame(; x=1:10, y=1:10))
-                # this bit is tricky because the eltypes differ which would normally matter
-                # to the structure of the type we really want the type hash *post*
-                # transformation in this case (but note that this isn't really feasible,
-                # since we only have the type at the type we're hashing type information,
-                # and for good reason)
                 @test test_hash((; x=collect(1:10), y=collect(1:10)), TablesEq(ctx)) ==
                       test_hash([(; x=i, y=i) for i in 1:10], TablesEq(ctx))
                 @test test_hash([(; x=i, y=i) for i in 1:10], TablesEq(ctx)) ==
@@ -206,6 +201,11 @@ include("setup_tests.jl")
                 @test test_hash(S3Path("s3://foo/bar")) != test_hash(S3Path("s3://foo/baz"))
             end
 
+            @testset "Singletons and nulls" begin
+                @test test_hash(missing) != test_hash(nothing)
+                @test test_hash(Singleton1) != test_hash(Singleton2)
+            end
+
             @testset "Functions" begin
                 @test test_hash(sin) != test_hash(cos)
                 @test test_hash(sin) != test_hash(:sin)
@@ -245,7 +245,11 @@ include("setup_tests.jl")
                 @test test_hash(TestType4(1, 2)) != test_hash(TestType3(1, 2))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
                 @test test_hash(TestType(1, 2)) != test_hash(TestType4(2, 1))
-                @test_throws ArgumentError test_hash(BadHashMethod())
+                if V <= 2
+                    @test_throws ArgumentError test_hash(BadHashMethod())
+                else
+                    @test_throws TypeError test_hash(BadHashMethod())
+                end
             end
 
             @testset "Pluto-defined strucst are stable" begin
@@ -308,21 +312,21 @@ include("setup_tests.jl")
                 # NOTE: V refers to the hash version currently in loose
                 # its the `for` loop at the top of this file
                 if nb.cells[5].output.body isa Dict
-                    throw(Error("Failed notebook eval: $(nb.cells[5].output.body[:msg])"))
+                    throw(error("Failed notebook eval: $(nb.cells[5].output.body[:msg])"))
                 else
                     @test_reference("references/pluto01_$(V)_$(nameof(hashfn)).txt",
                                     strip(nb.cells[5].output.body, '"'))
                 end
 
                 if nb.cells[6].output.body isa Dict
-                    throw(Error("Failed notebook eval: $(nb.cells[6].output.body[:msg])"))
+                    throw(error("Failed notebook eval: $(nb.cells[6].output.body[:msg])"))
                 else
                     @test_reference("references/pluto02_$(V)_$(nameof(hashfn)).txt",
                                     strip(nb.cells[6].output.body, '"'))
                 end
             end
 
-            if V > 2 && hashfn == sha256
+            if V > 1 && hashfn == sha256
                 @testset "Hash-invariance to buffer size" begin
                     data = (rand(Int8, 2), rand(Int8, 2))
                     wrapped1 = StableHashTraits.HashState(sha256, HashVersion{1}())
@@ -356,6 +360,7 @@ include("setup_tests.jl")
         @test_deprecated(UseSize(UseIterate()))
         @test_deprecated(ConstantHash("foo"))
         @test_deprecated(UseTable())
+        # TODO: test hash_version 2 and related deprecations
     end
 
     if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION

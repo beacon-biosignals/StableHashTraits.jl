@@ -18,21 +18,24 @@
 
 # type hash
 
-function transformer(::Type{<:Type}, context::TypeHashContext)
-    return Transformer(Base.Fix2(transform_type, context))
+function transformer(::Type{T}, context::TypeHashContext) where {T<:Type}
+    return Transformer(T -> (type_hash_name(T, StructType_(T), context),
+                             type_structure(T, StructType_(T), context)))
 end
-transform_type(::Type{T}, context) where {T} = transform_type(T, parent_context(context))
-transform_type(::Type{Union{}}, context::HashVersion{3}) = nothing
+@inline StructType_(T) = StructType(T)
+StructType_(::Type{Union{}}) = StructTypes.NoStructType()
+type_hash_name(::Type{T}, trait, context) where {T} = type_hash_name(T, trait, parent_context(context))
+type_hash_name(::Type{T}, trait, ::Nothing) where {T} = type_hash_name(T, trait)
+type_hash_name(::Type{T}, trait) where {T} = type_hash_name(T)
+type_hash_name(::Type{T}) where {T} = qualified_name_(StructType_(T))
+type_hash_name(::Type{Union{}}) = "StructTypes.NoStructType"
 
-function transform_type(::Type{T}, context::HashVersion{3}) where {T}
-    return qualified_name_(StructType(T)), type_structure(T, context)
-end
-
-type_structure(::Type{T}, context) where {T} = type_structure(T, StructType(T), context)
 function type_structure(::Type{T}, trait, context) where {T}
     return type_structure(T, trait, parent_context(context))
 end
-type_structure(::Type{T}, trait, ::Nothing) where {T} = nothing
+function type_structure(::Type{T}, trait, ::HashVersion{3}) where {T}
+    return nothing
+end
 
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
@@ -59,19 +62,20 @@ parent_context(x::TypeAsValueContext) = x.parent
 function hash_type!(hash_state, context::CachingContext, ::Type{<:Type})
     return update_hash!(hash_state, "Base.Type", context)
 end
-
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
-    return Transformer(Base.Fix2(transform_type_value, context))
+    return Transformer(T -> (type_name(T, context),
+                             type_structure(T, StructType_(T), context)))
 end
-transform_type_value(::Type{T}, context) where {T} = transform_type_value(T, parent_context(context))
-transform_type_value(::Type{Union{}}, context::HashVersion{3}) = "Base.Union{}"
-function transform_type_value(::Type{T}, context::HashVersion{3}) where {T}
-    return qualified_name_(T), type_structure(T, StructType(T), context)
-end
+
+type_name(::Type{T}, trait, context) where {T} = type_name(T, trait, parent_context(context))
+type_name(::Type{T}, trait, ::Nothing) where {T} = type_name(T, trait)
+type_name(::Type{T}, trait) where {T} = type_name(T)
+type_name(::Type{T}) where {T} = qualified_name_(T)
+type_name(::Type{Union{}}) = "Base.Union{}"
 
 hash_type!(hash_state, ::TypeAsValueContext, T) = hash_state
 function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where {T}
-    transform = transformer(typeof(T), context)
+    transform = transformer(typeof(T), context)::Transformer
     type_context = TypeAsValueContext(context)
     tT = transform(T)
     return stable_hash_helper(tT, hash_state, type_context, hash_trait(transform, tT))
@@ -91,15 +95,10 @@ function transformer(::Type{<:Function}, context::HashVersion{3})
     return Transformer(identity, StructTypes.UnorderedStruct())
 end
 
-function transform_type(::Type{T}, context::HashVersion{3}) where {T<:Function}
-    transform_function_type(T)
-end
+type_hash_name(::Type{T}) where {T<:Function} = function_type_name(T)
+type_name(::Type{T}) where {T<:Function} = function_type_name(T)
 
-function transform_type_value(::Type{T}, context::HashVersion{3}) where {T<:Function}
-    transform_function_type(T)
-end
-
-function transform_function_type(::Type{T}) where {T}
+function function_type_name(::Type{T}) where {T}
     if hasproperty(T, :instance) && isdefined(T, :instance)
         return "typeof($(qualified_name_(T.instance)))"
     else
@@ -116,9 +115,9 @@ sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
     return TupleTools.sort(fieldnames(T); by=string)
 end
 
-function type_structure(::Type{T}, ::StructTypes.DataType, context) where {T}
+function type_structure(::Type{T}, trait::StructTypes.DataType, context::HashVersion{3}) where {T}
     if isconcretetype(T)
-        fields = T <: StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
+        fields = trait isa StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
         return fields, map(field -> fieldtype(T, field), fields)
     else
         return nothing
@@ -140,7 +139,7 @@ function hash_fields(x, fields, hash_state, context)
     for field in fields
         val = getfield(x, field)
         # can we optimize away the field's type_hash?
-        transform = transformer(typeof(val), context)
+        transform = transformer(typeof(val), context)::Transformer
         if isconcretetype(fieldtype(typeof(x), field)) && transform.preserves_structure
             tval = transform(val)
             hash_state = stable_hash_helper(tval, hash_state, context,
@@ -168,12 +167,12 @@ is_ordered(::AbstractSet) = false
 order_by(x::Symbol) = String(x)
 order_by(x) = x
 
-function type_structure(::Type{T}, ::StructTypes.ArrayType, context) where {T}
+function type_structure(::Type{T}, ::StructTypes.ArrayType, context::HashVersion{3}) where {T}
     return eltype(T)
 end
 
 # include ndims in type hash where possible
-function type_structure(::Type{T}, ::StructTypes.ArrayType, context) where {T<:AbstractArray}
+function type_structure(::Type{T}, ::StructTypes.ArrayType, context::HashVersion{3}) where {T<:AbstractArray}
     if isconcretetype(T)
         return eltype(T), ndims(T)
     else
@@ -181,19 +180,11 @@ function type_structure(::Type{T}, ::StructTypes.ArrayType, context) where {T<:A
     end
 end
 
-struct SizedArray{T}
-    val::T
-end
-hash_trait(::SizedArray) = StructTypes.ArrayType()
-
 function transformer(::Type{<:AbstractArray}, ::HashVersion{3})
-    return Transformer(x -> (size(x), SizedArray(x)); preserves_structure=true)
-end
-function transformer(::Type{<:SizedArray}, ::HashVersion{3})
-    return Transformer(x -> x.val; preserves_structure=true)
+    return Transformer(x -> (size(x), TransformIdentity(x)); preserves_structure=true)
 end
 function transformer(::Type{<:AbstractRange}, ::HashVersion{3})
-    return Transformer(identity, StructTypes.Struct(); preserves_structure=true)
+    return Transformer(identity, StructTypes.Struct())
 end
 
 function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
@@ -217,7 +208,7 @@ function hash_elements(items, hash_state, context)
         end
     else
         for x in items
-            transform = transformer(typeof(x), context)
+            transform = transformer(typeof(x), context)::Transformer
             if transform.preserves_structure
                 hash_state = hash_type!(hash_state, context, typeof(x))
             end
@@ -235,7 +226,7 @@ end
 ##### Tuples
 #####
 
-function type_structure(::Type{T}, ::StructTypes.ArrayType, context) where {T<:Tuple}
+function type_structure(::Type{T}, ::StructTypes.ArrayType, context::HashVersion{3}) where {T<:Tuple}
     if isconcretetype(T)
         fields = T <: StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
         return fields, map(field -> fieldtype(T, field), fields)
@@ -244,7 +235,7 @@ function type_structure(::Type{T}, ::StructTypes.ArrayType, context) where {T<:T
     end
 end
 
-function type_structure(::Type{T}, ::StructTypes.ArrayType, context) where {T<:NTuple}
+function type_structure(::Type{T}, ::StructTypes.ArrayType, context::HashVersion{3}) where {T<:NTuple}
     return eltype(T)
 end
 
@@ -293,7 +284,7 @@ end
 # be anything
 function stable_hash_helper(x, hash_state, context, ::StructTypes.CustomStruct)
     lowered = StructTypes.lower(x)
-    transform = transformer(typeof(lowered), context)
+    transform = transformer(typeof(lowered), context)::Transformer
     if transform.preserves_structure
         hash_type!(hash_state, context, typeof(val))
     end
@@ -327,6 +318,19 @@ function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
 end
 
 # null types are encoded purely by their type hash
+function type_hash_name(::Type{T}, ::StructTypes.NullType,
+                        context::HashVersion{3}) where {T}
+    return qualified_name_(T)
+end
 function stable_hash_helper(_, hash_state, context, ::StructTypes.NullType)
+    return hash_state
+end
+
+# null types are encoded purely by their type hash
+function type_hash_name(::Type{T}, ::StructTypes.SingletonType,
+                        context::HashVersion{3}) where {T}
+    return qualified_name_(T)
+end
+function stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType)
     return hash_state
 end

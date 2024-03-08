@@ -10,6 +10,7 @@ using DataFrames
 using Tables
 using AWSS3
 using Pluto
+using StructTypes
 
 struct TestType
     a::Any
@@ -45,6 +46,9 @@ StableHashTraits.hash_method(::TestType3) = StructHash(:ByName)
 StableHashTraits.hash_method(::TestType4) = StructHash(propertynames => getproperty)
 StableHashTraits.hash_method(::TypeType) = StructHash()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
+
+StableHashTraits.type_hash_name(::Type{<:TestType2}) = "TestType2"
+StructTypes.StructType(::Type{<:TestType4}) = StructTypes.OrderedStruct()
 
 struct NonTableStruct
     x::Vector{Int}
@@ -97,15 +101,22 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = IterateHash()
 struct ExtraTypeParams{P,T}
     value::T
 end
-type_structure(::Type{<:ExtraTypeParams{P,T}}, trait, ::HashVersion{3}) where {P,T} = (P, T)
+function StableHashTraits.type_structure(::Type{T}, ::StructTypes.DataType,
+                        ::HashVersion{3}) where {P,U,T<:ExtraTypeParams{P,U}}
+    return (P, U)
+end
 
 struct BadHashMethod end
 StableHashTraits.hash_method(::BadHashMethod) = "garbage"
+StableHashTraits.transformer(::Type{<:BadHashMethod}) = "garbage"
+
+struct Singleton1 end
+struct Singleton2 end
 
 struct BadRootContext end
 StableHashTraits.parent_context(::BadRootContext) = nothing
 StableHashTraits.hash_method(::Int, ::BadRootContext) = WriteHash()
-StableHashTraits.transformer(::Type{Int}, ::BadRootContext) = Transformer()
+StableHashTraits.transformer(::Type{Int}, ::BadRootContext) = StableHashTraits.Transformer()
 
 mutable struct CountedBufferState
     state::StableHashTraits.BufferedHashState

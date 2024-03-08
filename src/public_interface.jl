@@ -54,7 +54,7 @@ function stable_hash(x, context; alg=sha256)
     else
         context = CachingContext(context)
         hash_state = HashState(alg, context)
-        transform = transformer(typeof(x), context)
+        transform = transformer(typeof(x), context)::Transformer
         if transform.preserves_structure
             hash_state = hash_type!(hash_state, context, typeof(x))
         end
@@ -87,20 +87,26 @@ hash_trait(x) = StructType(x)
 
 transformer(::Type{T}, context) where {T} = transformer(T, parent_context(context))
 function transformer(::Type{T}, ::HashVersion{3}) where {T}
-    result = transform(T)
+    result = transformer(T)
     is_implemented(result) && return result
     return Transformer()
 end
 transformer(::Type{T}, ::Nothing) where {T} = transformer(T)
-transform(x) = NotImplemented()
-hash_method(_) = NotImplemented()
+
+struct NotImplemented end
+transformer(x) = NotImplemented()
 is_implemented(::NotImplemented) = false
 is_implemented(_) = true
+
+struct TransformIdentity{T}
+    val::T
+end
+HashType(x::TransformIdentity) = StructTypes.StructType(x.val)
+transformer(::Type{<:TransformIdentity}, ::HashVersion{3}) = Transformer(x -> x.val)
 
 # we signal that a method specific to a type is not available using `NotImplemented`; we
 # need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext) where T
 # below for details
-struct NotImplemented end
 
 
 function stable_hash_helper(x, hash_state, context, method)
