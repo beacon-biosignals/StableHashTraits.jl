@@ -73,3 +73,47 @@ You can change how a type name is hashed for an object using [`type_hash_name`](
 type name is hashed as a value using [`type_value_name`](@ref) and how the structure is
 hashed using [`type_structure`](@ref). You should ensure that [`type_structure`](@ref) calls the `type_structure(x, trait, parent_context(x))` so that the `HashVersion{3}` method for `type_structure` is eventually called. If you don't do this the assumptions of type
 hoisting described in the previous section will be violated.
+
+## Caching
+
+StableHashTraits cached hash results for all types and large values. This cache is generated
+per call to `stable_hash`; to leverage the same cache over multiple calls you can create a
+`CachingHashContext`,
+
+```julia
+context = CachingHashContext(HashVersion{3}())
+stable_hash(x, context)
+stable_hash(y, context) # previously cached values will be re-used
+```
+
+However, if you change any method definitions to `transform` between calls to `stable_hash` you will need to create a new context to avoid using stale method results.
+
+If you know that a particular object is referenced in multiple places, you can make sure
+that it is cached by wrapping it in a `HashShouldCache` object during a call to
+`transformer`, like so:
+
+```@doctest
+julia> begin;
+            using StableHashTraits
+            using StableHashTraits: Transformer
+
+            struct Foo
+                x::Int
+                ref::Bar
+            end
+
+            struct Bar
+                data::Vector{Int}
+            end
+
+            foos = Foo.(rand(Int, 10_000), Ref(Bar(rand(Int, 1_000))))
+            transformer(::Type{<:Bar}) = Transformer(function(x)
+                @show "Hello!"
+                HashShouldCache(x)
+            end
+        end
+
+julia> stable_hash(foos) # Bar will only be cached once
+"Hello!"
+
+```

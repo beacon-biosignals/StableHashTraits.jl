@@ -10,13 +10,11 @@ using TupleTools, Tables, Compat, StructTypes
 using SHA: SHA, sha256
 using StructTypes: StructType
 
-include("extract_readme_docs.jl")
-
 include("public_interface.jl")
 export stable_hash, HashVersion
 
 include("caching_context.jl")
-# CachingContext
+# CachingHashContext
 
 include("hash_algorithms.jl")
 # update_hash!, HashState, compute_hash!, start_nested_hash!, end_nested_hash!, similar_hash_state

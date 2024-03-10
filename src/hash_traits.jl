@@ -130,7 +130,7 @@ struct TypeAsValueContext{T}
 end
 parent_context(x::TypeAsValueContext) = x.parent
 
-function hash_type!(hash_state, context::CachingContext, ::Type{<:Type})
+function hash_type!(hash_state, context::CachingHashContext, ::Type{<:Type})
     return update_hash!(hash_state, "Base.Type", context)
 end
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
@@ -260,6 +260,21 @@ function transformer(::Type{<:AbstractArray}, ::HashVersion{3})
 end
 function transformer(::Type{<:AbstractRange}, ::HashVersion{3})
     return Transformer(identity, StructTypes.Struct())
+end
+
+# handle the simplest and most common cases of union splitting
+# arrays of null-type and another type
+function split_union(array::AbstractArray{Union{N, M}}) where {N, M}
+    isM_array = isa.(array, M)
+    return isM_array, array[isM_array]
+end
+
+function transformer(::Type{<:AbstractArray{Union{N,M}}}, ::HashVersion{3}) where {N,M}
+    if StructType(N) isa StructTypes.NullType
+        return Transformer(x -> (size(x), split_union(x)); preserves_structure=true)
+    else
+        return Transformer(x -> (size(x), TransformIdentity(x)); preserves_structure=true)
+    end
 end
 
 function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)

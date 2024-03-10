@@ -26,7 +26,7 @@ include("setup_tests.jl")
         @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
     end
 
-    for V in (1, 2), hashfn in (sha256, sha1, crc32c)
+    for V in (1, 2, 3), hashfn in (sha256, sha1, crc32c)
         hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
@@ -82,7 +82,6 @@ include("setup_tests.jl")
                                 bytes2hex_(test_hash((;))))
             end
             # verifies that transform can be called recursively
-
             if V <= 2
                 @testset "FnHash" begin
                     @test test_hash(GoodTransform(2)) == test_hash(GoodTransform("-0.2"))
@@ -187,13 +186,7 @@ include("setup_tests.jl")
                 @test test_hash("foo") != test_hash("bar")
                 @test test_hash(("a", "b")) != test_hash("ab")
                 @test test_hash(["ab"]) != test_hash(["a", "b"])
-                if V <= 2
-                    @test test_hash(:foo) != test_hash("foo")
-                else
-                    @test test_hash(:foo) == test_hash("foo")
-                    @test test_hash(:foo, WithTypeNames(ctx)) !=
-                          test_hash("foo", WithTypeNames(ctx))
-                end
+                @test test_hash(:foo) != test_hash("foo")
                 @test test_hash(:foo) != test_hash(:bar)
                 if V <= 2
                     @test test_hash(view("bob", 1:2)) != test_hash("bo")
@@ -333,7 +326,42 @@ include("setup_tests.jl")
                 end
             end
 
-            # TODO: test both hoisted and unhoisted versions of hashing
+            if V >= 3
+                @testset "Type-stable vs. type-unstable hashing" begin
+                    # arrays
+                    xs = [isodd(n) ? Char(n) : Int32(n) for n in 1:10]
+                    ys = [iseven(n) ? Char(n) : Int32(n) for n in 1:10]
+                    @test test_hash(xs) != test_hash(ys)
+
+                    # TODO: think through this test more
+                    xs = [] # ???
+                    ys = [] # ???
+                    @test test_hash(xs) != test_hash(ys)
+
+                    # dicts
+                    xs = Dict(n => isodd(n) ? UInt8(n) : Int8(n) for n in 1:10)
+                    ys = Dict(n => iseven(n) ? UInt8(n) : Int8(n) for n in 1:10)
+                    @test test_hash(xs) != test_hash(ys)
+
+                    xs = Dict(n => isodd(n) ? -n : n for n in 1:10)
+                    ys = Dict(n => iseven(n) ? -n : n for n in 1:10)
+                    @test test_hash(xs) != test_hash(ys)
+
+                    # dicts
+                    xs = [n => (;n=isodd(n) ? UInt8(n) : Int8(n)) for n in 1:10]
+                    ys = [n => (;n=iseven(n) ? UInt8(n) : Int8(n)) for n in 1:10]
+                    @test test_hash(xs) != test_hash(ys)
+
+                    xs = [n => (;n=isodd(n) ? -n : n) for n in 1:10]
+                    ys = [n => (;n=iseven(n) ? -n : n) for n in 1:10]
+                    @test test_hash(xs) != test_hash(ys)
+                end
+            end
+
+            # TODO: test caching
+            if V >= 3
+                # @testset
+            end
 
             if V > 1 && hashfn == sha256
                 @testset "Hash-invariance to buffer size" begin

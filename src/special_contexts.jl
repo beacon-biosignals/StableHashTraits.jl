@@ -15,7 +15,7 @@ struct WithTypeNames{T}
 end
 WithTypeNames() = TablesEq(HashVersion{1}())
 parent_context(x::WithTypeNames) = x.parent
-type_hash_name(::Type{T}, trait, c::WithTypeNames) where {T} = type_name(T, trait, c)
+type_hash_name(::Type{T}, trait, c::WithTypeNames) where {T} = type_value_name(T, trait, c)
 
 #####
 ##### TablesEq

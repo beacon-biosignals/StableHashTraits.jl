@@ -53,7 +53,7 @@ function stable_hash(x, context; alg=sha256)
                                                     hash_method(x, context)))
     else
         hash_state = hash_type_and_value(x, HashState(alg, context),
-                                         CachingContext(context))
+                                         CachingHashContext(context))
         return compute_hash!(hash_state)
     end
 end
