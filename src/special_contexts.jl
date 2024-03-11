@@ -13,7 +13,7 @@ struct WithTypeNames{T}
     function WithTypeNames(parent)
         root_version(parent) < 3 &&
             throw(ArgumentError("`WithTypeNames` does not support HashVersion 1 or 2"))
-        new{typeof(parent)}(parent)
+        return new{typeof(parent)}(parent)
     end
 end
 parent_context(x::WithTypeNames) = x.parent

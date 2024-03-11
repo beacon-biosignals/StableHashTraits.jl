@@ -5,7 +5,7 @@ using .StableNames: cleanup_name, NAMED_TUPLES_PRETTY_PRINT_VERSION
 
 export stable_hash, WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq,
-       WithTypeNames,stable_typename_id, stable_type_id
+       WithTypeNames, stable_typename_id, stable_type_id
 using TupleTools, Tables, Compat, StructTypes
 using SHA: SHA, sha256
 using StructTypes: StructType

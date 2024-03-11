@@ -202,7 +202,7 @@ function deprecated_hash_helper(x, hash_state, context, use::StructHash{<:Any,S}
     if root_version(context) > 1 && fieldsfn isa typeof(fieldnames_)
         # NOTE: hashes the field names at compile time if possible (~x10 speed up)
         hash_state = deprecated_hash_helper(stable_typefields_id(x), hash_state, context,
-                                        WriteHash())
+                                            WriteHash())
         # NOTE: sort fields at compile time if possible (~x1.33 speed up)
         fields = S == :ByName ? sorted_field_names(x) : fieldnames_(x)
         hash_state = hash_foreach(hash_state, context, fields) do k
@@ -374,7 +374,7 @@ macro ConstantHash(constant)
 end
 
 function deprecated_hash_helper(x, hash_state, context,
-                            method::Union{FnHash,PrivateConstantHash})
+                                method::Union{FnHash,PrivateConstantHash})
     y = get_value_(x, method)
     new_method = @something(method.result_method, hash_method(y, context))
     if typeof(x) == typeof(y) && method == new_method

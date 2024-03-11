@@ -16,7 +16,7 @@ struct CachedHash{T}
     type_cache::IdDict{Type,Vector{UInt8}}
     value_cache::IdDict{Any,Vector{UInt8}}
     function CachedHash(parent, types=IdDict{Type,Vector{UInt8}}(),
-                                values=IdDict{Any,Vector{UInt8}}())
+                        values=IdDict{Any,Vector{UInt8}}())
         return new{typeof(parent)}(parent, types, values)
     end
 end
@@ -24,7 +24,7 @@ CachedHash(x::CachedHash) = x
 parent_context(x::CachedHash) = x.parent
 
 function hash_value!(x, hash_state, context, trait)
-    hash_value!(x, hash_state, parent_context(context), trait)
+    return hash_value!(x, hash_state, parent_context(context), trait)
 end
 
 """
@@ -74,7 +74,7 @@ Caches larger values.
 """
 function hash_value!(x::T, hash_state, context::CachedHash, trait) where {T}
     if !(x isa HashShouldNotCache) &&
-        (x isa HashShouldCache || (isbitstype(T) && sizeof(x) >= CACHE_OBJECT_THRESHOLD))
+       (x isa HashShouldCache || (isbitstype(T) && sizeof(x) >= CACHE_OBJECT_THRESHOLD))
         bytes = get!(context.value_cache, x) do
             cache_state = similar_hash_state(hash_state)
             stable_hash_helper(dont_cache(x), cache_state, context, trait)

@@ -16,8 +16,7 @@ link_pattern = r"\[`(\S+)`\]\((https://beacon-biosignals\.github\.io/StableHashT
 index_str = replace(index_str, link_pattern => s"[`\1`](@ref)")
 write("src/index.md", index_str)
 
-pages = [
-         "Manual" => "index.md",
+pages = ["Manual" => "index.md",
          "API" => "api.md",
          "Deprecated" => "deprecated.md"]
 

@@ -181,8 +181,12 @@ function transformer(::Type{<:Function}, ::HashVersion{3})
     return Transformer(identity, StructTypes.UnorderedStruct())
 end
 
-type_hash_name(::Type{T}, ::StructTypes.NoStructType) where {T<:Function} = function_type_name(T)
-type_value_name(::Type{T}, ::StructTypes.NoStructType) where {T<:Function} = function_type_name(T)
+function type_hash_name(::Type{T}, ::StructTypes.NoStructType) where {T<:Function}
+    return function_type_name(T)
+end
+function type_value_name(::Type{T}, ::StructTypes.NoStructType) where {T<:Function}
+    return function_type_name(T)
+end
 
 function function_type_name(::Type{T}) where {T}
     if hasproperty(T, :instance) && isdefined(T, :instance)
@@ -266,7 +270,7 @@ end
 
 # handle the simplest and most common cases of union splitting
 # arrays of null-type and another type
-function split_union(array::AbstractArray{Union{N, M}}) where {N, M}
+function split_union(array::AbstractArray{Union{N,M}}) where {N,M}
     isM_array = isa.(array, M)
     return isM_array, array[isM_array]
 end
@@ -344,7 +348,7 @@ function type_structure(::Type{T}, ::StructTypes.DictType) where {T}
 end
 
 function transformer(::Type{<:Pair}, ::HashVersion{3})
-    Transformer(((a, b),) -> (a, b); preserves_structure=true)
+    return Transformer(((a, b),) -> (a, b); preserves_structure=true)
 end
 
 function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)

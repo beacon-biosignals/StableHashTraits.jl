@@ -102,7 +102,8 @@ struct ExtraTypeParams{P,T}
     value::T
 end
 function StableHashTraits.type_structure(::Type{T}, ::StructTypes.DataType,
-                        ::HashVersion{3}) where {P,U,T<:ExtraTypeParams{P,U}}
+                                         ::HashVersion{3}) where {P,U,
+                                                                  T<:ExtraTypeParams{P,U}}
     return (P, U)
 end
 
@@ -124,7 +125,9 @@ mutable struct CountedBufferState
 end
 CountedBufferState(x::StableHashTraits.BufferedHashState) = CountedBufferState(x, Int[])
 StableHashTraits.HashState(x::CountedBufferState, ctx) = x
-StableHashTraits.similar_hash_state(x::CountedBufferState) = CountedBufferState(StableHashTraits.similar_hash_state(x.state), Int[])
+function StableHashTraits.similar_hash_state(x::CountedBufferState)
+    return CountedBufferState(StableHashTraits.similar_hash_state(x.state), Int[])
+end
 
 function StableHashTraits.update_hash!(x::CountedBufferState, args...)
     x.state = StableHashTraits.update_hash!(x.state, args...)

@@ -136,7 +136,7 @@ include("setup_tests.jl")
             @testset "Contexts" begin
                 if V <= 2
                     @test test_hash(CustomHashObject(1:5, 1:10)) !=
-                        test_hash(BasicHashObject(1:5, 1:10))
+                          test_hash(BasicHashObject(1:5, 1:10))
                 end
                 @test_throws ArgumentError test_hash("bob", BadRootContext())
                 @test test_hash(1, BadRootContext()) isa Union{Unsigned,Vector{UInt8}}
@@ -349,12 +349,12 @@ include("setup_tests.jl")
                     @test test_hash(xs) != test_hash(ys)
 
                     # structs
-                    xs = [(;n=isodd(n) ? Char(n) : Int32(n)) for n in 1:10]
-                    ys = [(;n=iseven(n) ? Char(n) : Int32(n)) for n in 1:10]
+                    xs = [(; n=isodd(n) ? Char(n) : Int32(n)) for n in 1:10]
+                    ys = [(; n=iseven(n) ? Char(n) : Int32(n)) for n in 1:10]
                     @test test_hash(xs) != test_hash(ys)
 
-                    xs = [(;n) for n in Int32.(1:10)]
-                    ys = [(;n) for n in Char.(1:10)]
+                    xs = [(; n) for n in Int32.(1:10)]
+                    ys = [(; n) for n in Char.(1:10)]
                     @test test_hash(xs) != test_hash(ys)
                 end
             end

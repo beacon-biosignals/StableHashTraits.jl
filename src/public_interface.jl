@@ -172,7 +172,7 @@ struct TransformIdentity{T}
 end
 HashType(x::TransformIdentity) = StructTypes.StructType(x.val)
 function transformer(::Type{<:TransformIdentity}, ::HashVersion{3})
-    Transformer(x -> x.val; preserves_structure=true)
+    return Transformer(x -> x.val; preserves_structure=true)
 end
 
 function stable_hash_helper(x, hash_state, context, trait)
