@@ -3,13 +3,12 @@
 """
     HashVersion{V}()
 
-The default `hash_context` used by `stable_hash`. There are currently two versions
-(1 and 2). Version 2 is far more optimized than 1 and should generally be used in newly
-written code. Version 1 is the default version, so as to avoid changing the hash computed
-by existing code.
+The default `hash_context` used by `stable_hash`. There are currently three versions (1-3).
+Version 3 should be favored when at all possible. Version 1 is the default version, so as to
+avoid changing the hash computed by existing code.
 
 By explicitly passing this hash version in `stable_hash` you ensure that hash values for
-these fallback methods will not change even if new fallbacks are defined.
+these fallback methods will not change even if new hash versions are developed.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
@@ -26,17 +25,18 @@ end
     stable_hash(x; alg=sha256, version=1)
 
 Create a stable hash of the given objects. As long as the context remains the same, this is
-intended to remain unchanged across julia versions. How each object is hashed is determined
-by [`hash_method`](@ref), which aims to have sensible fallbacks.
+intended to remain unchanged across julia versions.
+
+Behavior with hash version 1 or 2 is deprecated. Favor version 3 in all cases where possible.
 
 To ensure the greatest stability, you should explicitly pass the context object. It is also
-best to pass an explicit version, since `HashVersion{2}` is generally faster than
-`HashVersion{1}`. If the fallback methods change in a future release, the hash you get
-by passing an explicit `HashVersion{N}` should *not* change. (Note that the number in
+best to pass an explicit version, since `HashVersion{3}` is generally faster than
+`HashVersion{1}`. If the fallback methods change in a future release, the hash you get by
+passing an explicit `HashVersion{N}` should *not* change. (Note that the number in
 `HashVersion` does not necessarily match the package version of `StableHashTraits`).
 
-Instead of passing a context, you can instead pass a `version` keyword, that will
-set the context to `HashVersion{version}()`.
+Instead of passing a context, you can instead pass a `version` keyword, that will set the
+context to `HashVersion{version}()`.
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash64(x::AbstractArray{UInt8},

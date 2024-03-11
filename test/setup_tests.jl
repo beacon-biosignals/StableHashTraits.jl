@@ -152,17 +152,31 @@ struct CachingType
 end
 cache_type_hashed = 0
 
-struct ContainerType
+struct ContainerType{T}
     x::Int
-    ref::CachingType
+    ref::T
 end
 
 function StableHashTraits.transformer(::Type{<:CachingType})
-    return StableHashTraits.Transformer(x -> HashShouldCache(x))
+    return StableHashTraits.Transformer(HashShouldCache)
 end
+
 function StableHashTraits.stable_hash_helper(x::CachingType, hash_state, context,
                                              st::StructTypes.DataType)
     global cache_type_hashed += 1
+    return invoke(StableHashTraits.stable_hash_helper,
+                  Tuple{Any,Any,Any,StructTypes.DataType}, x, hash_state,
+                  context, st)
+end
+
+struct NonCachingType
+    data::Vector{Int}
+end
+non_cache_type_hashed = 0
+
+function StableHashTraits.stable_hash_helper(x::NonCachingType, hash_state, context,
+                                             st::StructTypes.DataType)
+    global non_cache_type_hashed += 1
     return invoke(StableHashTraits.stable_hash_helper,
                   Tuple{Any,Any,Any,StructTypes.DataType}, x, hash_state,
                   context, st)

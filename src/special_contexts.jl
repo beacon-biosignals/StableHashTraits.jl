@@ -1,5 +1,3 @@
-# NOTE: same code as old `StableHashTraits.jl` excepting new `transform` implementation
-
 #####
 ##### WithTypeNames
 #####
@@ -12,10 +10,14 @@ vs. `SubArray`) affects the hashed value.
 """
 struct WithTypeNames{T}
     parent::T
+    function WithTypeNames(parent)
+        root_version(parent) < 3 &&
+            throw(ArgumentError("`WithTypeNames` does not support HashVersion 1 or 2"))
+        new{typeof(parent)}(parent)
+    end
 end
-WithTypeNames() = TablesEq(HashVersion{1}())
 parent_context(x::WithTypeNames) = x.parent
-type_hash_name(::Type{T}, trait, c::WithTypeNames) where {T} = type_value_name(T, trait, c)
+type_hash_name(::Type{T}, trait, c::WithTypeNames) where {T} = qualified_name_(T)
 
 #####
 ##### TablesEq
@@ -24,9 +26,9 @@ type_hash_name(::Type{T}, trait, c::WithTypeNames) where {T} = type_value_name(T
 """
     TablesEq(parent_context)
 
-In this hash context the order of columns, and the type of the table do not impact the hash
-that is created, only the set of columns (as determined by `Tables.columns`), and the hash
-of the individual columns matter.
+In this hash context the type and structure of a table do not impact the hash that is
+created, only the set of columns (as determined by `Tables.columns`), and the hash of the
+individual columns matter.
 """
 struct TablesEq{T}
     parent::T

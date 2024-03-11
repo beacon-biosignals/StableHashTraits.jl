@@ -143,6 +143,7 @@ mutable struct BufferedHashState{T} <: HashState
     io::IOBuffer
 end
 const HASH_BUFFER_SIZE = 2^14
+
 function BufferedHashState(state, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
     delimiters = sizehint!(Vector{Int}(), 2size)

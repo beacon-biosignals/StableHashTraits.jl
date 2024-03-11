@@ -92,9 +92,7 @@ If you know that a particular object is referenced in multiple places, you can m
 that it is cached by wrapping it in a `HashShouldCache` object during a call to
 `transformer`.
 
-**TODO** clean this up
-
-```@doctest
+```julia
 using StableHashTraits
 using StableHashTraits: Transformer
 
@@ -108,9 +106,6 @@ struct Bar
 end
 
 foos = Foo.(rand(Int, 10_000), Ref(Bar(rand(Int, 1_000))))
-transformer(::Type{<:Bar}) = Transformer(function(x)
-    @show "Hello!"
-    HashShouldCache(x)
-end
+transformer(::Type{<:Bar}) = Transformer(HashShouldCache)
 
 ```

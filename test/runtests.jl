@@ -357,7 +357,6 @@ include("setup_tests.jl")
                 end
             end
 
-            # TODO: test caching
             if V >= 3
                 global cache_type_hashed = 0
                 x = ContainerType.(rand(Int, 10), Ref(CachingType(rand(Int, 3))))

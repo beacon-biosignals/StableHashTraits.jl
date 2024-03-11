@@ -13,12 +13,12 @@ using StructTypes: StructType
 include("public_interface.jl")
 export stable_hash, HashVersion
 
+include("hash_algorithms.jl")
+# update_hash!, HashState, compute_hash!, start_nested_hash!, end_nested_hash!, similar_hash_state
+
 include("caching_context.jl")
 # CachedHash
 export CachedHash, HashShouldCache
-
-include("hash_algorithms.jl")
-# update_hash!, HashState, compute_hash!, start_nested_hash!, end_nested_hash!, similar_hash_state
 
 include("hash_traits.jl")
 # stable_hash_helper
