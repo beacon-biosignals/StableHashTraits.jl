@@ -275,7 +275,7 @@ function split_union(array::AbstractArray{Union{N,M}}) where {N,M}
     return isM_array, array[isM_array]
 end
 
-function transformer(::Type{<:AbstractArray{Union{N,<:Any}}}, ::HashVersion{3}) where {N}
+function transformer(::Type{<:AbstractArray{Union{N,M}}}, ::HashVersion{3}) where {N,M}
     if StructType(N) isa StructTypes.NullType
         return Transformer(x -> (size(x), split_union(x)); preserves_structure=true)
     else

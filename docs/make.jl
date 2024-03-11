@@ -8,7 +8,7 @@ readme = read(readme_file, String)
 overview_txt = match(r"START_OVERVIEW-->(.*?)<!--END_OVERVIEW"s, readme).captures[1]
 example_txt = match(r"START_EXAMPLE-->(.*?)<!--END_EXAMPLE"s, readme).captures[1]
 
-index_str = read("src/index_template.md", String)
+index_str = read("templates/index_template.md", String)
 index_str = replace(index_str, "{INSERT_OVERVIEW}" => overview_txt)
 index_str = replace(index_str, "{INSERT_EXAMPLE}" => example_txt)
 
