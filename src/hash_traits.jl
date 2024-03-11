@@ -181,8 +181,8 @@ function transformer(::Type{<:Function}, ::HashVersion{3})
     return Transformer(identity, StructTypes.UnorderedStruct())
 end
 
-type_hash_name(::Type{T}, trait) where {T<:Function} = function_type_name(T)
-type_value_name(::Type{T}, trait) where {T<:Function} = function_type_name(T)
+type_hash_name(::Type{T}, ::StructTypes.NoStructType) where {T<:Function} = function_type_name(T)
+type_value_name(::Type{T}, ::StructTypes.NoStructType) where {T<:Function} = function_type_name(T)
 
 function function_type_name(::Type{T}) where {T}
     if hasproperty(T, :instance) && isdefined(T, :instance)
@@ -271,7 +271,7 @@ function split_union(array::AbstractArray{Union{N, M}}) where {N, M}
     return isM_array, array[isM_array]
 end
 
-function transformer(::Type{<:AbstractArray{Union{N,M}}}, ::HashVersion{3}) where {N,M}
+function transformer(::Type{<:AbstractArray{Union{N,<:Any}}}, ::HashVersion{3}) where {N}
     if StructType(N) isa StructTypes.NullType
         return Transformer(x -> (size(x), split_union(x)); preserves_structure=true)
     else
@@ -377,7 +377,7 @@ end
 ##### Basic data types
 #####
 
-type_hash_name(::Type{Symbol}, trait) = "Base.Symbol"
+type_hash_name(::Type{Symbol}, ::StructTypes.StringType) = "Base.Symbol"
 function transformer(::Type{<:Symbol}, ::HashVersion{3})
     return Transformer(String; preserves_structure=true)
 end

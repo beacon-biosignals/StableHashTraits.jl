@@ -228,9 +228,9 @@ include("setup_tests.jl")
                 @test test_hash(Float64) != test_hash(Int)
                 if V >= 3
                     @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
+                    @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
+                    @test test_hash(Array{Int}) != test_hash(Array{Float64})
                 end
-                @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
-                @test test_hash(Array{Int}) != test_hash(Array{Float64})
             end
 
             @testset "Custom hash_method" begin
