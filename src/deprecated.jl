@@ -2,6 +2,10 @@
 # changes to names
 function hash_method end
 
+struct NotImplemented end
+is_implemented(::NotImplemented) = false
+is_implemented(_) = true
+
 # recurse up to the parent until a method is defined or we hit the root (with parent `nothing`)
 hash_method(x, context) = hash_method(x, parent_context(context))
 # if we hit the root context, we call the one-argument form, which could be extended by a

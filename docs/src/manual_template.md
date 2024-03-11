@@ -78,10 +78,10 @@ hoisting described in the previous section will be violated.
 
 StableHashTraits cached hash results for all types and large values. This cache is generated
 per call to `stable_hash`; to leverage the same cache over multiple calls you can create a
-`CachingHashContext`,
+`CachedHash`,
 
 ```julia
-context = CachingHashContext(HashVersion{3}())
+context = CachedHash(HashVersion{3}())
 stable_hash(x, context)
 stable_hash(y, context) # previously cached values will be re-used
 ```
@@ -90,30 +90,27 @@ However, if you change any method definitions to `transform` between calls to `s
 
 If you know that a particular object is referenced in multiple places, you can make sure
 that it is cached by wrapping it in a `HashShouldCache` object during a call to
-`transformer`, like so:
+`transformer`.
+
+**TODO** clean this up
 
 ```@doctest
-julia> begin;
-            using StableHashTraits
-            using StableHashTraits: Transformer
+using StableHashTraits
+using StableHashTraits: Transformer
 
-            struct Foo
-                x::Int
-                ref::Bar
-            end
+struct Foo
+    x::Int
+    ref::Bar
+end
 
-            struct Bar
-                data::Vector{Int}
-            end
+struct Bar
+    data::Vector{Int}
+end
 
-            foos = Foo.(rand(Int, 10_000), Ref(Bar(rand(Int, 1_000))))
-            transformer(::Type{<:Bar}) = Transformer(function(x)
-                @show "Hello!"
-                HashShouldCache(x)
-            end
-        end
-
-julia> stable_hash(foos) # Bar will only be cached once
-"Hello!"
+foos = Foo.(rand(Int, 10_000), Ref(Bar(rand(Int, 1_000))))
+transformer(::Type{<:Bar}) = Transformer(function(x)
+    @show "Hello!"
+    HashShouldCache(x)
+end
 
 ```

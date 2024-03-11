@@ -50,12 +50,12 @@ StableHashTraits is designed to be used in cases where there is an object you wi
 ## What gets hashed?
 
 By default, an object is hashed according to its `StructType` (ala
-(SructTypes)[https://github.com/JuliaData/StructTypes.jl]), and can be customized using
+(SructTypes)[https://github.com/JuliaData/StructTypes.jl]), and this can be customized using
 (`StableHashTraits.transformer`)[https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer].
 
-These methods all make use of `stable_name` which is a hash of `string(T)` for type `T`,
+Hashing makes use of (`stable_name`)[https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_name] which is a hash of `string(T)` for type `T`,
 with a few additional regularizations to ensure e.g. `Core.` values become `Base.` values
-(as this differs across julia versions).
+(as what is in `Core` changes across julia versions).
 
 - `Type`: when hashing the type of an object or its contained types, only the name of `stable_name(StructType(T))` is hashed along with any structure as determined by the particular return value of `StructType(T)` (e.g. `eltype` for `ArrayType`). If you hash a type as a value (e.g. `stable_hash(Int)`) the `stable_name` of the type itself, rather than `StructType(T)` is used.
 

@@ -53,7 +53,7 @@ function stable_hash(x, context; alg=sha256)
                                                     hash_method(x, context)))
     else
         hash_state = hash_type_and_value(x, HashState(alg, context),
-                                         CachingHashContext(context))
+                                         CachedHash(context))
         return compute_hash!(hash_state)
     end
 end
@@ -104,31 +104,20 @@ hashing it. Methods without a `context` are called if no method for that type
 exists for any specific `context` object.
 """
 transformer(::Type{T}, context) where {T} = transformer(T, parent_context(context))
-function transformer(::Type{T}, ::HashVersion{3}) where {T}
-    result = transformer(T)
-    is_implemented(result) && return result
-    return Transformer()
-end
-transformer(::Type{T}, ::Nothing) where {T} = transformer(T)
-
-struct NotImplemented end
-transformer(x) = NotImplemented()
-is_implemented(::NotImplemented) = false
-is_implemented(_) = true
+transformer(::Type{T}, ::HashVersion{3}) where {T} = transformer(T)
+transformer(x) = Transformer()
 
 struct TransformIdentity{T}
     val::T
 end
 HashType(x::TransformIdentity) = StructTypes.StructType(x.val)
-transformer(::Type{<:TransformIdentity}, ::HashVersion{3}) = Transformer(x -> x.val)
+function transformer(::Type{<:TransformIdentity}, ::HashVersion{3})
+    Transformer(x -> x.val; preserves_structure=true)
+end
 
-# we signal that a method specific to a type is not available using `NotImplemented`; we
-# need this to avoid method ambiguities, see `hash_method(x::T, ::HashContext) where T
-# below for details
-
-function stable_hash_helper(x, hash_state, context, method)
-    throw(ArgumentError("Unrecognized hash method of type `$(typeof(method))` when " *
+function stable_hash_helper(x, hash_state, context, trait)
+    throw(ArgumentError("Unrecognized trait of type `$(typeof(trait))` when " *
                         "hashing object $x. The implementation of `transformer` for this " *
-                        "object is invalid."))
+                        "object provides an invalid second argument."))
     return
 end

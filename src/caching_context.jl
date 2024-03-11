@@ -1,29 +1,30 @@
-struct TransformResult{T}
-    value::T
-    preserves_structure::Bool
-end
-with_type_structure(val, ::Type{T}) where {T} = transform_structure(val, T, StructType(T))
-with_type_structure(val, ::Type{T}, trait) where {T} = TransformResult(val, false)
-handle_transform(x::TransformResult) = x.value, x.preserves_structure
-handle_transform(x) = x, false
-
-struct CachingHashContext{T}
+struct CachedHash{T}
     parent::T
     type_cache::IdDict{Type,Vector{UInt8}}
     value_cache::IdDict{Any,Vector{UInt8}}
-    function CachingHashContext(parent, types=IdDict{Type,Vector{UInt8}}(),
+    function CachedHash(parent, types=IdDict{Type,Vector{UInt8}}(),
                                 values=IdDict{Any,Vector{UInt8}}())
         return new{typeof(parent)}(parent, types, values)
     end
 end
-CachingHashContext(x::CachingHashContext) = x
+CachedHash(x::CachedHash) = x
+parent_context(x::CachedHash) = x.parent
 
-function hash_value!(hash_state, context, x, trait)
-    hash_value!(hash_state, parent_context(context), x, trait)
+function hash_value!(x, hash_state, context, trait)
+    hash_value!(x, hash_state, parent_context(context), trait)
 end
 
-struct CacheShouldHash{T}
+struct HashShouldCache{T}
     val::T
+end
+struct HashShouldNotCache{T}
+    val::T
+end
+dont_cache(x::HashShouldCache) = HashShouldNotCache(x.val)
+dont_cache(x) = HashShouldNotCache(x)
+function stable_hash_helper(x::HashShouldNotCache, hash_state, context,
+                            trait::StructTypes.DataType)
+    return stable_hash_helper(x.val, hash_state, context, trait)
 end
 
 # we have to somehow decide before seeing the full tree of objects which things we want to
@@ -34,11 +35,11 @@ end
 
 const CACHE_OBJECT_THRESHOLD = 2^13
 
-function hash_value!(hash_state, context::CachingHashContext, x::T, trait) where {T}
-    if x isa CacheShouldHash || sizeof(x) >= CACHE_OBJECT_THRESHOLD
+function hash_value!(x::T, hash_state, context::CachedHash, trait) where {T}
+    if x isa HashShouldCache || (isbitstype(T) && sizeof(x) >= CACHE_OBJECT_THRESHOLD)
         bytes = get!(context.value_cache, x) do
             cache_state = similar_hash_state(hash_state)
-            stable_hash_helper(x, cache_state, context, trait)
+            stable_hash_helper(dont_cache(x), cache_state, context, trait)
             return reinterpret(UInt8, asarray(compute_hash!(cache_state)))
         end
         return update_hash!(hash_state, bytes, context)
@@ -47,12 +48,11 @@ function hash_value!(hash_state, context::CachingHashContext, x::T, trait) where
     end
 end
 
-parent_context(x::CachingHashContext) = x.parent
 hash_type!(hash_state, x, key) = hash_type!(hash_state, parent_context(x), key)
 function hash_type!(hash_state, ::Nothing, key)
     throw(ArgumentError("`hash_type! is not supported"))
 end
-function hash_type!(hash_state, context::CachingHashContext, ::Type{T}) where {T}
+function hash_type!(hash_state, context::CachedHash, ::Type{T}) where {T}
     bytes = get!(context.type_cache, T) do
         type_context = TypeHashContext(context)
         transform = transformer(typeof(T), type_context)

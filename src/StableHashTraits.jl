@@ -14,7 +14,8 @@ include("public_interface.jl")
 export stable_hash, HashVersion
 
 include("caching_context.jl")
-# CachingHashContext
+# CachedHash
+export CachedHash, HashShouldCache
 
 include("hash_algorithms.jl")
 # update_hash!, HashState, compute_hash!, start_nested_hash!, end_nested_hash!, similar_hash_state

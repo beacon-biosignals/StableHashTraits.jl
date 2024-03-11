@@ -16,13 +16,13 @@ function hash_type_and_value(x, hash_state, context)
     if !transform.preserves_structure
         hash_state = hash_type!(hash_state, context, typeof(tx))
     end
-    return stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
+    return hash_value!(tx, hash_state, context, hash_trait(transform, tx))
 end
 
 # how we hash when the type hash can be hoisted out of a loop
 function hash_value(x, hash_state, context, transform::Transformer)
     tx = transform(x)
-    return stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
+    return hash_value!(tx, hash_state, context, hash_trait(transform, tx))
 end
 
 # There are two cases where we want to hash types:
@@ -48,22 +48,19 @@ end
 StructType_(::Type{Union{}}) = StructTypes.NoStructType()
 
 """
-    type_hash_name(::Type{T}, [trait], [context])
+    type_hash_name(::Type{T}, trait, [context])
 
 The name that is hashed for type `T` when hashing the type of a given value. This defaults
-to stable_name(trait). Users of `StableHashTraits` can implement a method that accepts one
-argument (`T`), two (`T` and `trait`) or three arguments (`T`, `trait`, `context`). The
-trait is one of the `StructTypes` traits and `context` is the hash context (as per
-the second argument to `stable_hash`)
+to `stable_name(trait)`. Users of `StableHashTraits` can implement a method that accepts two
+(`T` and `trait`) or three arguments (`T`, `trait`, `context`). The trait is one of the
+`StructTypes` traits and `context` is the hash context (as per the second argument to
+`stable_hash`)
 """
 function type_hash_name(::Type{T}, trait, context) where {T}
-    return type_hash_name(T, trait,
-                          parent_context(context))
+    return type_hash_name(T, trait, parent_context(context))
 end
 type_hash_name(::Type{T}, trait, ::Nothing) where {T} = type_hash_name(T, trait)
-type_hash_name(::Type{T}, trait) where {T} = type_hash_name(T)
-type_hash_name(::Type{T}) where {T} = qualified_name_(StructType_(T))
-type_hash_name(::Type{Union{}}) = "StructTypes.NoStructType"
+type_hash_name(::Type{T}, trait) where {T} = qualified_name_(trait)
 
 """
     type_structure(::Type{T}, trait, context)
@@ -130,7 +127,7 @@ struct TypeAsValueContext{T}
 end
 parent_context(x::TypeAsValueContext) = x.parent
 
-function hash_type!(hash_state, context::CachingHashContext, ::Type{<:Type})
+function hash_type!(hash_state, context::CachedHash, ::Type{<:Type})
     return update_hash!(hash_state, "Base.Type", context)
 end
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
@@ -139,15 +136,14 @@ function transformer(::Type{<:Type}, context::TypeAsValueContext)
 end
 
 """
-    type_value_name(::Type{T}, [trait], [context])
+    type_value_name(::Type{T}, trait, [context]) where {T}
 
 The name that is hashed for type `T` when hashing a type as a value (e.g.
-`stable_hash(Int)`). This defaults to `stable_name(T)`. Users of `StableHashTraits` can
-implement a method that accepts one argument (`T`), two (`T` and `trait`) or three arguments
-(`T`, `trait`, `context`). The trait is one of the `StructTypes` traits and `context` is the
-hash context (as per the second argument to `stable_hash`)
+`stable_hash(Int)`). This defaults to `stable_name(trait)`. Users of `StableHashTraits` can
+implement a method that accepts two (`T` and `trait`) or three arguments (`T`, `trait`,
+`context`). The trait is one of the `StructTypes` traits and `context` is the hash context
+(as per the second argument to `stable_hash`)
 """
-
 function type_value_name(::Type{T}, trait, context) where {T}
     return type_value_name(T, trait, parent_context(context))
 end
@@ -179,8 +175,8 @@ function transformer(::Type{<:Function}, ::HashVersion{3})
     return Transformer(identity, StructTypes.UnorderedStruct())
 end
 
-type_hash_name(::Type{T}) where {T<:Function} = function_type_name(T)
-type_value_name(::Type{T}) where {T<:Function} = function_type_name(T)
+type_hash_name(::Type{T}, trait) where {T<:Function} = function_type_name(T)
+type_value_name(::Type{T}, trait) where {T<:Function} = function_type_name(T)
 
 function function_type_name(::Type{T}) where {T}
     if hasproperty(T, :instance) && isdefined(T, :instance)
@@ -225,6 +221,7 @@ function hash_fields(x, fields, hash_state, context)
         # can we optimize away the field's type_hash?
         transform = transformer(typeof(val), context)
         if isconcretetype(fieldtype(typeof(x), field)) && transform.preserves_structure
+            # the fieldtype has been hashed as part of the type of the caller
             hash_value(val, hash_state, context, transform)
         else
             hash_type_and_value(val, hash_state, context)
@@ -240,6 +237,7 @@ end
 is_ordered(x) = true
 is_ordered(::AbstractSet) = false
 order_by(x::Symbol) = String(x)
+order_by(x::Char) = string(x)
 order_by(x) = x
 
 function type_structure(::Type{T}, ::StructTypes.ArrayType,
@@ -259,7 +257,7 @@ function transformer(::Type{<:AbstractArray}, ::HashVersion{3})
     return Transformer(x -> (size(x), TransformIdentity(x)); preserves_structure=true)
 end
 function transformer(::Type{<:AbstractRange}, ::HashVersion{3})
-    return Transformer(identity, StructTypes.Struct())
+    return Transformer(identity, StructTypes.Struct(); preserves_structure=true)
 end
 
 # handle the simplest and most common cases of union splitting
@@ -281,17 +279,18 @@ function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
     nested_hash_state = start_nested_hash!(hash_state)
 
     items = !is_ordered(xs) ? sort!(collect(xs); by=order_by) : xs
-    nested_hash_state = hash_elements(items, nested_hash_state, context)
+    transform = transformer(eltype(items), context)::Transformer
+    nested_hash_state = hash_elements(items, nested_hash_state, context, transform)
 
     hash_state = end_nested_hash!(hash_state, nested_hash_state)
     return hash_state
 end
 
-function hash_elements(items, hash_state, context)
-    transform = transformer(eltype(items), context)::Transformer
+function hash_elements(items, hash_state, context, transform)
     # can we optimize away the element type hash?
     if isconcretetype(eltype(items)) && transform.preserves_structure
-        hash_state = hash_type!(hash_state, context, eltype(items))
+        # the eltype has already been hashed as part of the type structure of
+        # the caller
         for x in items
             hash_value(x, hash_state, context, transform)
         end
@@ -342,7 +341,9 @@ function type_structure(::Type{T}, ::StructTypes.DictType, ::HashVersion{3}) whe
     return eltype(T)
 end
 
-transformer(::Type{<:Pair}) = Transformer(((a, b),) -> (a, b); preserves_structure=true)
+function transformer(::Type{<:Pair}, ::HashVersion{3})
+    Transformer(((a, b),) -> (a, b); preserves_structure=true)
+end
 
 function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = StructTypes.keyvaluepairs(x)
@@ -351,9 +352,10 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = if is_ordered(x)
         StructTypes.keyvaluepairs(x)
     else
-        sort!(collect(StructTypes.keyvaluepairs(x)); by=order_by)
+        sort!(collect(StructTypes.keyvaluepairs(x)); by=order_by ∘ first)
     end
-    hash_elements(pairs, nested_hash_state, context)
+    transform = transformer(eltype(x), context)::Transformer
+    hash_elements(pairs, nested_hash_state, context, transform)
 
     hash_state = end_nested_hash!(hash_state, nested_hash_state)
     return hash_state
@@ -373,8 +375,10 @@ end
 ##### Basic data types
 #####
 
-type_hash_name(::Type{<:Symbol}) = "Base.Symbol"
-transformer(::Type{<:Symbol}) = Transformer(String; preserves_structure=true)
+type_hash_name(::Type{Symbol}, trait) = "Base.Symbol"
+function transformer(::Type{<:Symbol}, ::HashVersion{3})
+    return Transformer(String; preserves_structure=true)
+end
 
 function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
     nested_hash_state = start_nested_hash!(hash_state)
@@ -393,17 +397,9 @@ function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
 end
 
 # null types are encoded purely by their type hash
-function type_hash_name(::Type{T}, ::StructTypes.NullType) where {T}
-    return qualified_name_(T)
-end
-function stable_hash_helper(_, hash_state, context, ::StructTypes.NullType)
-    return hash_state
-end
+type_hash_name(::Type{T}, ::StructTypes.NullType) where {T} = qualified_name_(T)
+stable_hash_helper(_, hash_state, context, ::StructTypes.NullType) = hash_state
 
-# null types are encoded purely by their type hash
-function type_hash_name(::Type{T}, ::StructTypes.SingletonType) where {T}
-    return qualified_name_(T)
-end
-function stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType)
-    return hash_state
-end
+# singleton types are encoded purely by their type hash
+type_hash_name(::Type{T}, ::StructTypes.SingletonType) where {T} = qualified_name_(T)
+stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType) = hash_state

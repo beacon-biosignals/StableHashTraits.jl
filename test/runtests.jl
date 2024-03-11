@@ -333,34 +333,37 @@ include("setup_tests.jl")
                     ys = [iseven(n) ? Char(n) : Int32(n) for n in 1:10]
                     @test test_hash(xs) != test_hash(ys)
 
-                    # TODO: think through this test more
-                    xs = [] # ???
-                    ys = [] # ???
+                    xs = zeros(Int32, 10)
+                    ys = Char.(xs)
                     @test test_hash(xs) != test_hash(ys)
 
                     # dicts
-                    xs = Dict(n => isodd(n) ? UInt8(n) : Int8(n) for n in 1:10)
-                    ys = Dict(n => iseven(n) ? UInt8(n) : Int8(n) for n in 1:10)
+                    xs = Dict(n => isodd(n) ? Char(n) : Int32(n) for n in 1:10)
+                    ys = Dict(n => iseven(n) ? Char(n) : Int32(n) for n in 1:10)
                     @test test_hash(xs) != test_hash(ys)
 
-                    xs = Dict(n => isodd(n) ? -n : n for n in 1:10)
-                    ys = Dict(n => iseven(n) ? -n : n for n in 1:10)
+                    xs = Dict(1:10 .=> Int32.(1:10))
+                    ys = Dict(1:10 .=> Char.(1:10))
                     @test test_hash(xs) != test_hash(ys)
 
-                    # dicts
-                    xs = [n => (;n=isodd(n) ? UInt8(n) : Int8(n)) for n in 1:10]
-                    ys = [n => (;n=iseven(n) ? UInt8(n) : Int8(n)) for n in 1:10]
+                    # structs
+                    xs = [(;n=isodd(n) ? Char(n) : Int32(n)) for n in 1:10]
+                    ys = [(;n=iseven(n) ? Char(n) : Int32(n)) for n in 1:10]
                     @test test_hash(xs) != test_hash(ys)
 
-                    xs = [n => (;n=isodd(n) ? -n : n) for n in 1:10]
-                    ys = [n => (;n=iseven(n) ? -n : n) for n in 1:10]
+                    xs = [(;n) for n in Int32.(1:10)]
+                    ys = [(;n) for n in Char.(1:10)]
                     @test test_hash(xs) != test_hash(ys)
                 end
             end
 
             # TODO: test caching
             if V >= 3
-                # @testset
+                global cache_type_hashed = 0
+                x = ContainerType.(rand(Int, 10), Ref(CachingType(rand(Int, 3))))
+                @test x[1].ref === x[2].ref
+                test_hash(x)
+                @test cache_type_hashed == 1
             end
 
             if V > 1 && hashfn == sha256
