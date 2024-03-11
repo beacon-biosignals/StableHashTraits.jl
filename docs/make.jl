@@ -19,12 +19,11 @@ pages = ["Manual" => "index.md",
          "Deprecated" => "deprecated.md"]
 
 source_files = readdir(joinpath(@__DIR__, "src"))
-@info "Documentation source: " source_files
 
 DocMeta.setdocmeta!(StableHashTraits, :DocTestSetup, :(using StableHashTraits))
 makedocs(; modules=[StableHashTraits], sitename="StableHashTraits.jl",
          authors="Beacon Biosignals", pages)
-rm("src/index.md")
+rm(joinpath(@__DIR__, "src", "index.md"))
 deploydocs(; repo="github.com/beacon-biosignals/StableHashTraits.jl",
            push_preview=true,
            devbranch="main")
