@@ -158,7 +158,7 @@ struct ContainerType{T}
 end
 
 function StableHashTraits.transformer(::Type{<:CachingType})
-    return StableHashTraits.Transformer(HashShouldCache)
+    return StableHashTraits.Transformer(StableHashTraits.HashShouldCache)
 end
 
 function StableHashTraits.stable_hash_helper(x::CachingType, hash_state, context,

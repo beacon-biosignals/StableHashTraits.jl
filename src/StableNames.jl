@@ -89,7 +89,7 @@ end
                                       :inclause,
                                       P.many(:sepclause => P.seq(:sep, :inclause)),
                                       P.many(:sep)))
-        P.make_grammar([:clause], P.unwrap(rules, Char))
+        P.make_grammar([:clause], P.flatten(rules, Char))
     end
 
     struct Parsed
