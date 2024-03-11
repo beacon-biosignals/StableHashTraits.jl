@@ -1,5 +1,21 @@
 # API
 
-```@autodocs
-Modules = [StableHashTraits]
+```@docs
+stable_hash
+HashVersion
+stable_name
+StableHashTraits.transformer
+StableHashTraits.Transformer
+StableHashTraits.TransformIdentity
+StableHashTraits.preserves_structure
+StableHashTraits.CachedHash
+StableHashTraits.HashShouldCache
+StableHashTraits.type_hash_name
+StableHashTraits.type_value_name
+StableHashTraits.type_structure
+StableHashTraits.parent_context
+StableHashTraits.root_version
+TablesEq
+ViewsEq
+WithTypeNames
 ```

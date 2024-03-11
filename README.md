@@ -28,7 +28,7 @@ a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 stable_hash(a; version=3) == stable_hash(b; version=3) # true
 ```
-<!--STOP_EXAMPLE-->
+<!--END_EXAMPLE-->
 
 Useres can define a method of `transformer` to customize how an object is hashed. It should
 return a function wrapped in `Transformer`. During hashing, this function is called and its
@@ -50,34 +50,32 @@ StableHashTraits is designed to be used in cases where there is an object you wi
 ## What gets hashed?
 
 By default, an object is hashed according to its `StructType` (ala
-(SructTypes)[https://github.com/JuliaData/StructTypes.jl]), and this can be customized using
-(`StableHashTraits.transformer`)[https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer].
+[SructTypes](https://github.com/JuliaData/StructTypes.jl)), and this can be customized using
+[`StableHashTraits.transformer`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer).
 
-Hashing makes use of (`stable_name`)[https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_name] which is a hash of `string(T)` for type `T`,
+Hashing makes use of [`stable_name`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_name) which is a hash of `string(T)` for type `T`,
 with a few additional regularizations to ensure e.g. `Core.` values become `Base.` values
 (as what is in `Core` changes across julia versions).
 
 - `Type`: when hashing the type of an object or its contained types, only the name of `stable_name(StructType(T))` is hashed along with any structure as determined by the particular return value of `StructType(T)` (e.g. `eltype` for `ArrayType`). If you hash a type as a value (e.g. `stable_hash(Int)`) the `stable_name` of the type itself, rather than `StructType(T)` is used.
 
-- `StructType.DataType` — the fieldnames, fieldtypes and field values are hashed, and if this is a `StructType.UnorderedStruct` those are all sorted in lexicographic order of the fieldnames. `StructType.Struct` is the default sturct-type trait so this is how most objects get hashed.
+- `StructType.DataType` — the `fieldnames`, `fieldtypes` and the field values are hashed, and if this is a `StructType.UnorderedStruct` those are all sorted in lexicographic order of the fieldnames. `StructType.Struct` is the default sturct-type trait so this is how most objects get hashed.
 
-- `StructType.ArrayType` — the eltype is hashed and elements are hashed using `iterate`
+- `StructType.ArrayType` — the `eltype` is hashed and elements are hashed using `iterate`
 
-- `StructType.DictType` — the eltype and the keys and values are hashed by iterating over `StructTypes.keyvaluepairs`
+- `StructType.DictType` — the `eltype` of the keys and values are hashed by iterating over `StructTypes.keyvaluepairs`
 
 - `StructType.CustomStruct` - the object is first `StructType.lower`ed and the result is hashed according to its `StructType`.
 
-- `StructType.NullType`, `StructType.SingletonType`: in this case the `stable_name` of the
-  type is hashed, not just its `StructType`.
+- `StructType.NullType`, `StructType.SingletonType`: in these cases the `stable_name` of the
+  type `T` is hashed rather than `StructType(T)`
 
 - `StructType.NumberType`, `StructType.StringType`, `StructType.BoolType`: the
   the type of the object is hashed along with its bytes
 
-- `Function`: functions are a special case and their `stable_name` is hashed
-  along with their fieldnames, fieldtypes and fieldvalues. Functions have
-  fields when they are curried, e.g. `==(2)` or when they are defined
-  via a `struct` definition.
-<!--STOP_OVERVIEW-->
+- `Function`: functions are a special case and their `stable_name` is hashed along with their fieldnames, fieldtypes and fieldvalues. Functions have fields when they are curried, e.g. `==(2)` or when they are defined via a `struct` definition.
+
+<!--END_OVERVIEW-->
 
 ## Breaking changes
 

@@ -63,18 +63,18 @@ type_hash_name(::Type{T}, trait, ::Nothing) where {T} = type_hash_name(T, trait)
 type_hash_name(::Type{T}, trait) where {T} = qualified_name_(trait)
 
 """
-    type_structure(::Type{T}, trait, context)
+    type_structure(::Type{T}, trait, [context])
 
 Get the types and symbols that represent the structure of `T`. This should return the
 relevant, contained types from `T` that should be hashed. The trait is one of the
 `StructTypes` traits and `context` is the hash context (as per the second argument to
-`stable_hash`). The second and third arguments must be included as part of a method
-definition.
+`stable_hash`). The second must be included as part of a method definition, but `context` is
+optional.
 
 For example, this is the definition for `ArrayType` objects.
 
 ```julia
-function type_structure(::Type{T}, ::StructTypes.ArrayType, context::HashVersion{3}) where {T}
+function type_structure(::Type{T}, ::StructTypes.ArrayType) where {T}
     return eltype(T)
 end
 ```
@@ -86,8 +86,7 @@ hash but is not included in `fieldtypes(T)`. For example:
 struct MyType{T,F}
     obj::T
 end
-StableHashTratis.type_structure(::Type{T}, ::StructTypes.DataType,
-                                context::HashVersion{3}) where {F,T<:MyType{<:Any,F}}
+StableHashTratis.type_structure(::Type{T}, ::StructTypes.DataType) where {F,T<:MyType{<:Any,F}}
     return fieldnames(T), fieldtypes(T), F
 end
 ```
@@ -95,13 +94,20 @@ end
 Without this definition `MyType{Int,:foo}(1)` would hash to the same value as
 `MyType{Int,:bar}(2)`.
 
+!!! warn "Hash all expected type structure!" Overloading `type_structure` improperly can
+    cause the assumptions of type-hash-hoisting to be violated. You *must*: - return
+    `fieldtypes` as part of `StructTypes.DataType` - return `eltype` as part of
+    `StructType.ArrayType` - return `eltype` of `StructTypes.keyvaluepairs` of a
+    `StructTypes.DictType` Or the hashes of your type may collied in unexpected ways.
+
 """
 function type_structure(::Type{T}, trait, context) where {T}
     return type_structure(T, trait, parent_context(context))
 end
 function type_structure(::Type{T}, trait, ::HashVersion{3}) where {T}
-    return nothing
+    return type_structure(T, trait)
 end
+type_structure(T, trait) = nothing
 
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
@@ -195,7 +201,7 @@ sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
     return TupleTools.sort(fieldnames(T); by=string)
 end
 
-function type_structure(::Type{T}, trait::StructTypes.DataType, ::HashVersion{3}) where {T}
+function type_structure(::Type{T}, trait::StructTypes.DataType) where {T}
     if isconcretetype(T)
         fields = trait isa StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
         return fields, map(field -> fieldtype(T, field), fields)
@@ -240,14 +246,12 @@ order_by(x::Symbol) = String(x)
 order_by(x::Char) = string(x)
 order_by(x) = x
 
-function type_structure(::Type{T}, ::StructTypes.ArrayType,
-                        context::HashVersion{3}) where {T}
+function type_structure(::Type{T}, ::StructTypes.ArrayType) where {T}
     return eltype(T)
 end
 
 # include ndims in type hash when we can
-function type_structure(::Type{T}, ::StructTypes.ArrayType,
-                        context::HashVersion{3}) where {T<:AbstractArray}
+function type_structure(::Type{T}, ::StructTypes.ArrayType) where {T<:AbstractArray}
     return eltype(T), ndims_(T)
 end
 ndims_(::Type{<:AbstractArray{<:Any,N}}) where {N} = N
@@ -306,8 +310,7 @@ end
 ##### Tuples
 #####
 
-function type_structure(::Type{T}, ::StructTypes.ArrayType,
-                        context::HashVersion{3}) where {T<:Tuple}
+function type_structure(::Type{T}, ::StructTypes.ArrayType) where {T<:Tuple}
     if isconcretetype(T)
         fields = T <: StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
         return fields, map(field -> fieldtype(T, field), fields)
@@ -316,8 +319,7 @@ function type_structure(::Type{T}, ::StructTypes.ArrayType,
     end
 end
 
-function type_structure(::Type{T}, ::StructTypes.ArrayType,
-                        context::HashVersion{3}) where {T<:NTuple}
+function type_structure(::Type{T}, ::StructTypes.ArrayType) where {T<:NTuple}
     return eltype(T)
 end
 
@@ -337,7 +339,7 @@ is_ordered(x::AbstractDict) = false
 keytype(::Type{<:Pair{K,T}}) where {K,T} = K
 valtype(::Type{<:Pair{K,T}}) where {K,T} = T
 
-function type_structure(::Type{T}, ::StructTypes.DictType, ::HashVersion{3}) where {T}
+function type_structure(::Type{T}, ::StructTypes.DictType) where {T}
     return eltype(T)
 end
 

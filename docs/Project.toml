@@ -1,2 +1,3 @@
 [deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 StableHashTraits = "c5dd0088-6c3f-4803-b00e-f31a60c170fa"
