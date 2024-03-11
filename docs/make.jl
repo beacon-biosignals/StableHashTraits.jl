@@ -22,6 +22,7 @@ pages = ["Manual" => "index.md",
 
 makedocs(; modules=[StableHashTraits], sitename="StableHashTraits.jl",
          authors="Beacon Biosignals", pages)
+rm("src/index.md")
 deploydocs(; repo="github.com/beacon-biosignals/StableHashTraits.jl",
            push_preview=true,
            devbranch="main")
