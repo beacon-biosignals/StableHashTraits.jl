@@ -14,7 +14,7 @@ index_str = replace(index_str, "{INSERT_EXAMPLE}" => example_txt)
 
 link_pattern = r"\[`(\S+)`\]\((https://beacon-biosignals\.github\.io/StableHashTraits\.jl/stable/\S+)\)"
 index_str = replace(index_str, link_pattern => s"[`\1`](@ref)")
-write("src/index.md", index_str)
+write(joinpath(@__DIR__, "src/index.md"), index_str)
 
 pages = ["Manual" => "index.md",
          "API" => "api.md",
