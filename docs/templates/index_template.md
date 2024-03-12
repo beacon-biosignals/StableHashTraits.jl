@@ -58,6 +58,12 @@ true
 Without this context, the keys are first sorted because `StructType(NamedTuple) isa
 StructType.UnorderedStruct`.
 
+There are two useful, predefined contexts available in `StableHashTraits` that can be used
+to change how hashing works:
+
+- [`WithTypeNames`](@ref)
+- [`TablesEq`](@ref)
+
 ## Optimizing Transformers
 
 As noted `preserves_structure` can safely be set to true for any type-stable function. It is set to true by default for `identity`. When set to true, `stable_hash` will hoist type hashes outside of loops when possible, avoiding type hashes for any deeply nested fields, so long as the path to them includes all concrete types. For example, when hashing an `Array{Int}` the `Int` will only be hashed once, not once for every element.

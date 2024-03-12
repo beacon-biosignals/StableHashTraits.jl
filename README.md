@@ -30,12 +30,7 @@ stable_hash(a; version=3) == stable_hash(b; version=3) # true
 ```
 <!--END_EXAMPLE-->
 
-Useres can define a method of `transformer` to customize how an object is hashed. It should
-return a function wrapped in `Transformer`. During hashing, this function is called and its
-result is the value that is actually hashed. (The `preserves_structure` keyword shown above
-is an optional flag that can be used to further optimize performance of your transformer in
-some cases; you can do this any time the function is type stable, but some type-instable
-functions are also possible. See the documentation for details).
+Useres can define a method of `transformer` to customize how an object is hashed. It should return a function wrapped in `Transformer`. During hashing, this function is called and its result is the value that is actually hashed. (The `preserves_structure` keyword shown above is an optional flag that can be used to further optimize performance of your transformer in some cases; you can do this any time the function is type stable, but some type-instable functions are also possible. See the documentation for details).
 
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
@@ -45,7 +40,7 @@ StableHashTraits aims to guarantee a stable hash so long as you only upgrade to 
 <!--START_OVERVIEW-->
 ## Use Case and Design Rationale
 
-StableHashTraits is designed to be used in cases where there is an object you wish to serialize in a content-addressed cache. How and when objects collide is meant to be predictable and well defined, so that the user can reliably define methods of `transformer` to change this behavior.
+StableHashTraits is designed to be used in cases where there is an object you wish to serialize in a content-addressed cache. How and when objects pass the same input to a hashing algorithm is meant to be predictable and well defined, so that the user can reliably define methods of `transformer` to modify this behavior.
 
 ## What gets hashed?
 
@@ -53,13 +48,11 @@ By default, an object is hashed according to its `StructType` (ala
 [SructTypes](https://github.com/JuliaData/StructTypes.jl)), and this can be customized using
 [`StableHashTraits.transformer`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer).
 
-Hashing makes use of [`stable_type_name`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_type_name) which is a hash of `string(T)` for type `T`,
-with a few additional regularizations to ensure e.g. `Core.` values become `Base.` values
-(as what is in `Core` changes across julia versions).
+Hashing makes use of [`stable_type_name`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_type_name) which is a hash of `parentmodule(T) * string(T)` for type `T`, with a few additional regularizations to ensure e.g. `Core.` values become `Base.` values (as what is in `Core` vs. `Base` changes across julia versions). This function also ensures that no anonymous values (those that include `#`) are hashed, as these are not stable across sessions.
 
 - `Type`: when hashing the type of an object or its contained types, only the name of `stable_type_name(StructType(T))` is hashed along with any structure as determined by the particular return value of `StructType(T)` (e.g. `eltype` for `ArrayType`). If you hash a type as a value (e.g. `stable_hash(Int)`) the `stable_type_name` of the type itself, rather than `StructType(T)` is used.
 
-- `StructType.DataType` — the `fieldnames`, `fieldtypes` and the field values are hashed, and if this is a `StructType.UnorderedStruct` those are all sorted in lexicographic order of the fieldnames. `StructType.Struct` is the default sturct-type trait so this is how most objects get hashed.
+- `StructType.DataType` — the `fieldnames`, `fieldtypes` and the field values are hashed, and if this is a `StructType.UnorderedStruct` those are all sorted in lexicographic order of the fieldnames. `StructType.UnorderedStruct` is the default sturct-type trait so this is how most objects get hashed.
 
 - `StructType.ArrayType` — the `eltype` is hashed and elements are hashed using `iterate`
 
@@ -67,11 +60,9 @@ with a few additional regularizations to ensure e.g. `Core.` values become `Base
 
 - `StructType.CustomStruct` - the object is first `StructType.lower`ed and the result is hashed according to its `StructType`.
 
-- `StructType.NullType`, `StructType.SingletonType`: in these cases the `stable_type_name` of the
-  type `T` is hashed rather than `StructType(T)`
+- `StructType.NullType`, `StructType.SingletonType`: in these cases the `stable_type_name` of the type `T` is hashed rather than `StructType(T)`
 
-- `StructType.NumberType`, `StructType.StringType`, `StructType.BoolType`: the
-  the type of the object is hashed along with its bytes
+- `StructType.NumberType`, `StructType.StringType`, `StructType.BoolType`: the the type of the object is hashed along with its bytes
 
 - `Function`: functions are a special case and their `stable_type_name` is hashed along with their fieldnames, fieldtypes and fieldvalues. Functions have fields when they are curried, e.g. `==(2)` or when they are defined via a `struct` definition.
 
