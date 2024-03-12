@@ -393,6 +393,10 @@ include("setup_tests.jl")
                     # buffer sizes while updating the hash state...
                     @test alg_small.positions != alg_large.positions
                 end
+                # NOTE: the hash is *not* invariant to the CACHE_OBJECT_THRESHOLD since this
+                # is the object size overwhich the hash becomes recursively computed rather
+                # than computed using the buffered hash (which uses list of indices to
+                # denote nesting)
             end
         end # @testset
     end # for

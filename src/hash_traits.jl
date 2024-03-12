@@ -268,15 +268,15 @@ function transformer(::Type{<:AbstractRange}, ::HashVersion{3})
     return Transformer(identity, StructTypes.Struct(); preserves_structure=true)
 end
 
-# handle the simplest and most common cases of union splitting
-# arrays of null-type and another type
+# handle the simplest and most common cases of union splitting:
+# arrays of null-type/singleton-type and another type
 function split_union(array::AbstractArray{Union{N,M}}) where {N,M}
-    isM_array = isa.(array, M)
-    return isM_array, array[isM_array]
+    isM_array = findall(x -> x isa M, array)
+    return isM_array, map(i -> convert(M, @inbounds(array[i])), isM_array)
 end
 
 function transformer(::Type{<:AbstractArray{Union{N,M}}}, ::HashVersion{3}) where {N,M}
-    if StructType(N) isa StructTypes.NullType
+    if StructType(N) isa StructTypes.NullType || StructType(N) isa StructTypes.SingletonType
         return Transformer(x -> (size(x), split_union(x)); preserves_structure=true)
     else
         return Transformer(x -> (size(x), TransformIdentity(x)); preserves_structure=true)
