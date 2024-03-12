@@ -70,6 +70,12 @@ Hashing makes use of [`stable_type_name`](https://beacon-biosignals.github.io/St
 
 ## Breaking changes
 
+### In 1.2
+
+This release includes a new hash version 3 that has breaking API changes, documeted above.
+The prior API is deprecated. In version 2, which will be released in relatively short order,
+only hash version 3 will be available
+
 ### In 1.1
 
 This release includes speed improvements of about 100 fold.
