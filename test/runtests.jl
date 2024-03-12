@@ -361,7 +361,9 @@ include("setup_tests.jl")
                     # union-splitting code-path
                     xs = [fill(missing, 3); collect(1:10)]
                     ys = [collect(1:10); fill(missing, 3)]
-                    @test stable_hash(xs) != stable_hash(ys)
+                    @test test_hash(xs) != test_hash(ys)
+
+                    # TODO: we need to tes tmore edge cases with union splitting
                 end
             end
 

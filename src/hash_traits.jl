@@ -261,26 +261,37 @@ end
 ndims_(::Type{<:AbstractArray{<:Any,N}}) where {N} = N
 ndims_(::Type{<:AbstractArray}) = nothing
 
-function transformer(::Type{<:AbstractArray}, ::HashVersion{3})
-    return Transformer(x -> (size(x), TransformIdentity(x)); preserves_structure=true)
-end
 function transformer(::Type{<:AbstractRange}, ::HashVersion{3})
     return Transformer(identity, StructTypes.Struct(); preserves_structure=true)
 end
 
-# handle the simplest and most common cases of union splitting:
-# arrays of null-type/singleton-type and another type
-function split_union(array::AbstractArray{Union{N,M}}) where {N,M}
-    isM_array = findall(x -> x isa M, array)
-    return isM_array, map(i -> convert(M, @inbounds(array[i])), isM_array)
+function transformer(::Type{<:AbstractArray{Union{N,M}}}, ::HashVersion{3}) where {N,M}
+    return Transformer(x -> (size(x), split_union(x)); preserves_structure=true)
 end
 
-# TODO: union-splitting path not yet tested!!!
-function transformer(::Type{<:AbstractArray{Union{N,M}}}, ::HashVersion{3}) where {N,M}
-    if StructType(N) isa StructTypes.NullType || StructType(N) isa StructTypes.SingletonType
-        return Transformer(x -> (size(x), split_union(x)); preserves_structure=true)
+# NOTE: this method actually properly handles union splitting for as many splits as julia
+# will allow to match to this method not just two; in the case where the eltype is
+# Union{Int, UInt, Char} for instance, M will match to Union{UInt, Char} and the `else`
+# branch will properly split out the first type and the M_array will be split again, when
+# the `transformer` method above is applied to it.
+function split_union(array::AbstractArray{Union{N,M}}) where {N,M}
+    # NOTE: when an abstract array is e.g. AbstractArray{Int}, N becomes
+    # Int and M is left as undefined
+    !@isdefined(M) && return TransformIdentity(array)
+    if StructType(N) isa StructTypes.NullType ||
+       StructType(N) isa StructTypes.SingletonType
+        isM_array = isa.(array, M)
+        return isM_array, convert(AbstractArray{M}, array[isM_array])
+    elseif StructType(M) isa StructTypes.NullType ||
+           StructType(M) isa StructTypes.SingletonType
+        isN_array = isa.(array, N)
+        return isN_array, convert(AbstractArray{N}, array[isN_array])
     else
-        return Transformer(x -> (size(x), TransformIdentity(x)); preserves_structure=true)
+        @show M
+        @show isN_array = isa.(array, N)
+        @show N_array = convert(AbstractArray{N}, array[isN_array])
+        @show M_array = convert(AbstractArray{M}, array[.!isN_array])
+        return isN_array, N_array, M_array
     end
 end
 
