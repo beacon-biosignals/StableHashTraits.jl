@@ -231,7 +231,7 @@ function hash_fields(x, fields, hash_state, context)
         # can we optimize away the field's type_hash?
         transform = transformer(typeof(val), context)
         if isconcretetype(fieldtype(typeof(x), field)) && transform.preserves_structure
-            # the fieldtype has been hashed as part of the type of the caller
+            # the fieldtype has been hashed as part of the type of the container
             hash_value(val, hash_state, context, transform)
         else
             hash_type_and_value(val, hash_state, context)
@@ -317,7 +317,7 @@ function hash_elements(items, hash_state, context, transform)
     # can we optimize away the element type hash?
     if isconcretetype(eltype(items)) && transform.preserves_structure
         # the eltype has already been hashed as part of the type structure of
-        # the caller
+        # the container
         for x in items
             hash_value(x, hash_state, context, transform)
         end

@@ -86,17 +86,15 @@ stable and predictable hash behavior.
 
 A relatively naive implementation of this API, where parts of the hash that are a function
 of the type are computed every time an object of that type is hashed leads to `trait`
-columns in the table below on order of x100-200 slower than the `base` columns. Caching
-those parts of the hash that are a function of only the type brings this down to about
-x10-60 times slower (depending on the row). It appears that the calls to `get!` on the
-cached type hashes are not much faster than the the cost of re-hashing the type each
-time.
+columns in the table similar to version 1.0. Caching those parts of the hash that are a
+function of only the type brings this down to about x10-60 times slower (depending on the
+row). It appears that the calls to `get!` on the cached type hashes are a quite a bit slower
+than the cost of hashing the content of the object.
 
 The implementation used in 1.2 reduces the times in this table beyond what caching can
-accomplish alone by hoisting type hashes outside of loops where possible (and still caching
-their results for future use). For example when hashing `Vector{Int}` the hash of the type
-`Int` is computed only when hashing the array type, not when hashing the individual
-elements.
+accomplish alone by hoisting type hashes outside of loops (and still caching their results
+for future use). For example when hashing `Vector{Int}` the hash of the type `Int` is
+computed only when hashing the array type, not when hashing the individual elements.
 
 This implementation makes two additional, smaller improvements:
 
