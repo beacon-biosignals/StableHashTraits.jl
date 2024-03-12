@@ -5,7 +5,6 @@ Documented methods that are not part of the public API.
 ```@docs
 StableHashTraits.hash_type!
 StableHashTraits.hash_value!
-StableHashTraits.HashShouldNotCache
 StableHashTraits.HashState
 StableHashTraits.similar_hash_state
 StableHashTraits.start_nested_hash!
