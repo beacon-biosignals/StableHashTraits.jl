@@ -510,9 +510,12 @@ end # @testset
 @testset "Aqua" begin
     # NOTE: in Julia 1.9 and older we intentionally do not load `PikaParser`
     # as it is only used when transforming type strings in 1.10
+
+    # NOTE: aqua incorrectly flags the split_union method as having unbound type arguments
     if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
-        Aqua.test_all(StableHashTraits)
+        Aqua.test_all(StableHashTraits; unbound_args=(; broken=true))
     else
-        Aqua.test_all(StableHashTraits; stale_deps=(; ignore=[:PikaParser]))
+        Aqua.test_all(StableHashTraits; stale_deps=(; ignore=[:PikaParser]),
+                      unbound_args=(; broken=true))
     end
 end
