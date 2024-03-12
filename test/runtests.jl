@@ -422,7 +422,8 @@ include("setup_tests.jl")
         @test_deprecated(UseSize(UseIterate()))
         @test_deprecated(ConstantHash("foo"))
         @test_deprecated(UseTable())
-        # TODO: test hash_version 2 and related deprecations
+        @test_deprecated(HashVersion{1}())
+        @test_deprecated(HashVersion{2}())
     end
 
     if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
