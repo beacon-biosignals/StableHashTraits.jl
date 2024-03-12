@@ -371,7 +371,7 @@ include("setup_tests.jl")
                 test_hash(x)
                 @test cache_type_hashed == 1
 
-                x = rand(Int8, StableHashTraits.CACHE_OBJECT_THRESHOLD+1)
+                x = rand(Int8, StableHashTraits.CACHE_OBJECT_THRESHOLD + 1)
                 context = CachedHash(ctx)
                 test_hash(x, context)
                 @test !isempty(context.value_cache)
@@ -475,8 +475,10 @@ include("setup_tests.jl")
 
             # verify that we can replace an element in various locations using
             # parse_walker's second argument
-            replace_bob(str) = parse_walker((fn, p) -> p == "bob" ? "BOB" : nothing,
-                                            parse_brackets(str))
+            function replace_bob(str)
+                return parse_walker((fn, p) -> p == "bob" ? "BOB" : nothing,
+                                    parse_brackets(str))
+            end
             @test replace_bob("bob") == "BOB"
             @test replace_bob("bob joe") == "BOB joe"
             @test replace_bob("bob, joe") == "BOB, joe"

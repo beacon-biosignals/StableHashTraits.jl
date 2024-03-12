@@ -74,7 +74,7 @@ end
 # when types are hashed as values, we don't hash them using `hash_value!`, since the methods
 # implementing this fallback to calling `hash_type!`
 function hash_value!(x::Type, hash_state, context::CachedHash, trait)
-    stable_hash_helper(x, hash_state, context, trait)
+    return stable_hash_helper(x, hash_state, context, trait)
 end
 
 """

@@ -57,11 +57,11 @@ for hashfn in (crc, sha256)
                 suite["$(name)_$(hstr)_$V"]["base"] = @benchmarkable $(hashfn)(str_to_data($a))
             else
                 suite["$(name)_$(hstr)_$V"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8,
-                                                                                    $a))
+                                                                                           $a))
             end
             suite["$(name)_$(hstr)_$V"]["trait"] = @benchmarkable $(stable_hash)($b,
-                                                                            HashVersion{$(V)}();
-                                                                            alg=$(hashfn))
+                                                                                 HashVersion{$(V)}();
+                                                                                 alg=$(hashfn))
         end
     end
 end
