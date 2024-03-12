@@ -356,6 +356,11 @@ include("setup_tests.jl")
                     xs = [(; n) for n in Int32.(1:10)]
                     ys = [(; n) for n in Char.(1:10)]
                     @test test_hash(xs) != test_hash(ys)
+
+                    # union-splitting code-path
+                    xs = [fill(missing, 3); collect(1:10)]
+                    ys = [collect(1:10); fill(missing, 3)]
+                    @test stable_hash(xs) != stable_hash(ys)
                 end
             end
 
@@ -365,6 +370,11 @@ include("setup_tests.jl")
                 @test x[1].ref === x[2].ref
                 test_hash(x)
                 @test cache_type_hashed == 1
+
+                x = rand(Int8, StableHashTraits.CACHE_OBJECT_THRESHOLD+1)
+                context = CachedHash(ctx)
+                test_hash(x, context)
+                @test !isempty(context.value_cache)
             end
 
             if V > 1 && hashfn == sha256

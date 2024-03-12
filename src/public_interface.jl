@@ -1,5 +1,3 @@
-# NOTE: same code as old `StableHashTraits.jl`
-
 """
     HashVersion{V}()
 
@@ -133,16 +131,16 @@ transformer(::Type{T}, ::HashVersion{3}) where {T} = transformer(T)
 transformer(x) = Transformer()
 
 """
-    stable_name(::Type{T})
-    stable_name(T::Module)
-    stable_name(::T) where {T}
+    stable_type_name(::Type{T})
+    stable_type_name(T::Module)
+    stable_type_name(::T) where {T}
 
 Get a stable name of `T`. The stable name includes the name of the module that `T` was
 defined in. Any uses of `Core` are replaced with `Base` to keep the name stable across
-versions of julia. Anonymous names (e.g. `stable_name(x -> x+1)`) throw an error, as no
+versions of julia. Anonymous names (e.g. `stable_type_name(x -> x+1)`) throw an error, as no
 stable name is possible in this case.
 """
-stable_name(x) = qualified_name_(x)
+stable_type_name(x) = qualified_name_(x)
 
 """
     StableHashTraits.TransformIdentity(x)

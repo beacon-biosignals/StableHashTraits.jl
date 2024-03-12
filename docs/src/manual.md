@@ -11,11 +11,11 @@ By default, an object is hashed according to its `StructType` (ala
 (SructTypes)[https://github.com/JuliaData/StructTypes.jl]), and this can be customized using
 (`StableHashTraits.transformer`)[https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer].
 
-Hashing makes use of (`stable_name`)[https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_name] which is a hash of `string(T)` for type `T`,
+Hashing makes use of (`stable_type_name`)[https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_type_name] which is a hash of `string(T)` for type `T`,
 with a few additional regularizations to ensure e.g. `Core.` values become `Base.` values
 (as what is in `Core` changes across julia versions).
 
-- `Type`: when hashing the type of an object or its contained types, only the name of `stable_name(StructType(T))` is hashed along with any structure as determined by the particular return value of `StructType(T)` (e.g. `eltype` for `ArrayType`). If you hash a type as a value (e.g. `stable_hash(Int)`) the `stable_name` of the type itself, rather than `StructType(T)` is used.
+- `Type`: when hashing the type of an object or its contained types, only the name of `stable_type_name(StructType(T))` is hashed along with any structure as determined by the particular return value of `StructType(T)` (e.g. `eltype` for `ArrayType`). If you hash a type as a value (e.g. `stable_hash(Int)`) the `stable_type_name` of the type itself, rather than `StructType(T)` is used.
 
 - `StructType.DataType` — the fieldnames, fieldtypes and field values are hashed, and if this is a `StructType.UnorderedStruct` those are all sorted in lexicographic order of the fieldnames. `StructType.Struct` is the default sturct-type trait so this is how most objects get hashed.
 
@@ -25,13 +25,13 @@ with a few additional regularizations to ensure e.g. `Core.` values become `Base
 
 - `StructType.CustomStruct` - the object is first `StructType.lower`ed and the result is hashed according to its `StructType`.
 
-- `StructType.NullType`, `StructType.SingletonType`: in this case the `stable_name` of the
+- `StructType.NullType`, `StructType.SingletonType`: in this case the `stable_type_name` of the
   type is hashed, not just its `StructType`.
 
 - `StructType.NumberType`, `StructType.StringType`, `StructType.BoolType`: the
   the type of the object is hashed along with its bytes
 
-- `Function`: functions are a special case and their `stable_name` is hashed
+- `Function`: functions are a special case and their `stable_type_name` is hashed
   along with their fieldnames, fieldtypes and fieldvalues. Functions have
   fields when they are curried, e.g. `==(2)` or when they are defined
   via a `struct` definition.
@@ -53,11 +53,11 @@ By default, an object is hashed according to its `StructType` (ala
 (SructTypes)[https://github.com/JuliaData/StructTypes.jl]), and this can be customized using
 (`StableHashTraits.transformer`)[https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer].
 
-Hashing makes use of (`stable_name`)[https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_name] which is a hash of `string(T)` for type `T`,
+Hashing makes use of (`stable_type_name`)[https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_type_name] which is a hash of `string(T)` for type `T`,
 with a few additional regularizations to ensure e.g. `Core.` values become `Base.` values
 (as what is in `Core` changes across julia versions).
 
-- `Type`: when hashing the type of an object or its contained types, only the name of `stable_name(StructType(T))` is hashed along with any structure as determined by the particular return value of `StructType(T)` (e.g. `eltype` for `ArrayType`). If you hash a type as a value (e.g. `stable_hash(Int)`) the `stable_name` of the type itself, rather than `StructType(T)` is used.
+- `Type`: when hashing the type of an object or its contained types, only the name of `stable_type_name(StructType(T))` is hashed along with any structure as determined by the particular return value of `StructType(T)` (e.g. `eltype` for `ArrayType`). If you hash a type as a value (e.g. `stable_hash(Int)`) the `stable_type_name` of the type itself, rather than `StructType(T)` is used.
 
 - `StructType.DataType` — the fieldnames, fieldtypes and field values are hashed, and if this is a `StructType.UnorderedStruct` those are all sorted in lexicographic order of the fieldnames. `StructType.Struct` is the default sturct-type trait so this is how most objects get hashed.
 
@@ -67,13 +67,13 @@ with a few additional regularizations to ensure e.g. `Core.` values become `Base
 
 - `StructType.CustomStruct` - the object is first `StructType.lower`ed and the result is hashed according to its `StructType`.
 
-- `StructType.NullType`, `StructType.SingletonType`: in this case the `stable_name` of the
+- `StructType.NullType`, `StructType.SingletonType`: in this case the `stable_type_name` of the
   type is hashed, not just its `StructType`.
 
 - `StructType.NumberType`, `StructType.StringType`, `StructType.BoolType`: the
   the type of the object is hashed along with its bytes
 
-- `Function`: functions are a special case and their `stable_name` is hashed
+- `Function`: functions are a special case and their `stable_type_name` is hashed
   along with their fieldnames, fieldtypes and fieldvalues. Functions have
   fields when they are curried, e.g. `==(2)` or when they are defined
   via a `struct` definition.

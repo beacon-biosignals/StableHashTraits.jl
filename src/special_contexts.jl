@@ -1,4 +1,4 @@
-#####
+######
 ##### WithTypeNames
 #####
 
@@ -19,6 +19,7 @@ end
 parent_context(x::WithTypeNames) = x.parent
 type_hash_name(::Type{T}, trait, c::WithTypeNames) where {T} = qualified_name_(T)
 
+# NOTE: from this point below, only the `transformer`-related code is new
 #####
 ##### TablesEq
 #####

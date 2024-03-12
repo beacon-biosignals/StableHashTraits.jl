@@ -3,7 +3,7 @@
 ```@docs
 stable_hash
 HashVersion
-stable_name
+stable_type_name
 StableHashTraits.transformer
 StableHashTraits.Transformer
 StableHashTraits.TransformIdentity

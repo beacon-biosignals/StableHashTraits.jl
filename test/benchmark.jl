@@ -6,6 +6,7 @@ using StableHashTraits
 using DataFrames
 using SHA
 using CRC32c
+using Random
 
 # only `collect` when we have to
 crc(x, s=0x000000) = crc32c(collect(x), s)
@@ -33,6 +34,8 @@ symbols = [Symbol(String(rand('a':'z', 30))) for _ in 1:N]
 structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:N]
 struct_data = [x for st in structs for x in (st.a, st.b)]
 df = DataFrame(; x=1:N, y=1:N)
+missings_data = shuffle!([rand(Int, N); fill(missing, N >> 4)])
+non_missings_data = rand(Int, N + (N >> 4))
 
 # Define a parent BenchmarkGroup to contain our suite
 const suite = BenchmarkGroup()
@@ -42,6 +45,7 @@ benchmarks = [(; name="dataframes", a=data1, b=df);
               (; name="symbols", a=symbols, b=symbols);
               (; name="strings", a=strings, b=strings);
               (; name="tuples", a=data1, b=data2);
+              (; name="missings", a=non_missings_data, b=missings_data);
               (; name="numbers", a=data, b=data)]
 
 for hashfn in (crc, sha256)

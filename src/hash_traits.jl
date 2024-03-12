@@ -51,7 +51,7 @@ StructType_(::Type{Union{}}) = StructTypes.NoStructType()
     type_hash_name(::Type{T}, trait, [context])
 
 The name that is hashed for type `T` when hashing the type of a given value. This defaults
-to `stable_name(trait)`. Users of `StableHashTraits` can implement a method that accepts two
+to `stable_type_name(trait)`. Users of `StableHashTraits` can implement a method that accepts two
 (`T` and `trait`) or three arguments (`T`, `trait`, `context`). The trait is one of the
 `StructTypes` traits and `context` is the hash context (as per the second argument to
 `stable_hash`)
@@ -145,7 +145,7 @@ end
     type_value_name(::Type{T}, trait, [context]) where {T}
 
 The name that is hashed for type `T` when hashing a type as a value (e.g.
-`stable_hash(Int)`). This defaults to `stable_name(trait)`. Users of `StableHashTraits` can
+`stable_hash(Int)`). This defaults to `stable_type_name(trait)`. Users of `StableHashTraits` can
 implement a method that accepts two (`T` and `trait`) or three arguments (`T`, `trait`,
 `context`). The trait is one of the `StructTypes` traits and `context` is the hash context
 (as per the second argument to `stable_hash`)

@@ -37,26 +37,13 @@ struct HashShouldCache{T}
     val::T
 end
 preserves_structure(::typeof(HashShouldCache)) = true
-
-"""
-    HashShouldNotCache(x)
-
-Internal object that signals that `x` should never be cached during a call to
-[`stable_hash`](@ref). Useful in calls to [`transformer`](@ref). Note that the non-caching
-behavior does not apply to the contained values of `x`, so this is rarely useful to
-users, and is not intended to be part of the API.
-"""
-struct HashShouldNotCache{T}
-    val::T
-end
-dont_cache(x::HashShouldCache) = HashShouldNotCache(x.val)
-dont_cache(x) = HashShouldNotCache(x)
-unwrap(x::HashShouldNotCache) = x.val
+unwrap(x::HashShouldCache) = x.val
 unwrap(x) = x
-function stable_hash_helper(x::HashShouldNotCache, hash_state, context,
-                            trait::StructTypes.DataType)
-    return stable_hash_helper(x.val, hash_state, context, trait)
+
+struct NonCachedHash{T}
+    parent::T
 end
+parent_context(x::NonCachedHash) = x.parent
 
 # we have to somehow decide before hand which things we want to recurisvley hash and which
 # we don't. Many repeated recurisve hashes are expensive, especially for SHA-based hashing,
@@ -73,17 +60,19 @@ Hash the value of object x to the hash_state for the given context and hash trai
 Caches larger values.
 """
 function hash_value!(x::T, hash_state, context::CachedHash, trait) where {T}
-    if !(x isa HashShouldNotCache) &&
-       (x isa HashShouldCache || (isbitstype(T) && sizeof(x) >= CACHE_OBJECT_THRESHOLD))
+    if x isa HashShouldCache || (!isbitstype(T) && sizeof(x) >= CACHE_OBJECT_THRESHOLD)
         bytes = get!(context.value_cache, x) do
             cache_state = similar_hash_state(hash_state)
-            stable_hash_helper(dont_cache(x), cache_state, context, trait)
+            stable_hash_helper(unwrap(x), cache_state, NonCachedHash(context), trait)
             return reinterpret(UInt8, asarray(compute_hash!(cache_state)))
         end
         return update_hash!(hash_state, bytes, context)
     else
-        stable_hash_helper(unwrap(x), hash_state, context, trait)
+        stable_hash_helper(x, hash_state, context, trait)
     end
+end
+function hash_value!(x::DataType, hash_state, context::CachedHash, trait)
+    stable_hash_helper(x, hash_state, context, trait)
 end
 
 """
