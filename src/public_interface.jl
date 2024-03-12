@@ -159,7 +159,9 @@ struct MyArray <: AbstractVector{Int}
     meta::Dict{String, String}
 end
 # other array methods go here...
-StableHashTraits.transformer(::Type{<:MyArray}) = Transformer(x -> (x.meta, TransformIdentity(x)))
+function StableHashTraits.transformer(::Type{<:MyArray})
+    return Transformer(x -> (x.meta, TransformIdentity(x)); preserves_structure=true)
+end
 ```
 
 In this example we hash both some metadata about a custom array, and each of the elements of

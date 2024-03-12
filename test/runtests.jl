@@ -358,12 +358,16 @@ include("setup_tests.jl")
                     ys = [(; n) for n in Char.(1:10)]
                     @test test_hash(xs) != test_hash(ys)
 
-                    # union-splitting code-path
+                    # union-splitting tests
                     xs = [fill(missing, 3); collect(1:10)]
                     ys = [collect(1:10); fill(missing, 3)]
                     @test test_hash(xs) != test_hash(ys)
 
-                    # TODO: we need to tes tmore edge cases with union splitting
+                    xs = Union{Int32,UInt32,Char}[Int32(1), Int32(1), UInt32(1), UInt32(1),
+                                                  Char(1), Char(1)]
+                    ys = Union{Int32,UInt32,Char}[Int32(1), UInt32(1), Int32(1), Char(1),
+                                                  UInt32(1), Char(1)]
+                    @test test_hash(xs) != test_hash(ys)
                 end
             end
 
@@ -374,7 +378,7 @@ include("setup_tests.jl")
                 test_hash(x)
                 @test cache_type_hashed == 1
 
-                x = rand(Int8, StableHashTraits.CACHE_OBJECT_THRESHOLD + 1)
+                x = rand(Int8, StableHashTraits.CACHE_OBJECT_THRESHOLD)
                 context = CachedHash(ctx)
                 test_hash(x, context)
                 @test !isempty(context.value_cache)
@@ -506,14 +510,9 @@ end # @testset
 @testset "Aqua" begin
     # NOTE: in Julia 1.9 and older we intentionally do not load `PikaParser`
     # as it is only used when transforming type strings in 1.10
-
-    # NOTE: there should be two "unbound" args according to these tests from the
-    # `transformer` methods for union splitting of arrays. From what I can tell these need
-    # to be present for the methods to properly match to the right types
     if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
-        Aqua.test_all(StableHashTraits; unbound_args=(; broken=true))
+        Aqua.test_all(StableHashTraits)
     else
-        Aqua.test_all(StableHashTraits; stale_deps=(; ignore=[:PikaParser]),
-                      unbound_args=(; broken=true))
+        Aqua.test_all(StableHashTraits; stale_deps=(; ignore=[:PikaParser]))
     end
 end
