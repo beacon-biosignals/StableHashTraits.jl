@@ -95,9 +95,7 @@ function end_nested_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
     return hash_state
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
-HashState(x::SHA.SHA_CTX, ctx) = x
 similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
-hash_type(::T) where {T<:SHA.SHA_CTX} = Vector{UInt8}
 
 #####
 ##### RecursiveHashState: handles a function of the form hash64(bytes, [old_hash])
@@ -125,9 +123,7 @@ function end_nested_hash!(fn::RecursiveHashState, nested::RecursiveHashState)
     return update_hash!(fn, reinterpret(UInt8, [nested.val;]))
 end
 compute_hash!(x::RecursiveHashState) = x.val
-HashState(x::RecursiveHashState) = x
 similar_hash_state(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
-hash_type(::RecursiveHashState{<:Any,T}) where {T} = T
 
 #####
 ##### BufferedHashState: wrapper that buffers bytes before passing them to the hash algorithm
@@ -151,7 +147,6 @@ function BufferedHashState(state, size=HASH_BUFFER_SIZE)
     return BufferedHashState(state, similar_hash_state(state), 0, bytes, delimiters, size,
                              io)
 end
-hash_type(x::BufferedHashState) = hash_type(x.content_hash_state)
 
 # flush bytes that are stored internally to the underlying hasher
 function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
@@ -199,7 +194,6 @@ function compute_hash!(x::BufferedHashState)
 
     return compute_hash!(state)
 end
-HashState(x::BufferedHashState, ctx) = x
 function similar_hash_state(x::BufferedHashState)
     return BufferedHashState(similar_hash_state(x.content_hash_state), x.limit)
 end

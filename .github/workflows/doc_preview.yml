@@ -1,5 +1,3 @@
-# TODO: does this look different for public reposSS
-# remove PR previews once they're merged
 # <https://juliadocs.github.io/Documenter.jl/dev/man/hosting/#gh-pages-Branch>
 name: Doc Preview Cleanup
 on:

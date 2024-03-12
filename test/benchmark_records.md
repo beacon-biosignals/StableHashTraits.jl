@@ -80,18 +80,18 @@ macros to guarantee that their hashes are computed at compile time.
 # Version 1.2:
 
 Version 1.2 abandones `@generated` functions and the goal of perfectly hashing type names
-and type parameters and it redesigns the API for customizing hashes. The hope is that this
-will lead to more stable and predictable hash behavior.
+and type parameters and it redesigns the API for customizing hashes. The goal of these
+changes is to have more stable and predictable hash behavior.
 
 A relatively naive implementation of this API, where parts of the hash that are a function
-of the type are copmuted every time  an object of that type is hashed leads to `trait`
+of the type are computed every time an object of that type is hashed leads to `trait`
 columns in the table below on order of x100-200 slower than the `base` columns. Caching
 those parts of the hash that are a function of only the type brings this down to about
 x20-60 times slower (depending on the row). It appears that the calls to `get!` on the
 cached type hashes are very slow in comparison to the cost for re-hashing the type each
 time.
 
-The implementation used in 1.2 reduces the times in this table above what caching can
+The implementation used in 1.2 reduces the times in this table beyond what what caching can
 accomplish alone by hoisting type hashes outside of loops where possible (and still caching
 their results for future use). For example when hashing `Vector{Int}` the hash of the type
 `Int` is computed only when hashing the array type, not when hashing the individual

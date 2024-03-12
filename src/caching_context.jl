@@ -84,9 +84,6 @@ Hash type `T` in the given context to `hash_state`. The result is cached and fut
 calls to `hash_type!` will hash the cached result.
 """
 hash_type!(hash_state, x, key) = hash_type!(hash_state, parent_context(x), key)
-function hash_type!(hash_state, ::Nothing, key)
-    throw(ArgumentError("`hash_type! is not supported"))
-end
 function hash_type!(hash_state, context::CachedHash, ::Type{T}) where {T}
     bytes = get!(context.type_cache, T) do
         type_context = TypeHashContext(context)

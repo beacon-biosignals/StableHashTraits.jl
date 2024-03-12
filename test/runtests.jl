@@ -233,6 +233,7 @@ include("setup_tests.jl")
                 end
             end
 
+            # TODO: test singleton-type and custom struct
             @testset "Custom hash_method" begin
                 @test @ConstantHash(5).constant isa UInt64
                 @test @ConstantHash("foo").constant isa UInt64

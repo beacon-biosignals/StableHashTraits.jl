@@ -168,7 +168,6 @@ In this example we hash both some metadata about a custom array, and each of the
 struct TransformIdentity{T}
     val::T
 end
-HashType(x::TransformIdentity) = StructTypes.StructType(x.val)
 function transformer(::Type{<:TransformIdentity}, ::HashVersion{3})
     return Transformer(x -> x.val; preserves_structure=true)
 end
