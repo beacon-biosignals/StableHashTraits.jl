@@ -123,12 +123,15 @@ end
 Without this definition `MyType{Int,:foo}(1)` would hash to the same value as
 `MyType{Int,:bar}(2)`.
 
-!!! warn "Hash all expected type structure!" Overloading `type_structure` improperly can
-    cause the assumptions of type-hash-hoisting to be violated. You *must*:
+!!! warning "Hash all expected type structure!"
+    Overloading `type_structure` improperly can cause the assumptions of
+    type-hash-hoisting to be violated. You *must*:
+
     - return `fieldtypes` as part of `StructTypes.DataType`
     - return `eltype` as part of `StructType.ArrayType`
     - return `eltype` of `StructTypes.keyvaluepairs` of a `StructTypes.DictType`
-    Otherwise the hashes of your type may collied in unexpected ways.
+
+    Otherwise the hashes of your type may collide in unexpected ways.
 
 """
 function type_structure(::Type{T}, trait, context) where {T}
