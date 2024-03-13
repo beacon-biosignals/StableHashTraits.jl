@@ -6,6 +6,33 @@ hash_trait(x::Transformer, y) = x.result_method
 hash_trait(::Transformer{<:Any,Nothing}, y) = hash_trait(y)
 hash_trait(x) = StructType(x)
 
+function check_hash_method(x, transform, context)
+    # because of how `hash_method` uses `NotImplemented` we can leverage
+    # this to check for deprecated API usage
+    if is_implemented(hash_method(x, context)) && transform.fn === identity &&
+        isnothing(transform.result_method)
+         @warn """`hash_method` is implemented for type
+
+            $(typeof(x))
+
+            when in context of type
+
+            $(typeof(context))
+
+            No specialized `transformer` method is defined for this type. This object's
+            StableHashTraits customization may be deprecated, and may not work properly for
+            HashVersion{3}. If the default method for `transformer` is appropriate, you can
+            prevent this warning from appearing by implementing a method similar to the
+            following:
+
+            function hash_method(::MyType, context::SomeContextType)
+                StableHashTraits.root_version(context) > 2 && return StableHashTraits.NotImplemented()
+                # implement `hash_method` for `MyType`
+            end
+            """ _id=Symbol(qualified_name_(typeof(x))) maxlog=1
+    end
+end
+
 # how we hash when we haven't hoisted the type hash out of a loop
 function hash_type_and_value(x, hash_state, context)
     transform = transformer(typeof(x), context)::Transformer
@@ -13,6 +40,7 @@ function hash_type_and_value(x, hash_state, context)
         hash_state = hash_type!(hash_state, context, typeof(x))
     end
     tx = transform(x)
+    check_hash_method(x, transform, context)
     if !transform.preserves_structure
         hash_state = hash_type!(hash_state, context, typeof(tx))
     end
@@ -22,6 +50,7 @@ end
 # how we hash when the type hash can be hoisted out of a loop
 function hash_value(x, hash_state, context, transform::Transformer)
     tx = transform(x)
+    check_hash_method(x, transform, context)
     return hash_value!(tx, hash_state, context, hash_trait(transform, tx))
 end
 
@@ -176,7 +205,8 @@ end
 #####
 
 # remember: functions can have fields; in general StructTypes doesn't assume these are
-# serialized but here we want that to happen by default
+# serialized but here we want that to happen by default, so e.g. ==(2) will properly hash
+# both the name of `==` and `2`.
 function transformer(::Type{<:Function}, ::HashVersion{3})
     return Transformer(identity, StructTypes.UnorderedStruct())
 end

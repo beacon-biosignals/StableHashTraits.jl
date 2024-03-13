@@ -493,6 +493,7 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # arguments.
     default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
     is_implemented(default_method) && return default_method
+    root_version(c) > 2 && return NotImplemented()
     Base.isprimitivetype(T) && return WriteHash()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
@@ -546,3 +547,17 @@ function hash_method(fn::Base.Fix2, c::HashVersion{1})
 end
 hash_method(fn::Base.Fix1, c::HashVersion) = (@ConstantHash("Base.Fix1"), StructHash())
 hash_method(fn::Base.Fix2, c::HashVersion) = (@ConstantHash("Base.Fix2"), StructHash())
+
+# ensure HashVersion{3} signals that it doesn't support `hash_method`
+hash_method(::NamedTuple, c::HashVersion{3}) = NotImplemented()
+hash_method(::AbstractRange, c::HashVersion{3}) = NotImplemented()
+hash_method(::AbstractArray, c::HashVersion{3}) = NotImplemented()
+hash_method(::AbstractString, c::HashVersion{3}) = NotImplemented()
+hash_method(::AbstractDict, c::HashVersion{3}) = NotImplemented()
+hash_method(::Symbol, c::HashVersion{3}) = NotImplemented()
+hash_method(::Tuple, ::HashVersion{3}) = NotImplemented()
+hash_method(::Type, ::HashVersion{3}) = NotImplemented()
+hash_method(::Function, ::HashVersion{3}) = NotImplemented()
+hash_method(::AbstractSet, ::HashVersion{3}) = NotImplemented()
+hash_method(::Base.Fix1, ::HashVersion{3}) = NotImplemented()
+hash_method(::Base.Fix2, ::HashVersion{3}) = NotImplemented()

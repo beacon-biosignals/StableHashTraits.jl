@@ -424,6 +424,14 @@ include("setup_tests.jl")
         @test_deprecated(UseTable())
         @test_deprecated(HashVersion{1}())
         @test_deprecated(HashVersion{2}())
+
+        # verify that if a type only has implementations for `hash_method`
+        # and not `transformer` they'll get a warning
+        @test_logs (:warn, r"deprecated") stable_hash(TestType(1,2); version=3)
+        # verify that if there are appropriate definitions of `transformer` and/or
+        # `hash_method` this warning doesn't show up
+        @test_logs stable_hash(TestType4(1,2); version=3)
+        @test_logs stable_hash(TestType2(1,2); version=3)
     end
 
     if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
