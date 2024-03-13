@@ -16,7 +16,8 @@ write(joinpath(@__DIR__, "src", "index.md"), index_str)
 
 pages = ["Manual" => "index.md",
          "API" => "api.md",
-         "Deprecated" => "deprecated.md"]
+         "Deprecated" => "deprecated.md",
+         "Internal Functions" => "internal.md"]
 
 source_files = readdir(joinpath(@__DIR__, "src"))
 
