@@ -48,11 +48,11 @@ end
 StableHashTraits.hash_method(::TestType3) = StructHash(:ByName)
 function StableHashTraits.hash_method(::TestType4, context::HashVersion{V}) where {V}
     V > 2 && return StableHashTraits.NotImplemented()
-    StructHash(propertynames => getproperty)
+    return StructHash(propertynames => getproperty)
 end
 function StableHashTraits.hash_method(::TestType4, context)
     StableHashTraits.root_version(context) > 2 && return StableHashTraits.NotImplemented()
-    StructHash(propertynames => getproperty)
+    return StructHash(propertynames => getproperty)
 end
 StableHashTraits.hash_method(::TypeType) = StructHash()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))

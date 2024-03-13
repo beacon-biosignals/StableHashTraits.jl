@@ -10,26 +10,26 @@ function check_hash_method(x, transform, context)
     # because of how `hash_method` uses `NotImplemented` we can leverage
     # this to check for deprecated API usage
     if is_implemented(hash_method(x, context)) && transform.fn === identity &&
-        isnothing(transform.result_method)
-         @warn """`hash_method` is implemented for type
+       isnothing(transform.result_method)
+        @warn """`hash_method` is implemented for type
 
-            $(typeof(x))
+           $(typeof(x))
 
-            when in context of type
+           when in context of type
 
-            $(typeof(context))
+           $(typeof(context))
 
-            No specialized `transformer` method is defined for this type. This object's
-            StableHashTraits customization may be deprecated, and may not work properly for
-            HashVersion{3}. If the default method for `transformer` is appropriate, you can
-            prevent this warning from appearing by implementing a method similar to the
-            following:
+           No specialized `transformer` method is defined for this type. This object's
+           StableHashTraits customization may be deprecated, and may not work properly for
+           HashVersion{3}. If the default method for `transformer` is appropriate, you can
+           prevent this warning from appearing by implementing a method similar to the
+           following:
 
-            function hash_method(::MyType, context::SomeContextType)
-                StableHashTraits.root_version(context) > 2 && return StableHashTraits.NotImplemented()
-                # implement `hash_method` for `MyType`
-            end
-            """ _id=Symbol(qualified_name_(typeof(x))) maxlog=1
+           function hash_method(::MyType, context::SomeContextType)
+               StableHashTraits.root_version(context) > 2 && return StableHashTraits.NotImplemented()
+               # implement `hash_method` for `MyType`
+           end
+           """ _id = Symbol(qualified_name_(typeof(x))) maxlog = 1
     end
 end
 
