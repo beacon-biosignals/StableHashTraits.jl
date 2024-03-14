@@ -10,6 +10,7 @@ using DataFrames
 using Tables
 using AWSS3
 using Pluto
+using StructTypes
 
 struct TestType
     a::Any
@@ -41,10 +42,23 @@ end
 
 StableHashTraits.hash_method(::TestType) = StructHash()
 StableHashTraits.hash_method(::TestType2) = FnHash(qualified_name), StructHash()
+function StableHashTraits.transformer(::Type{<:TestType2})
+    return StableHashTraits.Transformer(x -> (x.a, x.b); preserves_structure=true)
+end
 StableHashTraits.hash_method(::TestType3) = StructHash(:ByName)
-StableHashTraits.hash_method(::TestType4) = StructHash(propertynames => getproperty)
+function StableHashTraits.hash_method(::TestType4, context::HashVersion{V}) where {V}
+    V > 2 && return StableHashTraits.NotImplemented()
+    return StructHash(propertynames => getproperty)
+end
+function StableHashTraits.hash_method(::TestType4, context)
+    StableHashTraits.root_version(context) > 2 && return StableHashTraits.NotImplemented()
+    return StructHash(propertynames => getproperty)
+end
 StableHashTraits.hash_method(::TypeType) = StructHash()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
+
+StableHashTraits.type_hash_name(::Type{<:TestType2}) = "TestType2"
+StructTypes.StructType(::Type{<:TestType4}) = StructTypes.OrderedStruct()
 
 struct NonTableStruct
     x::Vector{Int}
@@ -97,13 +111,23 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = IterateHash()
 struct ExtraTypeParams{P,T}
     value::T
 end
+function StableHashTraits.type_structure(::Type{T}, ::StructTypes.DataType,
+                                         ::HashVersion{3}) where {P,U,
+                                                                  T<:ExtraTypeParams{P,U}}
+    return (P, U)
+end
 
 struct BadHashMethod end
 StableHashTraits.hash_method(::BadHashMethod) = "garbage"
+StableHashTraits.transformer(::Type{<:BadHashMethod}) = "garbage"
+
+struct Singleton1 end
+struct Singleton2 end
 
 struct BadRootContext end
 StableHashTraits.parent_context(::BadRootContext) = nothing
 StableHashTraits.hash_method(::Int, ::BadRootContext) = WriteHash()
+StableHashTraits.transformer(::Type{Int}, ::BadRootContext) = StableHashTraits.Transformer()
 
 mutable struct CountedBufferState
     state::StableHashTraits.BufferedHashState
@@ -111,6 +135,9 @@ mutable struct CountedBufferState
 end
 CountedBufferState(x::StableHashTraits.BufferedHashState) = CountedBufferState(x, Int[])
 StableHashTraits.HashState(x::CountedBufferState, ctx) = x
+function StableHashTraits.similar_hash_state(x::CountedBufferState)
+    return CountedBufferState(StableHashTraits.similar_hash_state(x.state), Int[])
+end
 
 function StableHashTraits.update_hash!(x::CountedBufferState, args...)
     x.state = StableHashTraits.update_hash!(x.state, args...)
@@ -132,3 +159,38 @@ end
 
 struct BadShowSyntax end
 Base.show(io::IO, ::Type{<:BadShowSyntax}) = print(io, "{")
+
+struct CachingType
+    data::Vector{Int}
+end
+cache_type_hashed = 0
+
+struct ContainerType{T}
+    x::Int
+    ref::T
+end
+
+function StableHashTraits.transformer(::Type{<:CachingType})
+    return StableHashTraits.Transformer(StableHashTraits.HashShouldCache)
+end
+
+function StableHashTraits.stable_hash_helper(x::CachingType, hash_state, context,
+                                             st::StructTypes.DataType)
+    global cache_type_hashed += 1
+    return invoke(StableHashTraits.stable_hash_helper,
+                  Tuple{Any,Any,Any,StructTypes.DataType}, x, hash_state,
+                  context, st)
+end
+
+struct NonCachingType
+    data::Vector{Int}
+end
+non_cache_type_hashed = 0
+
+function StableHashTraits.stable_hash_helper(x::NonCachingType, hash_state, context,
+                                             st::StructTypes.DataType)
+    global non_cache_type_hashed += 1
+    return invoke(StableHashTraits.stable_hash_helper,
+                  Tuple{Any,Any,Any,StructTypes.DataType}, x, hash_state,
+                  context, st)
+end

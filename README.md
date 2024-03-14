@@ -1,19 +1,21 @@
 # StableHashTraits
 
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
- [![GitHub Actions](https://github.com/beacon-biosignals/StableHashTraits.jl/workflows/CI/badge.svg)](https://github.com/beacon-biosignals/StableHashTraits.jl/actions/workflows/CI.yml)
- [![codecov](https://codecov.io/gh/beacon-biosignals/StableHashTraits.jl/branch/main/graph/badge.svg?token=4O1YO0GMNM)](https://codecov.io/gh/beacon-biosignals/StableHashTraits.jl)
+[![GitHub Actions](https://github.com/beacon-biosignals/StableHashTraits.jl/workflows/CI/badge.svg)](https://github.com/beacon-biosignals/StableHashTraits.jl/actions/workflows/CI.yml)
+[![docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://beacon-biosignals.github.io/StableHashTraits.jl/dev)
+[![docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://beacon-biosignals.github.io/StableHashTraits.jl/stable)
+[![codecov](https://codecov.io/gh/beacon-biosignals/StableHashTraits.jl/branch/main/graph/badge.svg?token=4O1YO0GMNM)](https://codecov.io/gh/beacon-biosignals/StableHashTraits.jl)
 [![Code Style: YASGuide](https://img.shields.io/badge/code%20style-yas-violet.svg)](https://github.com/jrevels/YASGu)
 
-
-The aim of StableHashTraits is to make it easy to compute a stable hash of any Julia value
-with minimal boilerplate using trait-based dispatch; here, "stable" means the value will not
-change across Julia versions (or between Julia sessions).
+The aim of StableHashTraits is to make it easy to compute a stable hash of any Julia value with minimal boilerplate using trait-based dispatch; here, "stable" means the value will not change across Julia versions (or between Julia sessions).
 
 For example:
 
+<!--The START_ and STOP_ comments are used to extract content that is also repeated in the documentation-->
+<!--START_EXAMPLE-->
 ```julia
 using StableHashTraits
+using StableHashTraits: Transformer
 using Dates
 
 struct MyType
@@ -21,94 +23,59 @@ struct MyType
    metadata::Dict{Symbol, Any}
 end
 # ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
-StableHashTraits.stable_hash(::MyType) = FnHash(x -> x.data)
+StableHashTraits.transformer(::Type{<:MyType}) = Transformer(x -> (; x.data);
+                                                             preserves_structure=true)
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
-stable_hash(a; version=2) == stable_hash(b; version=2) # true
+stable_hash(a; version=3) == stable_hash(b; version=3) # true
 ```
+<!--END_EXAMPLE-->
 
-StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking
-versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an
-object's hash in this case would be considered a bug.
+Useres can define a method of `transformer` to customize how an object is hashed. It should return a function wrapped in `Transformer`. During hashing, this function is called and its result is the value that is actually hashed. (The `preserves_structure` keyword shown above is an optional flag that can be used to further optimize performance of your transformer in some cases; you can do this any time the function is type stable, but some type-instable functions are also possible. See the documentation for details).
 
-> ⚠️ In Julia 1.10 the stability of hashes in `StableHashTraits` is broken; 1.1.5 corrects
-> this bug. Versions 1.1.4 are to be retroactively marked as incompatible with Julia 1.10.
-> Please use version 1.1.5, or a higher version, when using Julia 1.10. More precisely:
-> Hashes in 1 - 1.1.4 of StableHashTraits will generate the correct hashes on Julia 1.6 -
-> 1.9 but an incorrect hash in 1.10. Hashes in 1.1.5 will generate the correct hash for
-> Julia 1.6 - 1.10. (The cause of this bug was the change in the string representation of
-> named tuples, so any hashed objects that include the type of a named tuple changed).
+StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
-## Why use `stable_hash` instead of `Base.hash`?
+> ⚠️ Hash versions 3 constitutes a substantial redesign of StableHashTraits so as to avoid reliance on some unstable Julia internals. Hash versions 1 and 2 are deprecated and will be removed in a soon-to-be released StableHashTraits@2.0. Hash version 3 will remain unchanged in this 2.0 release. Hash version 1 is the default version if you don't specify a version.
 
-This package can be useful any time one of the following holds:
+<!--The START_ and STOP_ comments are used to extract content that is also repeated in the documentation-->
+<!--START_OVERVIEW-->
+## Use Case and Design Rationale
 
-- you want to ensure the hash value will not change when you update Julia or start a new session
-- you want to compute a hash for an object that does not have `hash` defined
-- you want to customize how the hash works, within a specific scope
+StableHashTraits is designed to be used in cases where there is an object you wish to serialize in a content-addressed cache. How and when objects pass the same input to a hashing algorithm is meant to be predictable and well defined, so that the user can reliably define methods of `transformer` to modify this behavior.
 
-This is useful for content-addressed caching, in which e.g. some function of a value is stored at a location determined by a hash. Given the value, one can recompute the hash to determine where to look to see if the function evaluation on that value has already been cached.
+## What gets hashed?
 
-## Details
+By default, an object is hashed according to its `StructType` (ala
+[SructTypes](https://github.com/JuliaData/StructTypes.jl)), and this can be customized using
+[`StableHashTraits.transformer`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer).
 
-You compute hashes using `stable_hash`. This is called on the object you want to hash, and
-(optionally) a second argument called the context. The context you use affects how hashing
-occurs (it defaults to `HashVersion{1}()`). It is generally recommended that you avoid
-`HashVersion{1}()`, favoring `HashVersion{2}()` as it includes substantial speed
-improvements. See the final section below for details on
-how you can implement your own contexts. When you do not need to include a custom context, a short-hand for specifying
-`HashVersion{2}()` is to call `stable_hash(x; version=2)`.
+Hashing makes use of [`stable_type_name`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_type_name) which generates `string(parentmodule(T)) * "." * string(nameof(T))` for type `T`, with a few additional regularizations to ensure e.g. `Core.` values become `Base.` values (as what is in `Core` vs. `Base` changes across julia versions). This function also ensures that no anonymous values (those that include `#`) are hashed, as these are not stable across sessions.
 
-There are sensible defaults for `stable_hash` that aim to ensure that if two values are
-different, the input to the hash algorithm will differ.
+- `Type`: when hashing the type of an object or its contained types, only the name of `stable_type_name(StructType(T))` is hashed along with any structure as determined by the particular return value of `StructType(T)` (e.g. `eltype` for `ArrayType`). If you hash a type as a value (e.g. `stable_hash(Int)`) the `stable_type_name` of the type itself, rather than `StructType(T)` is used.
 
-You can customize the hash behavior for particular types by implementing the trait
-`StableHashTraits.hash_method`. It accepts the object you want to hash and, as an optional
-second argument, the context. If you define a method that does not accept a context, it will
-be used in all contexts. Any method of `hash_method` should simply return one of the
-following values, typically based only on the *type* of its input.
+- `StructType.DataType` — the `fieldnames`, `fieldtypes` and the field values are hashed, and if this is a `StructType.UnorderedStruct` those are all sorted in lexicographic order of the fieldnames. `StructType.UnorderedStruct` is the default sturct-type trait so this is how most objects get hashed.
 
-<!-- The text between START_ and END_ comments are extracted from this readme and inserted into julia docstrings -->
-<!-- START_HASH_TRAITS -->
-1. `WriteHash()`: writes the object to a binary format using `StableHashTraits.write(io, x)`
-    and takes a hash of that. `StableHashTraits.write(io, x)`
-    falls back to `Base.write(io, x)` if no specialized methods are defined for x.
-2. `IterateHash()`: assumes the object is iterable and finds a hash of all elements
-3. `StructHash([pair = (fieldnames ∘ typeof) => getfield], [order])`: hash the structure of
-    the object as defined by a sequence of pairs. How precisely this occurs is determined by
-    the two arguments:
-      - `pair` Defines how fields are extracted; the default is
-        `fieldnames ∘ typeof => getfield`
-        but this could be changed to e.g. `propertynames => getproperty` or
-        `Tables.columnnames => Tables.getcolumn`. The first element of the pair is a
-        function used to compute a list of keys and the second element is a two argument
-        function used to extract the keys from the object.
-      - `order` can be `:ByOrder` (the default)—which sorts by the order returned by
-        `pair[1]`—or `:ByName`—which sorts by lexigraphical order.
-4. `FnHash(fn, [method])`: hash the result of applying `fn` to the given object. Optionally,
-   use `method` to hash the result of `fn`, otherwise calls `hash_method` on the result to
-   determine how to hash it. There are two built-in functions commonly used with
-   `FnHash`.
-    - `stable_typename_id`: Get the qualified name of an object's type, e.g. `Base.String` and return 64 bit hash of this string
-    - `stable_type_id`: Get the qualified name and type parameters of a type, e.g.
-       `Base.Vector{Int}`, and return a 64 bit hash of this string.
-5. `@ConstantHash(x)`: at compile time, hash the literal (constant) string or number using
-    `sha256` and include the first 64 bits as a constant number that is recursively hashed
-    using the `WriteHash` method.
-6. `Tuple`: apply multiple methods to hash the object, and then recursively hash their
-    results. For example: `(@ConstantHash("header"), StructHash())` would compute a hash for
-    both the string `"header"` and the fields of the object, and then recursively hash
-    these two hashes.
+- `StructType.ArrayType` — the `eltype` is hashed and elements are hashed using `iterate`
 
-Your hash will be stable if the output for the given method remains the same: e.g. if
-`write` is the same for an object that uses `WriteHash`, its hash will be the same; if the
-fields are the same for `StructHash`, the hash will be the same; etc...
+- `StructType.DictType` — the `eltype` of the keys and values are hashed by iterating over `StructTypes.keyvaluepairs`
 
-Missing from the above list is one final, advanced, trait: `HashAndContext` which can be used to change the context within the scope of a given object. You can learn more about contexts below.
+- `StructType.CustomStruct` - the object is first `StructType.lower`ed and the result is hashed according to its `StructType`.
 
-<!-- END_HASH_TRAITS -->
+- `StructType.NullType`, `StructType.SingletonType`: in these cases the `stable_type_name` of the type `T` is hashed rather than `StructType(T)`
+
+- `StructType.NumberType`, `StructType.StringType`, `StructType.BoolType`: the the type of the object is hashed along with its bytes
+
+- `Function`: functions are a special case and their `stable_type_name` is hashed along with their fieldnames, fieldtypes and fieldvalues. Functions have fields when they are curried, e.g. `==(2)` or when they are defined via a `struct` definition.
+
+<!--END_OVERVIEW-->
 
 ## Breaking changes
+
+### In 1.2
+
+This release includes a new hash version 3 that has breaking API changes, documeted above.
+The prior API is deprecated. In version 2, which will be released in relatively short order,
+only hash version 3 will be available
 
 ### In 1.1
 
