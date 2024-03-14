@@ -49,7 +49,7 @@ By default, an object is hashed according to its `StructType` (ala
 [SructTypes](https://github.com/JuliaData/StructTypes.jl)), and this can be customized using
 [`StableHashTraits.transformer`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer).
 
-Hashing makes use of [`stable_type_name`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_type_name) which is a hash of `string(parentmodule(T)) * string(nameof(T))` for type `T`, with a few additional regularizations to ensure e.g. `Core.` values become `Base.` values (as what is in `Core` vs. `Base` changes across julia versions). This function also ensures that no anonymous values (those that include `#`) are hashed, as these are not stable across sessions.
+Hashing makes use of [`stable_type_name`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_type_name) which generates `string(parentmodule(T)) * "." * string(nameof(T))` for type `T`, with a few additional regularizations to ensure e.g. `Core.` values become `Base.` values (as what is in `Core` vs. `Base` changes across julia versions). This function also ensures that no anonymous values (those that include `#`) are hashed, as these are not stable across sessions.
 
 - `Type`: when hashing the type of an object or its contained types, only the name of `stable_type_name(StructType(T))` is hashed along with any structure as determined by the particular return value of `StructType(T)` (e.g. `eltype` for `ArrayType`). If you hash a type as a value (e.g. `stable_hash(Int)`) the `stable_type_name` of the type itself, rather than `StructType(T)` is used.
 
