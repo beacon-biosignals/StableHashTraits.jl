@@ -13,6 +13,8 @@ StableHashTraits.HashShouldCache
 StableHashTraits.type_hash_name
 StableHashTraits.type_value_name
 StableHashTraits.type_structure
+StableHashTraits.is_ordered
+StableHashTraits.hash_sort_by
 StableHashTraits.parent_context
 StableHashTraits.root_version
 TablesEq
