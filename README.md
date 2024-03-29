@@ -55,9 +55,10 @@ Hashing makes use of [`stable_type_name`](https://beacon-biosignals.github.io/St
 
 - `StructType.DataType` — the `fieldnames`, `fieldtypes` and the field values are hashed, and if this is a `StructType.UnorderedStruct` those are all sorted in lexicographic order of the fieldnames. `StructType.UnorderedStruct` is the default sturct-type trait so this is how most objects get hashed.
 
-- `StructType.ArrayType` — the `eltype` is hashed and elements are hashed using `iterate`
+- `StructType.ArrayType` — the `eltype` is hashed and elements are hashed using `iterate`.
+If [`StableHashTraits.is_ordered`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.is_ordered) returns `false` the elements are first `sort`ed according to [`StableHashTraits.hash_sort_by`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.hash_sort_by).
 
-- `StructType.DictType` — the `eltype` of the keys and values are hashed by iterating over `StructTypes.keyvaluepairs`
+- `StructType.DictType` — the `eltype` of the keys and values are hashed by iterating over `StructTypes.keyvaluepairs`. If [`StableHashTraits.is_ordered`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.is_ordered) returns `false` the pairs of the dictionary are first `sort`ed according their keys using [`StableHashTraits.hash_sort_by`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.hash_sort_by).
 
 - `StructType.CustomStruct` - the object is first `StructType.lower`ed and the result is hashed according to its `StructType`.
 
@@ -67,6 +68,14 @@ Hashing makes use of [`stable_type_name`](https://beacon-biosignals.github.io/St
 
 - `Function`: functions are a special case and their `stable_type_name` is hashed along with their fieldnames, fieldtypes and fieldvalues. Functions have fields when they are curried, e.g. `==(2)` or when they are defined via a `struct` definition.
 
+- `AbstractRange`: though their `StructType` is `AbstractArray`, abstract ranges are treated as `UnorderedStruct` objects for purposes of hashing, as this normally leads to a more effeicient hash computation.
+
+- `AbstractArray`: in addition to hashing the `eltype`, any abstract array type with a
+concrete dimension (`AbstractArray{<:Any, 3}` but not `AbstractArray{Int}`) will hash
+this dimension. The size of an array is hashed along with the array contents.
+
+> [!WARNING]
+> Some type parameters are ignored by this hashing scheme; specifically, the only parameters hashed are those specified above. This means, for example, that a parameter not included in `fieldtype(T)` for `StructType(T) == StructTypes.Struct` will be ignored during hashing. You can use [`StableHashTraits.type_structure`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.type_structure) to explicitly hash additional type parameters for a type.
 <!--END_OVERVIEW-->
 
 ## Breaking changes

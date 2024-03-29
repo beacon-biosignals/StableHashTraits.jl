@@ -71,6 +71,7 @@ end
 
 function transformer(::Type{T}, context::TypeHashContext) where {T<:Type}
     return Transformer(T -> (type_hash_name(T, StructType_(T), context),
+                             internal_type_structure(T, StructType_(T)),
                              type_structure(T, StructType_(T), context)))
 end
 @inline StructType_(T) = StructType(T)
@@ -88,28 +89,27 @@ to `stable_type_name(trait)`. Users of `StableHashTraits` can implement a method
 function type_hash_name(::Type{T}, trait, context) where {T}
     return type_hash_name(T, trait, parent_context(context))
 end
-type_hash_name(::Type{T}, trait, ::Nothing) where {T} = type_hash_name(T, trait)
+type_hash_name(::Type{T}, trait, ::HashVersion{3}) where {T} = type_hash_name(T, trait)
 type_hash_name(::Type{T}, trait) where {T} = qualified_name_(trait)
 
 """
     type_structure(::Type{T}, trait, [context])
 
-Get the types and symbols that represent the structure of `T`. This should return the
-relevant, contained types from `T` that should be hashed. The trait is one of the
-`StructTypes` traits and `context` is the hash context (as per the second argument to
-`stable_hash`). The second must be included as part of a method definition, but `context` is
-optional.
-
-For example, this is the definition for `ArrayType` objects.
-
-```julia
-function type_structure(::Type{T}, ::StructTypes.ArrayType) where {T}
-    return eltype(T)
-end
-```
+Get the types and symbols that represent the structure of `T`. The trait is the `StructType`
+of `T` and `context` is the hash context (as per the second argument to `stable_hash`). The
+second argument must be included as part of a method definition, but `context` is optional.
 
 You need to override this method when a type parameter of `T` is important to the type's
-hash but is not included in `fieldtypes(T)`. For example:
+hash but is not included as part of the normal hash.
+
+The normal hash includes:
+
+- `fieldtypes(T)` of any `StructType.DataType` (e.g. StructType.Struct)
+- `eltype(T)` of any `StructType.ArrayType` or `StructType.DictType`
+- `ndims(T)` of any `AbstractArray` that is a `StructType.ArrayTYpe` and that has a concrete
+  dimension
+
+## Example
 
 ```julia
 struct MyType{T,F}
@@ -123,16 +123,6 @@ end
 Without this definition `MyType{Int,:foo}(1)` would hash to the same value as
 `MyType{Int,:bar}(2)`.
 
-!!! warning "Hash all expected type structure!"
-    Overloading `type_structure` improperly can cause the assumptions of
-    type-hash-hoisting to be violated. You *must*:
-
-    - return `fieldtypes` as part of `StructTypes.DataType`
-    - return `eltype` as part of `StructType.ArrayType`
-    - return `eltype` of `StructTypes.keyvaluepairs` of a `StructTypes.DictType`
-
-    Otherwise the hashes of your type may collide in unexpected ways.
-
 """
 function type_structure(::Type{T}, trait, context) where {T}
     return type_structure(T, trait, parent_context(context))
@@ -141,6 +131,11 @@ function type_structure(::Type{T}, trait, ::HashVersion{3}) where {T}
     return type_structure(T, trait)
 end
 type_structure(T, trait) = nothing
+
+# `internal_type_structure` is like `type_structure` in form, but it implements mandatory
+# elements of the type structure that are always included; this method should not be
+# overwritten by users
+internal_type_structure(T, trait) = nothing
 
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
@@ -171,6 +166,7 @@ function hash_type!(hash_state, context::CachedHash, ::Type{<:Type})
 end
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
     return Transformer(T -> (type_value_name(T, context),
+                             internal_type_structure(T, StructType_(T)),
                              type_structure(T, StructType_(T), context)))
 end
 
@@ -178,7 +174,7 @@ end
     type_value_name(::Type{T}, trait, [context]) where {T}
 
 The name that is hashed for type `T` when hashing a type as a value (e.g.
-`stable_hash(Int)`). This defaults to `stable_type_name(trait)`. Users of `StableHashTraits` can
+`stable_hash(Int)`). This defaults to `stable_type_name(T)`. Users of `StableHashTraits` can
 implement a method that accepts two (`T` and `trait`) or three arguments (`T`, `trait`,
 `context`). The trait is one of the `StructTypes` traits and `context` is the hash context
 (as per the second argument to `stable_hash`)
@@ -187,9 +183,8 @@ function type_value_name(::Type{T}, trait, context) where {T}
     return type_value_name(T, trait, parent_context(context))
 end
 type_value_name(::Type{T}, trait, ::Nothing) where {T} = type_value_name(T, trait)
-type_value_name(::Type{T}, trait) where {T} = type_value_name(T)
-type_value_name(::Type{T}) where {T} = qualified_name_(T)
-type_value_name(::Type{Union{}}) = "Base.Union{}"
+type_value_name(::Type{T}, trait) where {T} = qualified_name_(T)
+type_value_name(::Type{Union{}}, trait) = "Base.Union{}"
 
 hash_type!(hash_state, ::TypeAsValueContext, T) = hash_state
 function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where {T}
@@ -239,7 +234,7 @@ sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
     return TupleTools.sort(fieldnames(T); by=string)
 end
 
-function type_structure(::Type{T}, trait::StructTypes.DataType) where {T}
+function internal_type_structure(::Type{T}, trait::StructTypes.DataType) where {T}
     if isconcretetype(T)
         fields = trait isa StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
         return fields, map(field -> fieldtype(T, field), fields)
@@ -278,25 +273,41 @@ end
 ##### ArrayType
 #####
 
+"""
+    is_ordered(x)
+
+Indicates whether the order of the elements of object `x` are important to its hashed value.
+If false, `x`'s elements will first be `collect`ed and `sort`'ed before hashing them. When
+calling `sort`, [`hash_sort_by`](@ref) is passed as the `by` keyword argument.
+If `x` is a `DictType`, the elements are sorted by their keys rather than their elements.
+"""
 is_ordered(x) = true
 is_ordered(::AbstractSet) = false
-order_by(x::Symbol) = String(x)
-order_by(x::Char) = string(x)
-order_by(x) = x
 
-function type_structure(::Type{T}, ::StructTypes.ArrayType) where {T}
+"""
+    `hash_sort_by(x)`
+
+Defines how the elements of a hashed container `x` are `sort`ed if [`is_ordered`](@ref) of
+`x` returns `false`. The return value of this function is passed to `sort` as the `by`
+keyword.
+"""
+hash_sort_by(x::Symbol) = String(x)
+hash_sort_by(x::Char) = string(x)
+hash_sort_by(x) = x
+
+function internal_type_structure(::Type{T}, ::StructTypes.ArrayType) where {T}
     return eltype(T)
 end
 
 # include ndims in type hash when we can
 function type_structure(::Type{T}, ::StructTypes.ArrayType) where {T<:AbstractArray}
-    return eltype(T), ndims_(T)
+    return ndims_(T)
 end
 ndims_(::Type{<:AbstractArray{<:Any,N}}) where {N} = N
 ndims_(::Type{<:AbstractArray}) = nothing
 
 function transformer(::Type{<:AbstractRange}, ::HashVersion{3})
-    return Transformer(identity, StructTypes.Struct(); preserves_structure=true)
+    return Transformer(identity, StructTypes.UnorderedStruct(); preserves_structure=true)
 end
 
 function transformer(::Type{<:AbstractArray}, ::HashVersion{3})
@@ -339,7 +350,7 @@ end
 function stable_hash_helper(xs, hash_state, context, ::StructTypes.ArrayType)
     nested_hash_state = start_nested_hash!(hash_state)
 
-    items = !is_ordered(xs) ? sort!(collect(xs); by=order_by) : xs
+    items = !is_ordered(xs) ? sort!(collect(xs); by=hash_sort_by) : xs
     transform = transformer(eltype(items), context)::Transformer
     nested_hash_state = hash_elements(items, nested_hash_state, context, transform)
 
@@ -367,7 +378,7 @@ end
 ##### Tuples
 #####
 
-function type_structure(::Type{T}, ::StructTypes.ArrayType) where {T<:Tuple}
+function internal_type_structure(::Type{T}, ::StructTypes.ArrayType) where {T<:Tuple}
     if isconcretetype(T)
         fields = T <: StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
         return fields, map(field -> fieldtype(T, field), fields)
@@ -376,7 +387,7 @@ function type_structure(::Type{T}, ::StructTypes.ArrayType) where {T<:Tuple}
     end
 end
 
-function type_structure(::Type{T}, ::StructTypes.ArrayType) where {T<:NTuple}
+function internal_type_structure(::Type{T}, ::StructTypes.ArrayType) where {T<:NTuple}
     return eltype(T)
 end
 
@@ -393,7 +404,7 @@ end
 
 is_ordered(x::AbstractDict) = false
 
-function type_structure(::Type{T}, ::StructTypes.DictType) where {T}
+function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
     return eltype(T)
 end
 
@@ -408,7 +419,7 @@ function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = if is_ordered(x)
         StructTypes.keyvaluepairs(x)
     else
-        sort!(collect(StructTypes.keyvaluepairs(x)); by=order_by ∘ first)
+        sort!(collect(StructTypes.keyvaluepairs(x)); by=hash_sort_by ∘ first)
     end
     transform = transformer(eltype(x), context)::Transformer
     hash_elements(pairs, nested_hash_state, context, transform)
