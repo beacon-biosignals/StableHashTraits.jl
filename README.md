@@ -82,9 +82,7 @@ this dimension. The size of an array is hashed along with the array contents.
 
 ### In 1.2
 
-This release includes a new hash version 3 that has breaking API changes, documeted above.
-The prior API is deprecated. In version 2, which will be released in relatively short order,
-only hash version 3 will be available
+This release includes a new hash version 3 that has breaking API changes, documeted above. The prior API is deprecated. In version 2, which will be released in relatively short order, only hash version 3 will be available
 
 ### In 1.1
 
@@ -170,51 +168,7 @@ previous hash value. For example if you had a custom table type `MyCustomTable` 
 you only defined a `StableHashTraits.write` method and no `hash_method`, its hash will be
 changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 
-<!-- The text between START_ and END_ comments are extracted from this readme and inserted into julia docstrings -->
-<!-- START_CONTEXTS -->
-## Customizing hash computations with contexts
-
-You can customize how hashes are computed within a given scope using a context object. This
-is also a very useful way to avoid type piracy. The context can be any object you'd like and
-is passed as the second argument to `stable_hash`. By default it is equal to
-`HashVersion{1}()` and this determines how objects are hashed when a more specific method is not defined.
-
-This context is then passed to both `hash_method` and `StableHashTraits.write` (the latter
-is the method called for `WriteHash`, and falls back to `Base.write`). Because of the way
-the root contexts (`HashVersion{1}` and `HashVersion{2}`) are defined, you normally don't
-have to include this context as an argument when you define a method of `hash_context` or
-`write` because there are appropriate fallback methods.
-
-When you define a hash context it should normally accept a parent context that serves as a
-fallback, and return it in an implementation of the method
-`StableHashTraits.parent_context`.
-
-As an example, here is how we could write a context that treats all named tuples with the
-same keys and values as equivalent.
-
-```julia
-struct NamedTuplesEq{T}
-    parent::T
-end
-StableHashTraits.parent_context(x::NamedTuplesEq) = x.parent
-function StableHashTraits.hash_method(::NamedTuple, ::NamedTuplesEq)
-    return FnHash(stable_typename_id), StructHash(:ByName)
-end
-context = NamedTuplesEq(HashVersion{2}())
-stable_hash((; a=1:2, b=1:2), context) == stable_hash((; b=1:2, a=1:2), context) # true
-```
-
-If we instead defined `parent_context` to return `nothing`, our context would need to
-implement a `hash_method` that covered the types `AbstractRange`, `Int64`, `Symbol` and
-`Pair` for the call to `stable_hash` above to succeed.
-
-### Customizing hashes within an object
-
-Contexts can be customized not only when you call `stable_hash` but also when you hash the
-contents of a particular object. This lets you change how hashing occurs within the object.
-See the docstring of `HashAndContext` for details.
-<!-- END_CONTEXTS -->
-
+<!--TODO: move this to docs-->
 ## Hashing Gotchas
 
 Numerical changes will, of course, change the hash. One way this can catch you off guard
