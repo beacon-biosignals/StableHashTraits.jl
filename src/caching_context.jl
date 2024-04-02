@@ -45,7 +45,7 @@ struct NonCachedHash{T}
 end
 parent_context(x::NonCachedHash) = x.parent
 
-# we have to somehow decide before hand which things we want to recurisvley hash and which
+# we have to somehow decide before hand which things we want to recursively hash and which
 # we don't. Many repeated recurisve hashes are expensive, especially for SHA-based hashing,
 # this is why we use the BufferedHashState. But it should be okay to recursively hash from
 # time to time; calls to `get!` are somewhere on the order of 20-50 times slower than a call

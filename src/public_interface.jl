@@ -22,28 +22,27 @@ end
     stable_hash(x, context=HashVersion{1}(); alg=sha256)
     stable_hash(x; alg=sha256, version=1)
 
-Create a stable hash of the given objects. As long as the context remains the same, this is
-intended to remain unchanged across julia versions.
+Create a stable hash of the given objects. As long as the context remains the same, this
+hash is intended to remain unchanged across julia versions. The built-in context is
+HashVersion{N}, and if you specify a `version`, this is equivalent to explicitly passing
+`HashVersion{version}`. To customize how the hash is copmuted see [Using Contexts](@ref).
 
-To ensure the greatest stability, you should explicitly pass the context object. It is also
-best to pass an explicit version, since `HashVersion{3}` is the only non-deprecated version;
-it is much faster than 1 and more stable than 2. Furthermore, a new hash version is provided
-in a future release, the hash you get by passing an explicit `HashVersion{N}` should *not*
-change. (Note that the number in `HashVersion` does not necessarily match the package
-version of `StableHashTraits`).
+It is best to pass an explicit version, since `HashVersion{3}` is the only non-deprecated
+version; it is much faster than 1 and more stable than 2. Furthermore, a new hash version is
+provided in a future release, the hash you get by passing an explicit `HashVersion{N}`
+should *not* change. (Note that the number in `HashVersion` does not necessarily match the
+package version of `StableHashTraits`).
 
 In hash version 3, you customize how hashes are computed using [`transformer`](@ref), and in
 versions 1-2 using [`hash_method`](@ref).
-
-Instead of passing a context, you can instead pass a `version` keyword that will set the
-context to `HashVersion{version}()`.
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash64(x::AbstractArray{UInt8},
 [old_hash])`.
 
-The `context` value gets passed as the second argument to [`hash_method`](@ref), and as the
-third argument to [`StableHashTraits.write`](@ref)
+The `context` value gets passed as the second argument to [`hash_method`](@ref) and
+[`transformer`], and as the third argument to [`StableHashTraits.write`](@ref). Note that
+both `hash_method` and `StableHashTraits.write` are deprecated.
 
 ## See Also
 

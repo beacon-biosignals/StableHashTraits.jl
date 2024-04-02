@@ -35,7 +35,8 @@ Useres can define a method of `transformer` to customize how an object is hashed
 
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
-> ⚠️ Hash versions 3 constitutes a substantial redesign of StableHashTraits so as to avoid reliance on some unstable Julia internals. Hash versions 1 and 2 are deprecated and will be removed in a soon-to-be released StableHashTraits@2.0. Hash version 3 will remain unchanged in this 2.0 release. Hash version 1 is the default version if you don't specify a version.
+> [!WARNING]
+> Hash versions 3 constitutes a substantial redesign of StableHashTraits so as to avoid reliance on some unstable Julia internals. Hash versions 1 and 2 are deprecated and will be removed in a soon-to-be released StableHashTraits@2.0. Hash version 3 will remain unchanged in this 2.0 release. Hash version 1 is the default version if you don't specify a version.
 
 <!--The START_ and STOP_ comments are used to extract content that is also repeated in the documentation-->
 <!--START_OVERVIEW-->
@@ -76,6 +77,92 @@ this dimension. The size of an array is hashed along with the array contents.
 
 > [!WARNING]
 > Some type parameters are ignored by this hashing scheme; specifically, the only parameters hashed are those specified above. This means, for example, that a parameter not included in `fieldtype(T)` for `StructType(T) == StructTypes.Struct` will be ignored during hashing. You can use [`StableHashTraits.type_structure`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.type_structure) to explicitly hash additional type parameters for a type.
+
+## Examples
+
+All of the following hash examples follow directly from the definitions above, but may not be so obvious to the reader.
+
+Most of the behaviors described below can be customized/changed by using your own hash context, which can is passed as the second argument to [`stable_hash`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_hash).
+
+The order of NamedTuple pairs does not matter
+
+```julia
+stable_hash((;a=1,b=2); version=3) == stable_hash((;b=2,a=1); version=3)
+```
+
+Two structs with the same fields hash equivalently
+
+```julia
+struct X
+    bar::Int
+    foo::Float64
+end
+
+struct Y
+    foo::Float64
+    bar::Int
+end
+
+stable_hash(X(2, 1); version=3) == stable_hash(Y(1, 2); version=3)
+```
+
+Different array types with the same content hash to the same value.
+
+```julia
+stable_hash(view([1,2,3], 1:2); version=3) == stable_hash([1,2]; version=3)
+```
+
+Byte equivalent arrays of all `NumberType` values will hash to the same value.
+
+```julia
+stable_hash([0.0, 0.0]; version=3) == stable_hash([0, 0]; version=3)
+```
+
+But if the eltype has a different `StructType`, or if the bytes are different, the collision will not occur.
+
+```julia
+stable_hash(Any[0.0, 0.0]; version=3) != stable_hash([0, 0]; version=3)
+stable_hash([1.0, 2.0]; version=3) != stable_hash([1, 2]; version=3)
+```
+
+Numerical changes will, of course, change the hash. One way this can catch you off guard
+are some differences in `StaticArray` outputs between julia versions:
+
+```julia
+julia> using StaticArrays, StableHashTraits;
+
+julia> begin
+        rotmatrix2d(a) = @SMatrix [cos(a) sin(a); -sin(a) cos(a)]
+        rotate(a, p) = rotmatrix2d(a) * p
+        rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
+    end;
+```
+
+In julia 1.9.4:
+
+```julia
+
+julia> bytes2hex(stable_hash(rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006)); version=3))
+"4ccdc172688dd2b5cd50ba81071a19217c3efe2e3b625e571542004c8f96c797"
+
+julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
+2-element SVector{2, Float64} with indices SOneTo(2):
+  7.419375817039376e-17
+ -0.5953242152248626
+```
+
+In julia 1.6.7
+
+```julia
+julia> bytes2hex(stable_hash(rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006)); version=3))
+"3b8d998f3106c05f8b74ee710267775d0d0ce0e6780c1256f4926d3b7dcddf9e"
+
+julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
+2-element SVector{2, Float64} with indices SOneTo(2):
+  5.551115123125783e-17
+ -0.5953242152248626
+```
+
 <!--END_OVERVIEW-->
 
 ## Breaking changes
@@ -170,41 +257,3 @@ changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
 
 <!--TODO: move this to docs-->
 ## Hashing Gotchas
-
-Numerical changes will, of course, change the hash. One way this can catch you off guard
-are some differences in `StaticArray` outputs between julia versions:
-
-```julia
-julia> using StaticArrays, StableHashTraits;
-
-julia> begin
-        rotmatrix2d(a) = @SMatrix [cos(a) sin(a); -sin(a) cos(a)]
-        rotate(a, p) = rotmatrix2d(a) * p
-        rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
-    end;
-```
-
-In julia 1.9.4:
-
-```julia
-
-julia> bytes2hex(stable_hash(rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006)); version=2))
-"4ccdc172688dd2b5cd50ba81071a19217c3efe2e3b625e571542004c8f96c797"
-
-julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
-2-element SVector{2, Float64} with indices SOneTo(2):
-  7.419375817039376e-17
- -0.5953242152248626
-```
-
-In julia 1.6.7
-
-```julia
-julia> bytes2hex(stable_hash(rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006)); version=2))
-"3b8d998f3106c05f8b74ee710267775d0d0ce0e6780c1256f4926d3b7dcddf9e"
-
-julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
-2-element SVector{2, Float64} with indices SOneTo(2):
-  5.551115123125783e-17
- -0.5953242152248626
-```
