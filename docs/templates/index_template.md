@@ -68,7 +68,7 @@ You can change how a type name is hashed for an object using [`StableHashTraits.
 
 ## Caching
 
-StableHashTraits caches hash results for all types and large values. This cache is initialized per call to `stable_hash`; to leverage the same cache over multiple calls you can create a `CachedHash`,
+StableHashTraits caches hash results for all types and large values. This cache is initialized per call to `stable_hash`; to leverage the same cache over multiple calls you can create a [`CachedHash`](@ref),
 
 ```julia
 context = CachedHash(HashVersion{3}())
