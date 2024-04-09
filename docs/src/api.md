@@ -9,7 +9,6 @@ StableHashTraits.Transformer
 StableHashTraits.TransformIdentity
 StableHashTraits.preserves_structure
 StableHashTraits.CachedHash
-StableHashTraits.HashShouldCache
 StableHashTraits.type_hash_name
 StableHashTraits.type_value_name
 StableHashTraits.type_structure

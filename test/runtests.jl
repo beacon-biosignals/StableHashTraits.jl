@@ -373,11 +373,6 @@ include("setup_tests.jl")
 
             if V >= 3
                 global cache_type_hashed = 0
-                x = ContainerType.(rand(Int, 10), Ref(CachingType(rand(Int, 3))))
-                @test x[1].ref === x[2].ref
-                test_hash(x)
-                @test cache_type_hashed == 1
-
                 x = rand(Int8, StableHashTraits.CACHE_OBJECT_THRESHOLD)
                 context = CachedHash(ctx)
                 test_hash(x, context)

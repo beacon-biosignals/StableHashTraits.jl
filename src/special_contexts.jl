@@ -39,6 +39,7 @@ end
 TablesEq() = TablesEq(HashVersion{1}())
 parent_context(x::TablesEq) = x.parent
 function hash_method(x::T, m::TablesEq) where {T}
+    root_version(m) > 2 && return NotImplemented()
     if Tables.istable(T)
         # NOTE: using root_version let's us ensure that `TableEq` is unchanged when using
         # `HashVersion{1}` as a parent or ancestor, but make use of the updated, more
@@ -92,10 +93,12 @@ parent_context(x::ViewsEq) = x.parent
 # `HashVersion{1}` as a parent or ancestor, but make use of the updated, more optimized API
 # for `HashVersion{2}`
 function hash_method(::AbstractArray, c::ViewsEq)
+    root_version(m) > 2 && return NotImplemented()
     return (root_version(c) > 1 ? @ConstantHash("Base.AbstractArray") :
             PrivateConstantHash("Base.AbstractArray"), FnHash(size), IterateHash())
 end
 function hash_method(::AbstractString, c::ViewsEq)
+    root_version(m) > 2 && return NotImplemented()
     return (root_version(c) > 1 ? @ConstantHash("Base.AbstractString") :
             PrivateConstantHash("Base.AbstractString", WriteHash()), WriteHash())
 end

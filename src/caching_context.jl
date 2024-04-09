@@ -1,11 +1,26 @@
+# we have to somehow decide before hand which things we want to recursively hash and which
+# we don't. Many repeated recurisve hashes are expensive, especially for SHA-based hashing,
+# this is why we use the BufferedHashState. But it should be okay to recursively hash from
+# time to time; calls to `get!` are somewhere on the order of 20-50 times slower than a call
+# to hash individual bytes, so as long as CACHE_OBJECT_THRESHOLD is well above this range of
+# values, we should be fine (here it is 2^12 = 4096).
+const CACHE_OBJECT_THRESHOLD = HASH_BUFFER_SIZE << 2
+
 """
     CachedHash(context)
 
 Setup a hash context that includes a cache of hash results. It stores the result of hashing
-types and large values. Calling the same cached hash context will re-use the this cache,
-possibly improving performance. If you do not pass a `CachedHash` to `stalbe_hash` it sets
+types and large values. Calling the same cached hash context will re-use this cache,
+possibly improving performance. If you do not pass a `CachedHash` to `stable_hash` it sets
 up its own internal cache to improve performance for repeated hashes of the same type or
-large value.
+large value *within* the call to `stable_hash`.
+
+Note that smaller objects are not cached so as to ensure that calls to retrieve a cached
+result do not exceed the time it takes to simply re-hash the individual bytes of an object.
+In use cases where you have many small redundant bits of data, caching will not help, and if
+you wish to optimize hashing of such objects you will have to implement a method of
+`transformer` that accounts for this structure of your data and only represents the
+non-redundant bytes.
 
 ## See Also
 
@@ -13,10 +28,14 @@ large value.
 """
 struct CachedHash{T}
     parent::T
+    # Types have arbitrarily long lifetimes and do not get `finalize`ed; we use a normal
+    # id dict with them
     type_cache::IdDict{Type,Vector{UInt8}}
-    value_cache::IdDict{Any,Vector{UInt8}}
+    # we cache only `ismutable` values, which can have finalizers, and so we can use weak
+    # keys
+    value_cache::WeakKeyIdDict{Any,Vector{UInt8}}
     function CachedHash(parent, types=IdDict{Type,Vector{UInt8}}(),
-                        values=IdDict{Any,Vector{UInt8}}())
+                        values=WeakKeyIdDict{Any,Vector{UInt8}}())
         return new{typeof(parent)}(parent, types, values)
     end
 end
@@ -27,31 +46,10 @@ function hash_value!(x, hash_state, context, trait)
     return hash_value!(x, hash_state, parent_context(context), trait)
 end
 
-"""
-    HashShouldCache(x)
-
-Signals that `x` should be cached during a call to [`stable_hash`](@ref). Useful in calls
-to [`transformer`](@ref).
-"""
-struct HashShouldCache{T}
-    val::T
-end
-preserves_structure(::typeof(HashShouldCache)) = true
-unwrap(x::HashShouldCache) = x.val
-unwrap(x) = x
-
 struct NonCachedHash{T}
     parent::T
 end
 parent_context(x::NonCachedHash) = x.parent
-
-# we have to somehow decide before hand which things we want to recursively hash and which
-# we don't. Many repeated recurisve hashes are expensive, especially for SHA-based hashing,
-# this is why we use the BufferedHashState. But it should be okay to recursively hash from
-# time to time; calls to `get!` are somewhere on the order of 20-50 times slower than a call
-# to hash individual bytes, so as long as CACHE_OBJECT_THRESHOLD is well above this range of
-# values, we should be fine (here it is 2^12 = 4096).
-const CACHE_OBJECT_THRESHOLD = HASH_BUFFER_SIZE << 2
 
 """
     hash_value!(x, hash_state, context, trait)
@@ -60,10 +58,10 @@ Hash the value of object x to the hash_state for the given context and hash trai
 Caches larger values.
 """
 function hash_value!(x::T, hash_state, context::CachedHash, trait) where {T}
-    if x isa HashShouldCache || (!isbitstype(T) && sizeof(x) >= CACHE_OBJECT_THRESHOLD)
+    if ismutable(T) && sizeof(x) >= CACHE_OBJECT_THRESHOLD
         bytes = get!(context.value_cache, x) do
             cache_state = similar_hash_state(hash_state)
-            stable_hash_helper(unwrap(x), cache_state, NonCachedHash(context), trait)
+            stable_hash_helper(x, cache_state, NonCachedHash(context), trait)
             return reinterpret(UInt8, asarray(compute_hash!(cache_state)))
         end
         return update_hash!(hash_state, bytes, context)

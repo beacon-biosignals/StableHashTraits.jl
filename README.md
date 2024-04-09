@@ -71,9 +71,7 @@ If [`StableHashTraits.is_ordered`](https://beacon-biosignals.github.io/StableHas
 
 - `AbstractRange`: though their `StructType` is `AbstractArray`, abstract ranges are treated as `UnorderedStruct` objects for purposes of hashing, as this normally leads to a more effeicient hash computation.
 
-- `AbstractArray`: in addition to hashing the `eltype`, any abstract array type with a
-concrete dimension (`AbstractArray{<:Any, 3}` but not `AbstractArray{Int}`) will hash
-this dimension. The size of an array is hashed along with the array contents.
+- `AbstractArray`: in addition to hashing the `eltype`, any abstract array type with a concrete dimension (`AbstractArray{<:Any, 3}` but not `AbstractArray{Int}`) will hash this dimension. The size of an array is hashed along with the array contents.
 
 > [!WARNING]
 > Some type parameters are ignored by this hashing scheme; specifically, the only parameters hashed are those specified above. This means, for example, that a parameter not included in `fieldtype(T)` for `StructType(T) == StructTypes.Struct` will be ignored during hashing. You can use [`StableHashTraits.type_structure`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.type_structure) to explicitly hash additional type parameters for a type.
@@ -82,7 +80,7 @@ this dimension. The size of an array is hashed along with the array contents.
 
 All of the following hash examples follow directly from the definitions above, but may not be so obvious to the reader.
 
-Most of the behaviors described below can be customized/changed by using your own hash context, which can is passed as the second argument to [`stable_hash`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_hash).
+Most of the behaviors described below can be customized/changed by using your own hash context, which can be passed as the second argument to [`stable_hash`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_hash).
 
 The order of NamedTuple pairs does not matter
 
@@ -254,6 +252,3 @@ same hash as a `DataFrame` or `NamedTuple` with the same column contents instead
 previous hash value. For example if you had a custom table type `MyCustomTable` for which
 you only defined a `StableHashTraits.write` method and no `hash_method`, its hash will be
 changed unless you now define `hash_method(::MyCustomTable) = UseWrite()`.
-
-<!--TODO: move this to docs-->
-## Hashing Gotchas

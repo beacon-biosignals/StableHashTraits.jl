@@ -64,11 +64,7 @@ This should give the reader some idea of when a type-unstable function can be sa
 
 Types are hashed by hashing a type name and a type structure. The structure is determined by the `StructType` as detailed above (e.g. `ArrayType`s hash their `eltype`). As noted there, the name will be based on `StructType` when hashing the type of an object, and the name of the type itself when hashing the type as a value.
 
-You can change how a type name is hashed for an object using
-[`StableHashTraits.type_hash_name`](@ref), how a type name is hashed as a value using
-[`StableHashTraits.type_value_name`](@ref) and how the structure is hashed using
-[`StableHashTraits.type_structure`](@ref). The latter is necessary to overwrite if you want
-to differentiate types that vary only in their type parameters not their `fieldtypes` or `eltype`.
+You can change how a type name is hashed for an object using [`StableHashTraits.type_hash_name`](@ref), how a type name is hashed as a value using [`StableHashTraits.type_value_name`](@ref) and how the structure is hashed using [`StableHashTraits.type_structure`](@ref). The latter is necessary to overwrite if you want to differentiate types that vary only in their type parameters not their `fieldtypes`.
 
 ## Caching
 
@@ -81,23 +77,3 @@ stable_hash(y, context) # previously cached values will be re-used
 ```
 
 However, if you change or add any method definitions that are used to customize hashes (e.g. [`StableHashTraits.transformer`](@ref)) you will need to create a new context to avoid using stale method results.
-
-If you know that a particular object is referenced in multiple places, you can make sure that it is cached by wrapping it in a [`StableHashTraits.HashShouldCache`](@ref) object during a call to [`StableHashTraits.transformer`](@ref).
-
-```julia
-using StableHashTraits
-using StableHashTraits: Transformer
-
-struct Foo
-    x::Int
-    ref::Bar
-end
-
-struct Bar
-    data::Vector{Int}
-end
-
-foos = Foo.(rand(Int, 10_000), Ref(Bar(rand(Int, 1_000))))
-# do not repeatedly hash `Bar`:
-transformer(::Type{<:Bar}) = Transformer(HashShouldCache)
-```

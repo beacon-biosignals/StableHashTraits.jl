@@ -228,14 +228,13 @@ qualified_(T, ::Type{Val{:type}}) = qualified_type_(T)
 
 # deprecate external use of `qualified_name/type`
 function qualified_name(x)
-    Base.depwarn("`qualified_name` is deprecated, favor `stable_typename_id` in all cases " *
+    Base.depwarn("`qualified_name` is deprecated, favor `stable_type_name` in all cases " *
                  "where backwards compatible hash values are not required.",
                  :qualified_name)
     return qualified_name_(x)
 end
 function qualified_type(x)
-    Base.depwarn("`qualified_type` is deprecated, favor `stable_type_id` in all cases " *
-                 "where backwards compatible hash values are not required.",
+    Base.depwarn("`qualified_type` is deprecated, it will not be supported in the future.",
                  :qualified_type)
     return qualified_type_(x)
 end
