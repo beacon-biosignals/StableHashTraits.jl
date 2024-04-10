@@ -13,7 +13,7 @@ Setup a hash context that includes a cache of hash results. It stores the result
 types and large values. Calling the same cached hash context will re-use this cache,
 possibly improving performance. If you do not pass a `CachedHash` to `stable_hash` it sets
 up its own internal cache to improve performance for repeated hashes of the same type or
-large value *within* the call to `stable_hash`.
+large values *within* the call to `stable_hash`.
 
 Note that smaller objects are not cached so as to ensure that calls to retrieve a cached
 result do not exceed the time it takes to simply re-hash the individual bytes of an object.
