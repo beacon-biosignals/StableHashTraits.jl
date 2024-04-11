@@ -58,11 +58,11 @@ As noted `preserves_structure` can safely be set to true for any type-stable fun
 
 When `preserves_structure=false` (the default for most functions) the type of the return value from `transformer` is always hashed alongside the transformed value.
 
-This should give the reader some idea of when a type-unstable function can be safely marked as `preserves_structure=true`. In particular any case where each value passed to transform maps to a value that will hash to a unique bit-sequence should be fine. This would be violated, for instance, by `x -> x < 0 : Char(0) ? Int32(0)`, but not by `x -> x < 0 : Char(1) : Int32(2)`. In the latter case we could safely mark `preserves_structure=true`.
+This should give the reader some idea of when a type-unstable function can be safely marked as `preserves_structure=true`. In particular any case where each value passed to transform maps to a value that will be hashed as a unique bit-sequence should be fine. This would be violated, for instance, by `x -> x < 0 : Char(0) ? Int32(0)`, but not by `x -> x < 0 : Char(1) : Int32(2)`. In the latter case we could safely mark `preserves_structure=true`.
 
 ## Customizing Type Hashes
 
-Types are hashed by hashing a type name and a type structure. The structure is determined by the `StructType` as detailed above (e.g. `ArrayType`s hash their `eltype`). As noted there, the name will be based on `StructType` when hashing the type of an object, and the name of the type itself when hashing the type as a value.
+Types are hashed by hashing a type name and a type structure. The structure is determined by the `StructType` as detailed above (e.g. `ArrayType`s hash their `eltype`). As noted there, the name will be based on the name of the `StructType` when hashing the type of an object, and the name of the type itself when hashing the type as a value.
 
 You can change how a type name is hashed for an object using [`StableHashTraits.type_hash_name`](@ref), how a type name is hashed as a value using [`StableHashTraits.type_value_name`](@ref) and how the structure is hashed using [`StableHashTraits.type_structure`](@ref). The latter is necessary to overwrite if you want to differentiate types that vary only in their type parameters not their `fieldtypes`.
 

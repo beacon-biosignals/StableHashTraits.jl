@@ -121,7 +121,7 @@ end
 ```
 
 Without this definition `MyType{Int,:foo}(1)` would hash to the same value as
-`MyType{Int,:bar}(2)`.
+`MyType{Int,:bar}(1)`.
 
 """
 function type_structure(::Type{T}, trait, context) where {T}
