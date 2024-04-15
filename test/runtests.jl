@@ -80,6 +80,13 @@ include("setup_tests.jl")
                                 bytes2hex_(test_hash((1, (a=1, b=(x=1, y=2), c=(1, 2))))))
                 @test_reference("references/ref22_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash((;))))
+                @test_reference("references/ref23_$(V)_$(nameof(hashfn)).txt",
+                                ((; kwargs...) -> test_hash(kwargs))(; b=2, a=1))
+                @test_reference("references/ref24_$(V)_$(nameof(hashfn)).txt",
+                                bytes2hex_(test_hash((; a=1))))
+                @test_reference("references/ref25_$(V)_$(nameof(hashfn)).txt",
+                                bytes2hex_(test_hash((a=1, b=(;), c=(; c1=1),
+                                                      d=(d1=1, d2=2)))))
             end
             # verifies that transform can be called recursively
             if V <= 2
@@ -504,6 +511,11 @@ include("setup_tests.jl")
             @test cleanup_named_tuple_type(string(typeof((;)))) == "NamedTuple{(),Tuple{}}"
             @test cleanup_named_tuple_type("@NamedTuple{x::Int, y::Int}") ==
                   "NamedTuple{(:x,:y),Tuple{Int,Int}}"
+            new_type_str = "@NamedTuple{a::Int64, b::@NamedTuple{}, c::@NamedTuple{c1::Int64}, d::@NamedTuple{d1::Int64, d2::Int64}}"
+            old_type_str = "NamedTuple{(:a,:b,:c,:d),Tuple{Int64,NamedTuple{(),Tuple{}},NamedTuple{(:c1,),Tuple{Int64}},NamedTuple{(:d1,:d2),Tuple{Int64,Int64}}}}"
+            @test cleanup_named_tuple_type(new_type_str) == old_type_str
+            @test cleanup_named_tuple_type("@NamedTuple{x::Int}") ==
+                  "NamedTuple{(:x,),Tuple{Int}}"
             @test cleanup_named_tuple_type("FooBar{Baz{Float64, (custom, display(}, " *
                                            "@NamedTuple{x::Int, y::Int}}") ==
                   "FooBar{Baz{Float64, (custom, display(}, NamedTuple{(:x,:y),Tuple{Int,Int}}}"

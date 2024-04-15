@@ -33,6 +33,11 @@ function cleanup_name(str)
     str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
     str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
 
+    # Base.Pairs in 1.9 is Base.Iterators.Pairs in 1.6 (it is part of the `name` of the
+    # object, and so we get some doubling up of stuff)
+    str = replace(str, "Iterators.Base.Iterators.Pairs" => "Base.Pairs")
+    str = replace(str, "Base.Iterators.Pairs" => "Base.Pairs")
+
     # cleanup pluto workspace names
 
     # TODO: eventually, when we create hash version 3 (which will generate strings from
@@ -183,7 +188,10 @@ end
         if parsed isa Parsed && parsed.name == :Head &&
            endswith(parsed.args[1], "@NamedTuple")
             symbols_and_types = split_symbol_and_type.(parsed.args[2].args)
-            symbol_tuple = join(":" .* filter(!isempty, first.(symbols_and_types)), ",")
+            symbols = filter(!isempty, first.(symbols_and_types))
+            symbol_tuple = join(":" .* symbols, ",")
+            # single term tuples need an extra ","
+            length(symbols) == 1 && (symbol_tuple *= ",")
             types = map(t -> parse_walker(fn, t), last.(symbols_and_types))
             types_tuple = join(types, ",")
             prefix = replace(parsed.args[1], "@NamedTuple" => "")
