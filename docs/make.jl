@@ -10,12 +10,13 @@ index_str = read(joinpath(@__DIR__, "templates/index_template.md"), String)
 index_str = replace(index_str, "{INSERT_OVERVIEW}" => overview_txt)
 index_str = replace(index_str, "{INSERT_EXAMPLE}" => example_txt)
 # revise admonition syntax
-overview_txt = replace(overview_txt, r"^> \[!\w+\](^> .*$)+"m => str -> begin
-    heading = match(r"^ (\w+)").capture[1]
-    str = replace(str, r"^> (\w)+" => "!!! "*lowercase(heading))
-    str = replace(str, r"^>(.*)$"m => s"    \1")
-    return str
-end)
+overview_txt = replace(overview_txt,
+                       r"^> \[!\w+\](^> .*$)+"m => str -> begin
+                           heading = match(r"^ (\w+)").capture[1]
+                           str = replace(str, r"^> (\w)+" => "!!! " * lowercase(heading))
+                           str = replace(str, r"^>(.*)$"m => s"    \1")
+                           return str
+                       end)
 
 link_pattern = r"\[`(\S+)`\]\((https://beacon-biosignals\.github\.io/StableHashTraits\.jl/stable/\S+)\)"
 index_str = replace(index_str, link_pattern => s"[`\1`](@ref)")
