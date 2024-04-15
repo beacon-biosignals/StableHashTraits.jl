@@ -19,16 +19,14 @@ To be cached an object must be:
 - large enough: this is to ensure that calls to retrieve a cached result do not exceed the
   time it takes to simply re-hash the individual bytes of an object. You can refer to the
   constant `CACHE_OBJECT_THRESHOLD` though it is not considered part of the public API and
-  may change with future hash versions. (Its value will not change for a given hash version,
-  since changing it can change an object's hashed value).
-- mutable: this is because cached values are stored in a WeakKeyIdDict, which doesn't
-  support immutable objects. In practice large amounts of data are usually stored in
-  mutable structures like `Array` and `String`.
+  may change with future hash versions. (The threshold will not change for a given hash
+  version, since changing it can change an object's hashed value).
+- mutable: cached objects can't be immutable because their hash is stored in a
+  WeakKeyIdDict, which doesn't support immutable objects. In practice large amounts of data
+  are usually stored in mutable structures like `Array` and `String`.
 
-In use cases where you have many small redundant bits of data, caching will not help, and if
-you wish to optimize hashing of such objects you will have to implement a method of
-`transformer` that accounts for this structure of your data and only represents the
-non-redundant bytes or implements some form of caching internally.
+In use cases where this caching method is not sufficient, you will have to implement an
+appropriate method of `transformer` that caches results intenrally.
 
 ## See Also
 
