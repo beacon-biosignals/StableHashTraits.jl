@@ -160,7 +160,6 @@ end
 struct BadShowSyntax end
 Base.show(io::IO, ::Type{<:BadShowSyntax}) = print(io, "{")
 
-
 struct CachingType
     data::Vector{Int}
 end
