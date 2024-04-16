@@ -28,9 +28,6 @@ For an object to be cached you must either signal that it should be, using
   clean up the cache regularly, since they are stored in an IdDict. Note that in practice
   large amounts of data are usually stored in mutable structures like `Array` and `String`.
 
-In use cases where this caching method is not sufficient, you will have to implement an
-appropriate method of `transformer` that caches results internally.
-
 ## See Also
 
 [`stable_hash`](@ref)
