@@ -20,6 +20,7 @@ include("hash_algorithms.jl")
 
 include("caching_context.jl")
 export CachedHash
+# StableHashTraits.UseCache
 
 # deprecated type used by `hash_method` that needs to be defined earlier than the other
 # `deprecated.jl` content (to be used for a deprecation check in `hash_traits.jl`)

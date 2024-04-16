@@ -77,3 +77,23 @@ stable_hash(y, context) # previously cached values will be re-used
 ```
 
 However, if you change or add any method definitions that are used to customize hashes (e.g. [`StableHashTraits.transformer`](@ref)) you will need to create a new context to avoid using stale method results.
+
+If you know that a particular object will be hashed repeatedly, you can make sure that it is cached by wrapping it in a [`StableHashTraits.UseCache`](@ref) object during a call to [`StableHashTraits.transformer`](@ref).
+
+```julia
+using StableHashTraits
+using StableHashTraits: Transformer, UseCache
+
+struct Foo
+    x::Int
+    ref::Bar
+end
+
+struct Bar
+    data::Vector{Int}
+end
+
+foos = Foo.(rand(Int, 10_000), Ref(Bar(rand(Int, 1_000))))
+# do not repeatedly hash `Bar`:
+transformer(::Type{<:Bar}) = Transformer(UseCache)
+```

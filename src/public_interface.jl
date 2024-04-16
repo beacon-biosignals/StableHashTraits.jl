@@ -116,6 +116,7 @@ hoisting the type hash outside of loops during hashing.
 """
 preserves_structure(::typeof(identity)) = true
 preserves_structure(::Function) = false
+preserves_structure(::Type) = false
 (tr::Transformer)(x) = tr.fn(x)
 
 """

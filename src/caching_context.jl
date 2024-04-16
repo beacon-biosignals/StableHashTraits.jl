@@ -9,24 +9,27 @@ const CACHE_OBJECT_THRESHOLD = HASH_BUFFER_SIZE << 2
 """
     CachedHash(context)
 
-Setup a hash context that includes a cache of hash results. It stores the result of hashing
-types and large values. Calling the same cached hash context will re-use this cache,
-possibly improving performance. If you do not pass a `CachedHash` to `stable_hash` it sets
-up its own internal cache to improve performance for repeated hashes of the same type or
-large values *within* the call to `stable_hash`.
+Setup a hash context that includes a cache of hash results. By default, it stores the result
+of hashing types and large values. Calling the same cached hash context will re-use this
+cache, possibly improving performance. If you do not pass a `CachedHash` to `stable_hash` it
+sets up its own internal cache to improve performance for repeated hashes of the same type
+or large values seen *within* the call to `stable_hash`.
 
-To be cached an object must be:
+For an object to be cached you must either signal that it should be, using
+[`UseCache`](@ref) or it must be:
+
 - large enough: this is to ensure that calls to retrieve a cached result do not exceed the
   time it takes to simply re-hash the individual bytes of an object. You can refer to the
   constant `CACHE_OBJECT_THRESHOLD` though it is not considered part of the public API and
   may change with future hash versions. (The threshold will not change for a given hash
   version, since changing it can change an object's hashed value).
-- mutable: cached objects can't be immutable because their hash is stored in a
-  WeakKeyIdDict, which doesn't support immutable objects. In practice large amounts of data
-  are usually stored in mutable structures like `Array` and `String`.
+- mutable: immutable objects cannot be stored in a WeakKeyIdDict, since they aren't
+  supported. This means that caching immutable objects can lead to memory leaks if you don't
+  clean up the cache regularly, since they are stored in an IdDict. Note that in practice
+  large amounts of data are usually stored in mutable structures like `Array` and `String`.
 
 In use cases where this caching method is not sufficient, you will have to implement an
-appropriate method of `transformer` that caches results intenrally.
+appropriate method of `transformer` that caches results internally.
 
 ## See Also
 
@@ -37,12 +40,22 @@ struct CachedHash{T}
     # Types have arbitrarily long lifetimes and do not get `finalize`ed; we use a normal
     # id dict with them
     type_cache::IdDict{Type,Vector{UInt8}}
-    # we cache only `ismutable` values, which can have finalizers, and so we can use weak
-    # keys
-    value_cache::WeakKeyIdDict{Any,Vector{UInt8}}
+    # we cache `ismutable` values automatically, since they can have finalizers, and so we
+    # can use weak keys and avoid memory leaks
+    mutable_value_cache::WeakKeyIdDict{Any,Vector{UInt8}}
+    # we cache immutable values when the user requests a particular object to be cached via
+    # `UseCache`. Such objects cannot be released until the `CacheHash` goes out of
+    # scope
+    immutable_value_cache::IdDict{Any,Vector{UInt8}}
+    # we have a private flag to signal that the cached hash was internally created, or
+    # defined by the user
+    user_defined::Bool
     function CachedHash(parent, types=IdDict{Type,Vector{UInt8}}(),
-                        values=WeakKeyIdDict{Any,Vector{UInt8}}())
-        return new{typeof(parent)}(parent, types, values)
+                        mutable_values=WeakKeyIdDict{Any,Vector{UInt8}}(),
+                        immutable_values=IdDict{Any,Vector{UInt8}}(),
+                        user_defined=false)
+        return new{typeof(parent)}(parent, types, mutable_values, immutable_values,
+                                   user_defined)
     end
 end
 CachedHash(x::CachedHash) = x
@@ -52,22 +65,38 @@ function hash_value!(x, hash_state, context, trait)
     return hash_value!(x, hash_state, parent_context(context), trait)
 end
 
-struct NonCachedHash{T}
-    parent::T
+"""
+    StableHashTraits.UseCache(x)
+
+Signal that the hash of `x` should be stored in the cache.
+
+!!! warning "Immutable objects can leak memory"
+    If `x` is immutable, caching it will cause the object `x` to be held in memory until the
+    cache is garbage collected. `WeakKeyIdDicts` do not support immutable objects. If there is
+    no user defined cache, the cache will be garbage collected inside the call to
+    [`stable_hash`](@ref). With a user defined hash you will need to make sure your cache
+    goes out of scope in a timely fashion to avoid memory leaks.
+
+"""
+struct UseCache{T}
+    val::T
 end
-parent_context(x::NonCachedHash) = x.parent
+preserves_structure(::Type{<:UseCache}) = true
+unwrap(x) = x
+unwrap(x::UseCache) = x.val
 
 """
     hash_value!(x, hash_state, context, trait)
 
 Hash the value of object x to the hash_state for the given context and hash trait.
-Caches larger values.
+Caches types, larger values and those objects manually flagged to be cached.
 """
 function hash_value!(x::T, hash_state, context::CachedHash, trait) where {T}
-    if ismutable(T) && sizeof(x) >= CACHE_OBJECT_THRESHOLD
-        bytes = get!(context.value_cache, x) do
+    if x isa UseCache || (ismutable(x) && sizeof(unwrap(x)) >= CACHE_OBJECT_THRESHOLD)
+        cache = ismutable(x) ? context.mutable_value_cache : context.immutable_value_cache
+        bytes = get!(cache, unwrap(x)) do
             cache_state = similar_hash_state(hash_state)
-            stable_hash_helper(x, cache_state, NonCachedHash(context), trait)
+            stable_hash_helper(unwrap(x), cache_state, context, trait)
             return reinterpret(UInt8, asarray(compute_hash!(cache_state)))
         end
         return update_hash!(hash_state, bytes, context)
