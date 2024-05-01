@@ -11,7 +11,7 @@ using TupleTools, Tables, Compat, StructTypes
 using SHA: SHA, sha256
 using StructTypes: StructType
 
-include("public_interface.jl")
+include("main_interface.jl")
 export stable_hash, HashVersion, stable_type_name
 # Transformer, transformer
 
@@ -28,10 +28,10 @@ struct NotImplemented end
 is_implemented(::NotImplemented) = false
 is_implemented(_) = true
 
-include("hash_traits.jl")
+include("transformer_traits.jl")
 # stable_hash_helper, type_hash_name, type_value_name, type_structure
 
-include("deprecated.jl")
+include("hash_traits.jl")
 export WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq,
        stable_typename_id, stable_type_id
