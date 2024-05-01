@@ -74,6 +74,10 @@ Signal that the hash of `x` should be stored in the cache.
     [`stable_hash`](@ref). With a user defined hash you will need to make sure your cache
     goes out of scope in a timely fashion to avoid memory leaks.
 
+## See Also
+
+[`transformer`](@ref)
+
 """
 struct UseCache{T}
     val::T

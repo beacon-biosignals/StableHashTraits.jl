@@ -64,7 +64,12 @@ This should give the reader some idea of when a type-unstable function can be sa
 
 Types are hashed by hashing a type name and a type structure. The structure is determined by the `StructType` as detailed above (e.g. `ArrayType`s hash their `eltype`). As noted there, the name will be based on the name of the `StructType` when hashing the type of an object, and the name of the type itself when hashing the type as a value.
 
-You can change how a type name is hashed for an object using [`StableHashTraits.type_hash_name`](@ref), how a type name is hashed as a value using [`StableHashTraits.type_value_name`](@ref) and how the structure is hashed using [`StableHashTraits.type_structure`](@ref). The latter is necessary to overwrite if you want to differentiate types that vary only in their type parameters not their `fieldtypes`.
+You can change how a type name is hashed for an object using
+[`StableHashTraits.type_hash_name`](@ref), how a type name is hashed as a value using
+[`StableHashTraits.type_value_name`](@ref) and how the structure is hashed using
+[`StableHashTraits.type_structure`](@ref). The latter is necessary to overwrite if you want
+to differentiate types that vary only in their type parameters, not their `fieldtypes` or
+`eltype`.
 
 ## Caching
 
