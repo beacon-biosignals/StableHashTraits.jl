@@ -1,5 +1,3 @@
-# NOTE: all of this code is copy pasted from the old `StableHashTraits.jl` modulo some
-# changes to names and some text copy pasted from the README to docstrings
 """
     StableHashTraits.hash_method(x, [context])
 
@@ -217,7 +215,19 @@ end
 ##### Stable values for types
 #####
 
+# TODO: some of this will be moved out of deprecated and renamed to match the public facing
+# function (stable_type_name)
+function validate_name(str)
+    if occursin("#", str)
+        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value: found type $str"))
+    end
+    return str
+end
+
+qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
+qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_type_(fn::Function) = qname_(fn, string)
+qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
 qualified_type_(x::T) where {T} = qname_(T <: DataType ? x : T, string)
 qualified_(T, ::Val{:name}) = qualified_name_(T)
 qualified_(T, ::Val{:type}) = qualified_type_(T)
@@ -242,13 +252,11 @@ end
 bytes_of_val(f) = reinterpret(UInt8, [f;])
 bytes_of_val(f::Symbol) = codeunits(String(f))
 bytes_of_val(f::String) = codeunits(f)
-
 function hash64(x)
     bytes = sha256(bytes_of_val(x))
     # take the first 64 bytes of `bytes`
     return first(reinterpret(UInt64, bytes))
 end
-
 function hash64(values::Tuple)
     sha = SHA.SHA2_256_CTX()
     for val in values
@@ -257,14 +265,6 @@ function hash64(values::Tuple)
     bytes = SHA.digest!(sha)
     # take the first 64 bytes of our hash
     return first(reinterpret(UInt64, bytes))
-end
-
-macro hash64(constant)
-    if constant isa Symbol || constant isa String || constant isa Number
-        return hash64(constant)
-    else
-        return :(throw(ArgumentError(string("Unexpected expression: ", $(string(constant))))))
-    end
 end
 
 # NOTE: using stable_{typename|type}_id increases speed by ~x10-20 vs. `qualified_name`
@@ -355,7 +355,7 @@ PrivateConstantHash(val) = PrivateConstantHash{typeof(val),Nothing}(val, nothing
 get_value_(x, method::PrivateConstantHash) = method.constant
 
 function ConstantHash(constant, method=nothing)
-    Base.depwarn("`ConstantHash` has been deprecated, favor ` ConstantHash`.",
+    Base.depwarn("`ConstantHash` has been deprecated, implement a method of `type_hash_name` instead.",
                  :ConstantHash)
     return PrivateConstantHash(constant, method)
 end
@@ -464,7 +464,7 @@ alter the documented behavior but do change the actual hash value returned becau
 and when elements get hashed.
 
 """
-root_version(x::Nothing) = 1 # delete this
+root_version(x::Nothing) = 1
 root_version(x) = root_version(parent_context(x))
 
 #####

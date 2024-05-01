@@ -137,18 +137,6 @@ type_structure(T, trait) = nothing
 # overwritten by users
 internal_type_structure(T, trait) = nothing
 
-qualified_name_(fn::Function) = qname_(fn, nameof)
-qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
-qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
-
-function validate_name(str)
-    if occursin("#", str)
-        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed " *
-                            "to a reliable value: found type $str"))
-    end
-    return str
-end
-
 #####
 ##### Hashing Types as Values
 #####

@@ -37,7 +37,7 @@ In hash version 3, you customize how hashes are computed using [`transformer`](@
 versions 1-2 using [`hash_method`](@ref).
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
-related function from `SHA` or any function of the form `hash64(x::AbstractArray{UInt8},
+related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
 [old_hash])`.
 
 The `context` value gets passed as the second argument to [`hash_method`](@ref) and

@@ -1,5 +1,10 @@
-# NOTE: all code is copy pasted from old `StableHashTraits.jl` excepting the new function
-# `hash_type`
+#####
+##### Internal Hash Algorithm Interface
+#####
+
+# This is a well defined interface that is used internally to compute hashes from bytes;
+# each type of hashing function that `stable_hash` accepts is setup to implement it. (See
+# bottom of this file for the implementations)
 
 """
     update_hash!(state::HashState, bytes)
@@ -60,12 +65,6 @@ Akin to `similar` for arrays, this constructs a new object of the same concrete 
 as `state`
 """
 function similar_hash_state end
-
-"""
-    hash_type(state::HashState)
-
-Return the type that `compute_hash!` returns.
-"""
 
 #####
 ##### SHA Hashing: support use of `sha256` and related hash functions
@@ -139,7 +138,6 @@ mutable struct BufferedHashState{T} <: HashState
     io::IOBuffer
 end
 const HASH_BUFFER_SIZE = 2^14
-
 function BufferedHashState(state, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
     delimiters = sizehint!(Vector{Int}(), 2size)
