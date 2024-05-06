@@ -44,14 +44,14 @@ function hash_type_and_value(x, hash_state, context)
     if !transform.preserves_structure
         hash_state = hash_type!(hash_state, context, typeof(tx))
     end
-    return hash_value!(tx, hash_state, context, hash_trait(transform, tx))
+    return stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
 end
 
 # how we hash when the type hash can be hoisted out of a loop
 function hash_value(x, hash_state, context, transform::Transformer)
     tx = transform(x)
     check_hash_method(x, transform, context)
-    return hash_value!(tx, hash_state, context, hash_trait(transform, tx))
+    return stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
 end
 
 # There are two cases where we want to hash types:
@@ -68,6 +68,34 @@ end
 #####
 ##### Type Hashes
 #####
+
+"""
+    hash_type!(hash_state, context, T)
+
+Hash type `T` in the given context, updating `hash_state`.
+"""
+function hash_type!(hash_state, context, ::Type{T}) where {T}
+    # TODO: cache type hashing in the final release (no this PR)
+    type_context = TypeHashContext(context)
+    transform = transformer(typeof(T), type_context)
+    tT = transform(T)
+    hash_type_state = similar_hash_state(hash_state)
+    hash_type_state = stable_hash_helper(tT, hash_type_state, type_context,
+                                         hash_trait(transform, tT))
+    bytes = reinterpret(UInt8, asarray(compute_hash!(hash_type_state)))
+
+    return update_hash!(hash_state, bytes, context)
+end
+asarray(x) = [x]
+asarray(x::AbstractArray) = x
+
+struct TypeHashContext{T}
+    parent::T
+end
+TypeHashContext(x::TypeHashContext) = x
+parent_context(x::TypeHashContext) = x.parent
+hash_type!(hash_state, ::TypeHashContext, key::Type{<:Type}) = hash_state
+hash_type!(hash_state, ::TypeHashContext, key::Type) = hash_state
 
 function transformer(::Type{T}, context::TypeHashContext) where {T<:Type}
     return Transformer(T -> (type_hash_name(T, StructType_(T), context),
@@ -149,7 +177,7 @@ struct TypeAsValueContext{T}
 end
 parent_context(x::TypeAsValueContext) = x.parent
 
-function hash_type!(hash_state, context::CachedHash, ::Type{<:Type})
+function hash_type!(hash_state, context, ::Type{<:Type})
     return update_hash!(hash_state, "Base.Type", context)
 end
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
@@ -174,7 +202,7 @@ type_value_name(::Type{T}, trait, ::Nothing) where {T} = type_value_name(T, trai
 type_value_name(::Type{T}, trait) where {T} = qualified_name_(T)
 type_value_name(::Type{Union{}}, trait) = "Base.Union{}"
 
-hash_type!(hash_state, ::TypeAsValueContext, T) = hash_state
+hash_type!(hash_state, ::TypeAsValueContext, ::Type{<:Type}) = hash_state
 function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where {T}
     type_context = TypeAsValueContext(context)
     transform = transformer(typeof(T), type_context)::Transformer

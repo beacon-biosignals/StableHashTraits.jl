@@ -15,10 +15,6 @@ export stable_hash, HashVersion, stable_type_name
 include("hash_algorithms.jl")
 # update_hash!, HashState, compute_hash!, start_nested_hash!, end_nested_hash!, similar_hash_state
 
-include("caching_context.jl")
-export CachedHash
-# StableHashTraits.UseCache
-
 # deprecated type used by `hash_method` that needs to be defined earlier than the other
 # `deprecated.jl` content (to be used for a deprecation check in `hash_traits.jl`)
 struct NotImplemented end
