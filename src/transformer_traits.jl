@@ -70,7 +70,7 @@ end
 #####
 
 """
-    hash_type!(hash_state, context, T)
+        hash_type!(hash_state, context, T)
 
 Hash type `T` in the given context, updating `hash_state`.
 """
