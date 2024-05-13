@@ -45,7 +45,7 @@ jobs:
           Pkg.activate("test/ValidateGenerated")
           Pkg.develop(PackageSpec(; path="."))
           Pkg.status()
-      - uses: julia-actions/cache@v1
+      - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-runtest@main
         with:
           compiled_modules: 'no'
