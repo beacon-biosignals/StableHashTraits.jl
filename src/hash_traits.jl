@@ -140,7 +140,19 @@ function validate_name(str)
     return str
 end
 
-qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
+function qname_(T, name)
+    sym = string(name(T))
+    parent = string(parentmodule(T))
+    # in some contexts `string(T)` will include the parent module as a prefix and in some
+    # other contexts it won't 😭, yet another reason we should be moving towards the design
+    # being worked out in https://github.com/beacon-biosignals/StableHashTraits.jl/pull/58
+    str = if startswith(sym, parent*".")
+        sym
+    else
+        string(parent, ".", sym)
+    end
+    validate_name(cleanup_name(str))
+end
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_type_(fn::Function) = qname_(fn, string)
 qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
