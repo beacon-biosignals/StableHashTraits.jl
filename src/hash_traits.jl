@@ -146,12 +146,12 @@ function qname_(T, name)
     # in some contexts `string(T)` will include the parent module as a prefix and in some
     # other contexts it won't 😭, yet another reason we should be moving towards the design
     # being worked out in https://github.com/beacon-biosignals/StableHashTraits.jl/pull/58
-    str = if startswith(sym, parent*".")
+    str = if startswith(sym, parent * ".")
         sym
     else
         string(parent, ".", sym)
     end
-    validate_name(cleanup_name(str))
+    return validate_name(cleanup_name(str))
 end
 qualified_name_(fn::Function) = qname_(fn, nameof)
 qualified_type_(fn::Function) = qname_(fn, string)
