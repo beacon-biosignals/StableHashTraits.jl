@@ -142,7 +142,9 @@ end
 
 # this version of qname is buggy!!! we keep the bug in to avoid changing
 # hashes that "depend" on this bug, only using the fixed variant for hash version 3.
-qname_(T, name, ::Val{:broken}) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
+function qname_(T, name, ::Val{:broken})
+    return validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
+end
 function qname_(T, name, ::Val{:fixed})
     sym = string(name(T))
     parent = string(parentmodule(T))
@@ -159,8 +161,12 @@ end
 # the fix should only affect qualified_type not qualified_name (a fact verified by our reference tests)
 qualified_name_(fn::Function, ver=Val(:fixed)) = qname_(fn, nameof, Val(:fixed))
 qualified_type_(fn::Function, ver=Val(:broken)) = qname_(fn, string, ver)
-qualified_name_(x::T, ver=Val(:fixed)) where {T} = qname_(T <: DataType ? x : T, nameof, Val(:fixed))
-qualified_type_(x::T, ver=Val(:broken)) where {T} = qname_(T <: DataType ? x : T, string, ver)
+function qualified_name_(x::T, ver=Val(:fixed)) where {T}
+    return qname_(T <: DataType ? x : T, nameof, Val(:fixed))
+end
+function qualified_type_(x::T, ver=Val(:broken)) where {T}
+    return qname_(T <: DataType ? x : T, string, ver)
+end
 qualified_(T, ::Val{:name}, ver) = qualified_name_(T)
 qualified_(T, ::Val{:type}, ver) = qualified_type_(T, ver)
 # we need `Type{Val}` methods below because the generated functions that call `qualified_`
@@ -479,7 +485,6 @@ TypeNameHash(::HashVersion{1}) = FnHash(qualified_name)
 # we can use a more conservative id here, we used a shorter one before to avoid hashing long strings
 TypeNameHash(::HashVersion{2}) = FnHash(stable_type_id, WriteHash())
 TypeNameHash(::HashVersion) = FnHash(stable_type_id_fixed, WriteHash())
-
 
 hash_method(::NamedTuple, c::HashVersion) = (TypeNameHash(c), StructHash())
 function hash_method(::AbstractRange, c::HashVersion)
