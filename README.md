@@ -110,6 +110,14 @@ Missing from the above list is one final, advanced, trait: `HashAndContext` whic
 
 ## Breaking changes
 
+### In 1.2
+
+This release includes a bugfix to `stable_type_id` and the underlying hashes that depend on it (true for most types). This bug caused `stable_type_id` to yield a different value depending on the order in which modules were loaded and in what scope `stable_type_id` was first called for a given type. The long-term plan is for this error to be addressed by eliminating the need for `stable_type_id` (see [#55](https://github.com/beacon-biosignals/StableHashTraits.jl/pull/55) for details) at all, as the hashing of types can be somewhat fragile with the current design.
+
+In the meantime, 1.2 provides a fixed version of `stable_type_id` that can be used by leveraging hash version 3. E.g. if you call `stable_hash(x, version=3)` or use `HashVersion{3}()` where you would have used `HashVersion{2}()` you will not be susceptible to these issues.
+
+However, some existing hashes might depend on the extant, broken behavior, so versions 1 and 2 of hashing remain unchanged.
+
 ### In 1.1
 
 This release includes speed improvements of about 100 fold.
