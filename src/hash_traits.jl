@@ -141,9 +141,9 @@ function validate_name(str)
 end
 
 # this version of qname is buggy!!! we keep the bug in to avoid changing
-# hashes that "depend" on this bug
+# hashes that "depend" on this bug, only using the fixed variant for hash version 3.
 qname_(T, name, ::Val{:broken}) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
-function qname_fixed_(T, name, ::Val{:fixed})
+function qname_(T, name, ::Val{:fixed})
     sym = string(name(T))
     parent = string(parentmodule(T))
     # in some contexts `string(T)` will include the parent module as a prefix and in some
@@ -157,10 +157,10 @@ function qname_fixed_(T, name, ::Val{:fixed})
     return validate_name(cleanup_name(str))
 end
 # the fix should only affect qualified_type not qualified_name (a fact verified by our reference tests)
-qualified_name_(fn::Function, ver) = qname_(fn, nameof, Val(:fixed))
-qualified_type_(fn::Function, ver) = qname_(fn, string, ver)
-qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof, Val(:fixed))
-qualified_type_(x::T, ver) where {T} = qname_(T <: DataType ? x : T, string, ver)
+qualified_name_(fn::Function, ver=Val(:fixed)) = qname_(fn, nameof, Val(:fixed))
+qualified_type_(fn::Function, ver=Val(:broken)) = qname_(fn, string, ver)
+qualified_name_(x::T, ver=Val(:fixed)) where {T} = qname_(T <: DataType ? x : T, nameof, Val(:fixed))
+qualified_type_(x::T, ver=Val(:broken)) where {T} = qname_(T <: DataType ? x : T, string, ver)
 qualified_(T, ::Val{:name}, ver) = qualified_name_(T)
 qualified_(T, ::Val{:type}, ver) = qualified_type_(T, ver)
 # we need `Type{Val}` methods below because the generated functions that call `qualified_`
@@ -179,7 +179,7 @@ function qualified_type(x)
     Base.depwarn("`qualified_type` is deprecated, favor `stable_type_id` in all cases " *
                  "where backwards compatible hash values are not required.",
                  :qualified_type)
-    return qualified_type_(x, Val{:broken})
+    return qualified_type_(x, Val{:broken}())
 end
 
 bytes_of_val(f) = reinterpret(UInt8, [f;])
@@ -477,7 +477,6 @@ TypeHash(::HashVersion{2}) = FnHash(stable_type_id, WriteHash())
 TypeHash(::HashVersion) = FnHash(stable_type_id_fixed, WriteHash())
 TypeNameHash(::HashVersion{1}) = FnHash(qualified_name)
 # we can use a more conservative id here, we used a shorter one before to avoid hashing long strings
-TypeNameHash(::HashVersion{1}) = FnHash(stable_type_id, WriteHash())
 TypeNameHash(::HashVersion{2}) = FnHash(stable_type_id, WriteHash())
 TypeNameHash(::HashVersion) = FnHash(stable_type_id_fixed, WriteHash())
 
