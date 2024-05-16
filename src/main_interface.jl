@@ -15,8 +15,8 @@ these fallback methods will not change even if new fallbacks are defined.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
-        V < 3 && Base.depwarn("HashVersion{V} for V < 3 is deprecated, favor "*
-                              "`HashVersion{3}` in all cases where backwards compatible "*
+        V < 3 && Base.depwarn("HashVersion{V} for V < 3 is deprecated, favor " *
+                              "`HashVersion{3}` in all cases where backwards compatible " *
                               "hash values are not required.", :HashVersion)
         return new{V}()
     end
