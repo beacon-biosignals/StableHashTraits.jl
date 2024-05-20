@@ -159,7 +159,7 @@ function qname_(T, name, ::Val{:fixed})
     return validate_name(cleanup_name(str))
 end
 # the fix should only affect qualified_type not qualified_name (a fact verified by our reference tests)
-qualified_name_(fn::Function, ver=Val(:fixed)) = qname_(fn, nameof, Val(:fixed))
+qualified_name_(fn::Function, ver=Val(:fixed)) = qname_(fn, nameof, ver)
 qualified_type_(fn::Function, ver=Val(:broken)) = qname_(fn, string, ver)
 function qualified_name_(x::T, ver=Val(:fixed)) where {T}
     return qname_(T <: DataType ? x : T, nameof, Val(:fixed))
@@ -262,7 +262,7 @@ julia> stable_type_id(["a", "b"])
     as their printing changes from Julia 1.6 -> 1.7.
 
 !!! warn
-    This function has bug in that has been left in to avoid breaking old hashes.
+    This function has a known bug that has been left in to avoid breaking old hashes.
     (The long-term plan is to eliminate this and `qualified_type` from the API,
     see https://github.com/beacon-biosignals/StableHashTraits.jl/pull/55 for details).
     The bug means that the type has can depend on the order in which you load modules

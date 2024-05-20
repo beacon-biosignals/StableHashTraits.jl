@@ -15,9 +15,14 @@ these fallback methods will not change even if new fallbacks are defined.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
-        V < 3 && Base.depwarn("HashVersion{V} for V < 3 is deprecated, favor " *
-                              "`HashVersion{3}` in all cases where backwards compatible " *
-                              "hash values are not required.", :HashVersion)
+        if !(V == 3)
+            Base.depwarn("HashVersion{V} for V < 3 is deprecated, favor " *
+                         "`HashVersion{3}` in all cases where backwards compatible " *
+                         "hash values are not required.", :HashVersion)
+            @warn "Hash version 1 and 2 have been found to depend on the module in "*
+                "which they are first executed (cf [#64](https://github.com/beacon-"*
+                "biosignals/StableHashTraits.jl/pull/64)); to avoid hash instability,"*
+                " use version 3."
         return new{V}()
     end
 end

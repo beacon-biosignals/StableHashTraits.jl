@@ -116,7 +116,7 @@ This release includes a bugfix to `stable_type_id` and the underlying hashes tha
 
 In the meantime, 1.2 provides a new hash version 3, which uses a fixed version of `stable_type_id` that can be used by leveraging hash version 3. E.g. if you call `stable_hash(x, version=3)` or use `HashVersion{3}()` where you would have used `HashVersion{2}()` you will not be susceptible to the bug. If you make use of `stable_type_id` directly and want to avoid this bug, you should use `StableHashTraits.stable_type_id_fixed`.
 
-Because existing usese of `StableHashTraits` might depend on the extant, broken behavior, versions 1 and 2 of hashing remain unchanged.
+Because existing uses of `StableHashTraits` might depend on the extant, broken behavior, versions 1 and 2 of hashing remain unchanged.
 
 ### In 1.1
 
