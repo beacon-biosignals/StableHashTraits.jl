@@ -144,7 +144,7 @@ struct MyType{T,F}
     obj::T
 end
 StableHashTratis.type_structure(::Type{T}, ::StructTypes.DataType) where {F,T<:MyType{<:Any,F}}
-    return fieldnames(T), fieldtypes(T), F
+    return F
 end
 ```
 
@@ -222,9 +222,7 @@ end
 # remember: functions can have fields; in general StructTypes doesn't assume these are
 # serialized but here we want that to happen by default, so e.g. ==(2) will properly hash
 # both the name of `==` and `2`.
-function transformer(::Type{<:Function}, ::HashVersion{3})
-    return Transformer(identity, StructTypes.UnorderedStruct())
-end
+hash_trait(x::Function) = StructTypes.UnorderedStruct()
 
 function type_hash_name(::Type{T}, ::StructTypes.NoStructType) where {T<:Function}
     return function_type_name(T)
