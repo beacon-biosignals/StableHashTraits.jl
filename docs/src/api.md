@@ -8,8 +8,8 @@ StableHashTraits.transformer
 StableHashTraits.Transformer
 StableHashTraits.TransformIdentity
 StableHashTraits.preserves_structure
-StableHashTraits.type_hash_name
-StableHashTraits.type_value_name
+StableHashTraits.type_identifier
+StableHashTraits.type_value_identifier
 StableHashTraits.type_structure
 StableHashTraits.is_ordered
 StableHashTraits.hash_sort_by

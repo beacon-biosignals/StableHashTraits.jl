@@ -355,7 +355,7 @@ PrivateConstantHash(val) = PrivateConstantHash{typeof(val),Nothing}(val, nothing
 get_value_(x, method::PrivateConstantHash) = method.constant
 
 function ConstantHash(constant, method=nothing)
-    Base.depwarn("`ConstantHash` has been deprecated, implement a method of `type_hash_name` instead.",
+    Base.depwarn("`ConstantHash` has been deprecated, implement a method of `type_identifier` instead.",
                  :ConstantHash)
     return PrivateConstantHash(constant, method)
 end

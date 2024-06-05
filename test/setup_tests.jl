@@ -57,7 +57,7 @@ end
 StableHashTraits.hash_method(::TypeType) = StructHash()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
 
-StableHashTraits.type_hash_name(::Type{<:TestType2}) = "TestType2"
+StableHashTraits.type_identifier(::Type{<:TestType2}) = "TestType2"
 StructTypes.StructType(::Type{<:TestType4}) = StructTypes.OrderedStruct()
 
 struct NonTableStruct

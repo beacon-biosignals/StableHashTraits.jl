@@ -17,9 +17,9 @@ struct WithTypeNames{T}
     end
 end
 parent_context(x::WithTypeNames) = x.parent
-type_hash_name(::Type{T}, trait, c::WithTypeNames) where {T} = qualified_name_(T)
+type_identifier(::Type{T}, trait, c::WithTypeNames) where {T} = qualified_name_(T)
 
-# NOTE: from this point below, only the `transformer` and `type_hash_name`-related code is
+# NOTE: from this point below, only the `transformer` and `type_identifier`-related code is
 # new
 
 #####
@@ -51,11 +51,11 @@ function hash_method(x::T, m::TablesEq) where {T}
     return hash_method(x, parent_context(m))
 end
 
-function type_hash_name(::Type{T}, ::StructTypes.DataType, context::TablesEq) where {T}
+function type_identifier(::Type{T}, ::StructTypes.DataType, context::TablesEq) where {T}
     if Tables.istable(T)
         return "Tables.istable"
     else
-        type_hash_name(T, parent_context(context))
+        type_identifier(T, parent_context(context))
     end
 end
 

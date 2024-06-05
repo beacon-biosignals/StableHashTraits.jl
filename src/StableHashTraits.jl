@@ -10,7 +10,7 @@ using StructTypes: StructType
 
 include("main_interface.jl")
 export stable_hash, HashVersion, stable_type_name
-# Transformer, transformer
+# Transformer, transformer, @context
 
 include("hash_algorithms.jl")
 # update_hash!, HashState, compute_hash!, start_nested_hash!, end_nested_hash!, similar_hash_state
@@ -22,7 +22,7 @@ is_implemented(::NotImplemented) = false
 is_implemented(_) = true
 
 include("transformer_traits.jl")
-# stable_hash_helper, type_hash_name, type_value_name, type_structure
+# stable_hash_helper, type_identifier, type_value_identifier, type_structure
 
 include("hash_traits.jl")
 export WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,

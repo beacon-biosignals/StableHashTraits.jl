@@ -180,3 +180,28 @@ function stable_hash_helper(x, hash_state, context, trait)
                         "object provides an invalid second argument."))
     return
 end
+
+"""
+    @context MyContext
+
+Shorthand for declaring a custom context, when no additional fields are required. This is
+rewritten as:
+
+```julia
+struct MyContext{T}
+    parent::T
+end
+StableHashTraits.parent_context(x::MyContext) = x.parent
+```
+
+## See Also
+- [`parent_context`](@ref)
+"""
+macro context(TypeName)
+    quote
+        Base.@__doc__ struct $(TypeName){T}
+            parent::T
+        end
+        StableHashTraits.parent_context(x::$(TypeName)) = x.parent
+    end
+end

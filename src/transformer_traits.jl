@@ -98,7 +98,7 @@ hash_type!(hash_state, ::TypeHashContext, key::Type{<:Type}) = hash_state
 hash_type!(hash_state, ::TypeHashContext, key::Type) = hash_state
 
 function transformer(::Type{T}, context::TypeHashContext) where {T<:Type}
-    return Transformer(T -> (type_hash_name(T, StructType_(T), context),
+    return Transformer(T -> (type_identifier(T, StructType_(T), context),
                              internal_type_structure(T, StructType_(T)),
                              type_structure(T, StructType_(T), context)))
 end
@@ -106,19 +106,59 @@ end
 StructType_(::Type{Union{}}) = StructTypes.NoStructType()
 
 """
-    type_hash_name(::Type{T}, trait, [context])
+    type_identifier(::Type{T}, trait, [context])
 
 The name that is hashed for type `T` when hashing the type of a given value. This defaults
 to `stable_type_name(trait)`. Users of `StableHashTraits` can implement a method that accepts two
 (`T` and `trait`) or three arguments (`T`, `trait`, `context`). The trait is one of the
 `StructTypes` traits and `context` is the hash context (as per the second argument to
 `stable_hash`)
-"""
-function type_hash_name(::Type{T}, trait, context) where {T}
-    return type_hash_name(T, trait, parent_context(context))
+
+## Examples
+
+### Singleton Types
+
+You can opt in to hashing novel singleton types by overwriting `type_identifier`:
+
+```julia
+struct MySingleton end
+StructTypes.StructType(::MySingleton) = StructTypes.SingletonType()
+function StableHashTraits.type_identifier(::Type{T},
+                                          ::StructTypes.SingletonType) where {T<:MySingleton}
+    return "MySingleton"
 end
-type_hash_name(::Type{T}, trait, ::HashVersion{3}) where {T} = type_hash_name(T, trait)
-type_hash_name(::Type{T}, trait) where {T} = qualified_name_(trait)
+```
+If you do not own the type you wish to customize, you can use a context:
+
+```julia
+using AnotherPackage: PackageSingleton
+StableHashTriats.@context HashAnotherSingleton
+function StableHashTraits.type_identifier(::Type{T}, ::StructTypes.SingletonType,
+                                          ::HashAnotherSingleton) where {T<:PackageSingleton}
+    return "AnotherPackage.PackageSingleton"
+end
+context = HashAnotherSingleton(HashVersion{3}())
+stable_hash([PackageSingleton(), 1, 2], context) # will not error
+```
+
+### Functions
+
+Overwriting type_identifier can be used to hash functions.
+
+```julia
+f(x) = x+1
+function StableHashTraits.type_identifier(::typeof(fn), ::StructTypes.NoStructType)
+    "Main.fn"
+end
+```
+
+
+"""
+function type_identifier(::Type{T}, trait, context) where {T}
+    return type_identifier(T, trait, parent_context(context))
+end
+type_identifier(::Type{T}, trait, ::HashVersion{3}) where {T} = type_identifier(T, trait)
+type_identifier(::Type{T}, trait) where {T} = qualified_name_(trait)
 
 """
     type_structure(::Type{T}, trait, [context])
@@ -130,26 +170,44 @@ second argument must be included as part of a method definition, but `context` i
 You need to override this method when a type parameter of `T` is important to the type's
 hash but is not included as part of the normal hash.
 
-The normal hash includes:
+The normal type_structure includes:
 
 - `fieldtypes(T)` of any `StructType.DataType` (e.g. StructType.Struct)
 - `eltype(T)` of any `StructType.ArrayType` or `StructType.DictType`
 - `ndims(T)` of any `AbstractArray` that is a `StructType.ArrayTYpe` and that has a concrete
   dimension
 
-## Example
+## Examples
+
 
 ```julia
-struct MyType{T,F}
-    obj::T
+struct MyStruct{T,K}
+    wrapped::T
 end
-StableHashTratis.type_structure(::Type{T}, ::StructTypes.DataType) where {F,T<:MyType{<:Any,F}}
-    return F
-end
+
+StableHashTraits.type_structure(::Type{<:MyStruct{T,K}}) = K
 ```
 
-Without this definition `MyType{Int,:foo}(1)` would hash to the same value as
-`MyType{Int,:bar}(1)`.
+By adding this additional method for `type_structure` both `K` and `T` will impact the hash,
+`T` because it is included in `fieldtypes(<:MyStruct)` and `K` because it is included in
+`type_structure(<:MyStruct)`.
+
+If you do not own the type you want to customize, you can specialize `type_structure` using
+a specific hash context.
+
+```julia
+using Intervals
+
+StableHashTraits.@context IntervalEndpointsMatter
+
+function HashTraits.type_structure(::Type{<:I}, ::IntervalEndpointsMatter) where {T, L, R, I<:Interval{T, L, R}}
+    return (L, R)
+end
+
+context = IntervalEndpointsMatter(HashVersion{3}())
+stable_hash(Interval{Closed, Open}(1, 2), context) !=
+    stable_hash(Interval{Open, Closed}(1, 2), context) # true
+```
 
 """
 function type_structure(::Type{T}, trait, context) where {T}
@@ -181,13 +239,13 @@ function hash_type!(hash_state, context, ::Type{<:Type})
     return update_hash!(hash_state, "Base.Type", context)
 end
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
-    return Transformer(T -> (type_value_name(T, context),
+    return Transformer(T -> (type_value_identifier(T, context),
                              internal_type_structure(T, StructType_(T)),
                              type_structure(T, StructType_(T), context)))
 end
 
 """
-    type_value_name(::Type{T}, trait, [context]) where {T}
+    type_value_identifier(::Type{T}, trait, [context]) where {T}
 
 The name that is hashed for type `T` when hashing a type as a value (e.g.
 `stable_hash(Int)`). This defaults to `stable_type_name(T)`. Users of `StableHashTraits` can
@@ -195,12 +253,12 @@ implement a method that accepts two (`T` and `trait`) or three arguments (`T`, `
 `context`). The trait is one of the `StructTypes` traits and `context` is the hash context
 (as per the second argument to `stable_hash`)
 """
-function type_value_name(::Type{T}, trait, context) where {T}
-    return type_value_name(T, trait, parent_context(context))
+function type_value_identifier(::Type{T}, trait, context) where {T}
+    return type_value_identifier(T, trait, parent_context(context))
 end
-type_value_name(::Type{T}, trait, ::Nothing) where {T} = type_value_name(T, trait)
-type_value_name(::Type{T}, trait) where {T} = qualified_name_(T)
-type_value_name(::Type{Union{}}, trait) = "Base.Union{}"
+type_value_identifier(::Type{T}, trait, ::Nothing) where {T} = type_value_identifier(T, trait)
+type_value_identifier(::Type{T}, trait) where {T} = qualified_name_(T)
+type_value_identifier(::Type{Union{}}, trait) = "Base.Union{}"
 
 hash_type!(hash_state, ::TypeAsValueContext, ::Type{<:Type}) = hash_state
 function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where {T}
@@ -224,11 +282,11 @@ end
 # both the name of `==` and `2`.
 hash_trait(x::Function) = StructTypes.UnorderedStruct()
 
-function type_hash_name(::Type{T}, ::StructTypes.NoStructType) where {T<:Function}
+function type_identifier(::Type{T}, ::StructTypes.NoStructType) where {T<:Function}
     return function_type_name(T)
 end
-function type_value_name(::Type{T}, ::StructTypes.NoStructType) where {T<:Function}
-    return function_type_name(T)
+function type_value_identifier(::Type{T}, ::StructTypes.NoStructType) where {T<:Function}
+    return type_identifier(T, ::StructTypes.NoStructType())
 end
 
 function function_type_name(::Type{T}) where {T}
@@ -456,7 +514,7 @@ end
 ##### Basic data types
 #####
 
-type_hash_name(::Type{Symbol}, ::StructTypes.StringType) = "Base.Symbol"
+type_identifier(::Type{Symbol}, ::StructTypes.StringType) = "Base.Symbol"
 function transformer(::Type{<:Symbol}, ::HashVersion{3})
     return Transformer(String; preserves_structure=true)
 end
@@ -478,9 +536,9 @@ function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
 end
 
 # null types are encoded purely by their type hash
-type_hash_name(::Type{T}, ::StructTypes.NullType) where {T} = qualified_name_(T)
+type_identifier(::Type{T}, ::StructTypes.NullType) where {T} = qualified_name_(T)
 stable_hash_helper(_, hash_state, context, ::StructTypes.NullType) = hash_state
 
 # singleton types are encoded purely by their type hash
-type_hash_name(::Type{T}, ::StructTypes.SingletonType) where {T} = qualified_name_(T)
+type_identifier(::Type{T}, ::StructTypes.SingletonType) where {T} = qualified_name_(T)
 stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType) = hash_state
