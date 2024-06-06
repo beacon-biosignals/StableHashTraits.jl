@@ -31,10 +31,7 @@ For example, this customization makes the ordering of named tuple keys affect th
 
 ```@doctest
 julia> begin
-        struct NamedTuplesOrdered{T}
-            parent::T
-        end
-        StableHashTraits.parent_context(x::NamedTuplesOrdered) = x.parent
+        @context NamedTuplesOrdered
         function transformer(::Type{<:NamedTuple}, ::NamedTuplesOrdered)
             Transformer(identity, StructTypes.OrderedStruct())
         end

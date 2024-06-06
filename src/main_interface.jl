@@ -41,8 +41,8 @@ related function from `SHA` or any function of the form `hash(x::AbstractArray{U
 [old_hash])`.
 
 The `context` value gets passed as the second argument to [`hash_method`](@ref) and
-[`transformer`], and as the third argument to [`StableHashTraits.write`](@ref). Note that
-both `hash_method` and `StableHashTraits.write` are deprecated.
+[`transformer`](@ref), and as the third argument to [`StableHashTraits.write`](@ref). Note
+that both `hash_method` and `StableHashTraits.write` are deprecated.
 
 ## See Also
 
@@ -62,10 +62,10 @@ end
 """
     StableHashTraits.parent_context(context)
 
-Return the parent context of the given context object. (See [`hash_method`](@ref) for
-details of using context). The default method falls back to returning `HashVersion{1}`, but
-this is flagged as a deprecation warning; in the future it is expected that all contexts
-define this method.
+Return the parent context of the given context object. (See [`hash_method`](@ref) and
+[`@context`](@ref) for details of using context). The default method falls back to returning
+`HashVersion{1}`, but this is flagged as a deprecation warning; in the future it is expected
+that all contexts define this method.
 
 This is normally all that you need to know to implement a new context. However, if your
 context is expected to be the root context—one that does not fallback to any parent (akin to
@@ -115,32 +115,35 @@ hoisting the type hash outside of loops during hashing.
 """
 preserves_structure(::typeof(identity)) = true
 preserves_structure(::Function) = false
-preserves_structure(::typeof(stable_type_name)) = true
+preserves_structure(::typeof(parentmodule_nameof)) = true
 preserves_structure(::Type) = false
 (tr::Transformer)(x) = tr.fn(x)
 
 """
     StableHashTraits.transformer(::Type{T}, [context]) where {T}
 
-Return [`Transformer`](@ref) indicating how to modify an object of type `T` before
-hashing it. Methods without a `context` are called if no method for that type
-exists for any specific `context` object.
+Return [`Transformer`](@ref) indicating how to modify an object of type `T` before hashing
+it. Methods without `context` are called first, and if no method for that type exists there
+is a fallback that calls the method without a `context`. Users can therefore implement a
+method with a context object to customize transformations for that context only, or a single
+argument method when they wish to affect the transformation across all contexts (where no
+specialized method for that context exists).
 """
 transformer(::Type{T}, context) where {T} = transformer(T, parent_context(context))
 transformer(::Type{T}, ::HashVersion{3}) where {T} = transformer(T)
 transformer(x) = Transformer()
 
 """
-    stable_type_name(::Type{T})
-    stable_type_name(T::Module)
-    stable_type_name(::T) where {T}
+    parentmodule_nameof(::Type{T})
+    parentmodule_nameof(T::Module)
+    parentmodule_nameof(::T) where {T}
 
 Get a stable name of `T`. The stable name includes the name of the module that `T` was
 defined in. Any uses of `Core` are replaced with `Base` to keep the name stable across
-versions of julia. Anonymous names (e.g. `stable_type_name(x -> x+1)`) throw an error, as no
+versions of julia. Anonymous names (e.g. `parentmodule_nameof(x -> x+1)`) throw an error, as no
 stable name is possible in this case.
 """
-stable_type_name(x) = qualified_name_(x)
+parentmodule_nameof(x) = qualified_name_(x)
 
 """
     StableHashTraits.TransformIdentity(x)
@@ -182,10 +185,15 @@ function stable_hash_helper(x, hash_state, context, trait)
 end
 
 """
-    @context MyContext
+    StableHashTraits.@context MyContext
 
-Shorthand for declaring a custom context, when no additional fields are required. This is
-rewritten as:
+Shorthand for declaring a hash context.
+
+Contexts are used to customize the behavior of a hash for a type you don't own, by passing
+the context as the second argument to `stable_hash`, and specializing methods of
+[`transform`](@ref) or [`transform_type`](@ref) on your context (see example below).
+
+The clause `@context MyContext` is re-written to:
 
 ```julia
 struct MyContext{T}
@@ -194,8 +202,20 @@ end
 StableHashTraits.parent_context(x::MyContext) = x.parent
 ```
 
+The parent context is typically another custom context, or the root context
+`HashVersion{3}()`.
+
+## Example
+
+```julia
+StableHashTraits.@context NumberAbs
+transformer(::Type{<:Number}, ::NumberAbs) = Transformer(abs; preserves_structure=true)
+stable_hash(10, NumberAbs(HashVersion{3}())) == stable_hash(-10, NumberAbs(HashVersion{3}()))
+```
+
 ## See Also
 - [`parent_context`](@ref)
+
 """
 macro context(TypeName)
     quote

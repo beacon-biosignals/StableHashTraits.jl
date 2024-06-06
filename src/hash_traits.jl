@@ -216,7 +216,7 @@ end
 #####
 
 # TODO: some of this will be moved out of deprecated and renamed to match the public facing
-# function (stable_type_name)
+# function (parentmodule_nameof)
 function validate_name(str)
     if occursin("#", str)
         throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value: found type $str"))
@@ -238,7 +238,7 @@ qualified_(T, ::Type{Val{:type}}) = qualified_type_(T)
 
 # deprecate external use of `qualified_name/type`
 function qualified_name(x)
-    Base.depwarn("`qualified_name` is deprecated, favor `stable_type_name` in all cases " *
+    Base.depwarn("`qualified_name` is deprecated, favor `parentmodule_nameof` in all cases " *
                  "where backwards compatible hash values are not required.",
                  :qualified_name)
     return qualified_name_(x)
