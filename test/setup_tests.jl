@@ -46,6 +46,11 @@ function StableHashTraits.transformer(::Type{<:TestType2})
     return StableHashTraits.Transformer(x -> (x.a, x.b); hoist_type=true)
 end
 StableHashTraits.hash_method(::TestType3) = StructHash(:ByName)
+
+StableHashTraits.transform_type(::Type{<:TestType3}) = "TestType"
+function StableHashTraits.transformer(::Type{<:TestType3})
+    return StableHashTraits.Transformer(x -> (x.a, x.b); hoist_type=false)
+end
 function StableHashTraits.hash_method(::TestType4, context::HashVersion{V}) where {V}
     V > 2 && return StableHashTraits.NotImplemented()
     return StructHash(propertynames => getproperty)

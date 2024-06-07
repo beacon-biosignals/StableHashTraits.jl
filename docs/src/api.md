@@ -9,7 +9,7 @@ StableHashTraits.TransformIdentity
 StableHashTraits.hoist_type
 StableHashTraits.transform_type
 StableHashTraits.transform_type_value
-parentmodule_nameof
+module_nameof_string
 StableHashTraits.is_ordered
 StableHashTraits.hash_sort_by
 StableHashTraits.parent_context

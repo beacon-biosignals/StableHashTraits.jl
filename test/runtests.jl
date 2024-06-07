@@ -212,10 +212,10 @@ include("setup_tests.jl")
                 # TODO: currently failing test I'm working on
                 @test test_hash(missing) != test_hash(nothing)
                 if V == 4
-                    @test test_hash(Singleton1, HashSingletonTypes(ctx)) !=
-                        test_hash(Singleton2, HashSingletonTypes(ctx))
+                    @test test_hash(Singleton1(), HashSingletonTypes(ctx)) !=
+                        test_hash(Singleton2(), HashSingletonTypes(ctx))
                 else
-                    @test test_hash(Singleton1) != test_hash(Singleton2)
+                    @test test_hash(Singleton1()) != test_hash(Singleton2())
                 end
             end
 
@@ -250,12 +250,10 @@ include("setup_tests.jl")
                 end
             end
 
-            # TODO: test singleton-type and custom struct
             @testset "Custom hash_method" begin
                 @test @ConstantHash(5).constant isa UInt64
                 @test @ConstantHash("foo").constant isa UInt64
                 @test_throws ArgumentError @ConstantHash(1 + 2)
-                # TODO: debugging this bit
                 @test test_hash(ExtraTypeParams{:A,Int}(2)) !=
                       test_hash(ExtraTypeParams{:B,Int}(2))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType(1, 2))
@@ -263,8 +261,8 @@ include("setup_tests.jl")
                 @test test_hash(TestType2(1, 2)) != test_hash((a=1, b=2))
                 @test test_hash(TestType4(1, 2)) == test_hash(TestType4(1, 2))
                 @test test_hash(TestType4(1, 2)) != test_hash(TestType3(1, 2))
-                @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
                 @test test_hash(TestType(1, 2)) != test_hash(TestType4(2, 1))
+                @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
                 if V <= 2
                     @test_throws ArgumentError test_hash(BadHashMethod())
                 else

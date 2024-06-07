@@ -29,7 +29,7 @@ function check_hash_method(x, transform, context)
                StableHashTraits.root_version(context) > 2 && return StableHashTraits.NotImplemented()
                # implement `hash_method` for `MyType`
            end
-           """ _id = Symbol(qualified_name_(typeof(x))) maxlog = 1
+           """ _id = Symbol(module_nameof_string(typeof(x))) maxlog = 1
     end
 end
 
@@ -174,7 +174,7 @@ end
 ##### DataType
 #####
 
-transform_type_by_trait(::Type{T}, ::StructTypes.DataType) where {T} = clean_nameof(T)
+transform_type_by_trait(::Type{T}, ::StructTypes.DataType) where {T} = nameof_string(T)
 
 sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
 @generated function sorted_field_names(T)

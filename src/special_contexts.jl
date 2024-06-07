@@ -1,6 +1,10 @@
+# TODO: now that we like nameof_string, maybe we should default to hashing without the
+# module qualification and make one context that lets one use module if you want it
+# (but is more unstable)
+
 const WARN_UNSTABLE = """
 !!! warn "Unstable"
-    `parentmodule_nameof`'s return value can change with non-breaking changes
+    `module_nameof_string`'s return value can change with non-breaking changes
     if e.g. the module of a function or type is changed because it's considered
     an implementation detail of a package.
 """
@@ -26,9 +30,14 @@ end
 """
     HashTypeValues
 
-Hash all types as values, by returningn the value of `parentmodule_nameof`
+Hash all types as values, by returning the value of `module_nameof_string`
 for [`transform_type_value`](@ref)
 """
+@checked_context HashTypeValues
+transform_type_value(::Type{T}, ::HashTypeValues) where {T} = module_nameof_string(T)
+function transform_type_value(::Type{T}, ::HashTypeValues) where {T<:AbstractArray}
+    module_nameof_string(T), ndims_(T)
+end
 
 #####
 ##### HashFunctions
@@ -37,13 +46,13 @@ for [`transform_type_value`](@ref)
 """
     HashFunctions
 
-Hash functions by default, by returning the value of [`parentmodule_nameof`](@ref) for all
+Hash functions by default, by returning the value of [`module_nameof_string`](@ref) for all
 `Function` types in [`transform_type`](@ref).
 
 $WARN_UNSTABLE
 """
 @checked_context HashFunctions
-transform_type(::Type{T}, ::HashFunctions) where {T<:Function} = parentmodule_nameof(T)
+transform_type(::Type{T}, ::HashFunctions) where {T<:Function} = module_nameof_string(T)
 
 #####
 ##### HashNullTypes
@@ -53,14 +62,14 @@ transform_type(::Type{T}, ::HashFunctions) where {T<:Function} = parentmodule_na
     HashNullTypes
 
 Hash function any type `T` where `StructType(T) isa StructTypes.NullType`
-using [`parentmodule_nameof`](@ref).
+using [`module_nameof_string`](@ref).
 
 $WARN_UNSTABLE
 """
 @checked_context HashNullTypes
 function transform_type(::Type{T}, c::HashNullTypes) where {T}
     if StructType(T) <: StructTypes.NullType
-        return parentmodule_nameof(T)
+        return module_nameof_string(T)
     else
         return transform_type(T, parent(c))
     end
@@ -74,14 +83,14 @@ end
     HashSingletonTypes
 
 Hash function any type `T` where `StructType(T) isa StructTypes.SingletonType`
-using [`parentmodule_nameof`](@ref).
+using [`module_nameof_string`](@ref).
 
 $WARN_UNSTABLE
 """
 @checked_context HashSingletonTypes
 function transform_type(::Type{T}, c::HashSingletonTypes) where {T}
-    if StructType(T) <: StructTypes.SingletonType
-        return parentmodule_nameof(T)
+    if StructType(T) isa StructTypes.SingletonType
+        return module_nameof_string(T)
     else
         return transform_type(T, parent(c))
     end
@@ -94,7 +103,7 @@ end
 """
     WithTypeNames(parent_context)
 
-In this hash context, [`transform_type`](@ref) returns `parentmodule_nameof` for all types.
+In this hash context, [`transform_type`](@ref) returns `module_nameof_string` for all types.
 This makes functions and singleton types hashable, and it means the kind of array or
 dictionary you use impacts the hash.
 
@@ -102,7 +111,7 @@ $WARN_UNSTABLE
 
 """
 @checked_context WithTypeNames
-transform_type(::Type{T}, c::WithTypeNames) where {T} = parentmodule_nameof(T)
+transform_type(::Type{T}, c::WithTypeNames) where {T} = module_nameof_string(T)
 
 # NOTE: from this point below, only the `transformer` and `type_identifier`-related code is
 # new

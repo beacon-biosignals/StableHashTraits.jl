@@ -110,7 +110,7 @@ end
 
 Returns true if it is known that `fn` preservess type structure ala [`Transformer`](@ref).
 See [Optimizing Transformers](@ref) for details. This is false by default for all functions
-but `identity` and [`parentmodule_nameof`](@ref). You can define a method of this function
+but `identity` and [`module_nameof_string`](@ref). You can define a method of this function
 for your own fn's to signal that their results can be safely optimized via hoisting the
 type hash outside of loops.
 """
@@ -215,43 +215,75 @@ macro context(TypeName)
 end
 
 """
-    parentmodule_nameof(::Type{T})
-    parentmodule_nameof(T::Module)
-    parentmodule_nameof(::T) where {T}
+    module_nameof_string(::Type{T})
+    module_nameof_string(T::Module)
+    module_nameof_string(::T) where {T}
 
 Get a (mostly!) stable name of `T`. This is a helpful utility for writing your own methods
 of [`transform_type`](@ref) and [`transform_type_value`](@ref). The stable name includes the
 name of the module that `T` was defined in. Any uses of `Core` are replaced with `Base` to
-keep the name stable across versions of julia. Anonymous names (e.g. `parentmodule_nameof(x
+keep the name stable across versions of julia. Anonymous names (e.g. `module_nameof_string(x
 -> x+1)`) throw an error, as no stable name is possible in this case.
 
 If the module or name of a type changes, this value will (obviously) change. The module of
 many types is considered an implementation detail and can change between non-breaking
-versions of a package. For this reason uses of `parentmodule_nameof` must be explicitly
+versions of a package. For this reason uses of `module_nameof_string` must be explicitly
 defined by user of `StableHashTraits`. This function is not used internally for the methods
 of `HashVersion{4}` but see [`HashFunctions`](@ref), [`HashTypeValues`](@ref),
 [`HashNullTypes`](@ref) and [`HashSingletonTypes`](@ref).
 """
-function parentmodule_nameof(::Type{Union{A, B}}) where {A, B}
+function module_nameof_string(::Type{Union{A, B}}) where {A, B}
     # Main.@infiltrate
     !@isdefined(A) && return ""
-    !@isdefined(B) && return qualified_name_(A)
-    return parentmodule_nameof(A)*","*parentmodule_nameof(B)
+    !@isdefined(B) && return module_nameof_string_(A)
+    return module_nameof_string(A)*","*module_nameof_string(B)
 end
-hoist_type(::typeof(parentmodule_nameof)) = true
+function module_nameof_string(::Type{T}) where {T}
+    module_nameof_string_(T)
+end
+hoist_type(::typeof(module_nameof_string)) = true
+function module_nameof_string_(::Type{T}) where {T}
+    # special case for function types
+    if hasproperty(T, :instance) && isdefined(T, :instance) && T.instance isa Function
+        return "typeof($(qualified_name_(T.instance)))"
+    else
+        module_nameof_(T)
+    end
+end
+function module_nameof_(::Type{T}) where {T}
+    return validate_name(cleanup_name(string(parentmodule(T))*"."*string(nameof(T))))
+end
 
 """
-    clean_nameof(::Type{T})
-    clean_nameof(T::Module)
-    clean_nameof(::T) where {T}
+    nameof_string(::Type{T})
+    nameof_string(T::Module)
+    nameof_string(::T) where {T}
 
+Get a stable name of `T`. This is a helpful utility for writing your own methods of
+[`transform_type`](@ref) and [`transform_type_value`](@ref). The stable name is computed
+from `nameof`. Any uses of `Core` are replaced with `Base` to keep the name stable across
+versions of julia. Anonymous names (e.g. `module_nameof_string(x -> x+1)`) throw an error, as
+no stable name is possible in this case.
 """
-function clean_nameof(::Type{Union{A, B}}) where {A, B}
+function nameof_string(::Type{Union{A, B}}) where {A, B}
     !@isdefined(A) && return ""
-    !@isdefined(B) && return nameof_(A)
-    return clean_nameof(A)*","*clean_nameof(B)
+    !@isdefined(B) && return nameof_string_(A)
+    return nameof_string(A)*","*nameof_string(B)
 end
-nameof_(T) = validate_name(cleanup_name(string(nameof(T))))
+function nameof_string(::Type{T}) where {T}
+    nameof_string_(T)
+end
+function nameof_string_(::Type{T}) where {T}
+    # special case for function types
+    if hasproperty(T, :instance) && isdefined(T, :instance)
+        return "typeof($(name_(T.instance)))"
+    else
+        name_(T)
+    end
+end
+function name_(::Type{T}) where {T}
+    return validate_name(cleanup_name(string(nameof(T))))
+end
 
 
 """
@@ -356,7 +388,7 @@ end
 transform_type(::Type{T}, ::HashVersion{4}) where {T} = transform_type(T)
 transform_type(::Type{Union{}}) = "Union{}"
 transform_type(::Type{T}) where {T} = transform_type_by_trait(T, StructType(T))
-transform_type_by_trait(::Type, ::S) where {S<:StructTypes.StructType} = parentmodule_nameof(S)
+transform_type_by_trait(::Type, ::S) where {S<:StructTypes.StructType} = module_nameof_string(S)
 
 """
     transform_type_value(::Type{T}, [trait], [context]) where {T}
@@ -372,7 +404,7 @@ You can define a method of this function to opt in to hashing your type as a val
 
 ```julia
 struct MyType end
-StableHashTraits.transform_type_value(::Type{T}) where {T<:MyType} = parentmodule_nameof(T)
+StableHashTraits.transform_type_value(::Type{T}) where {T<:MyType} = module_nameof_string(T)
 stable_hash(MyType) # does not error
 ```
 
@@ -382,7 +414,7 @@ Likewise, you can opt in to this behavior for a type you don't own by defining a
 StableHashTraits.@context HashNumberTypes
 function StableHashTraits.type_value_identifier(::Type{T},
                                                 ::HashNumberTypes) where {T <: Number}
-    return parentmodule_nameof(T)
+    return module_nameof_string(T)
 end
 stable_hash(Int, HashNumberTypes(HashVersion{4}())) # does not error
 ```
@@ -398,6 +430,10 @@ function transform_type_value(::Type{T}, context) where {T}
 end
 
 function transform_type_value(::Type{T}, c::HashVersion{4}) where {T}
+    transform_type_value(T)
+end
+transform_type_value(::Type{Union{}}) = "Union{}"
+function transform_type_value(::Type{T}) where {T}
     if !contains(string(nameof(T)), "#")
         @error fallback_error("transform_type_value", T)
     end
@@ -410,7 +446,7 @@ function fallback_error(name, T)
 
     If you wish to avoid this error, you can implement a method:
 
-        StableHashTraits.$(name)(::Type{$(nameof(T))}) = $(parentmodule_nameof(T))
+        StableHashTraits.$(name)(::Type{$(nameof(T))}) = $(module_nameof_string(T))
 
     You are responsible for ensuring this return value is stable following any non-breaking
     updates to the type.

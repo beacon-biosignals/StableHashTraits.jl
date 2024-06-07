@@ -93,7 +93,7 @@ The type is hashed as `"Base.AbstractRange"` along with the type of the `eltype`
 
 To hash the value, the result of `Base.write`ing the object is hashed.
 
-To hash the type, the value of `parentmodule_nameof(StructType))` is used. [`parentmodule_nameof`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.parentmodule_name) can be used to provide a relatively stable name for an object composed of `string(parentmodule(T))` and `string(nameof(T))`, along with some additional regularizations and validations.
+To hash the type, the value of `module_nameof_string(StructType))` is used. [`module_nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.parentmodule_name) can be used to provide a relatively stable name for an object composed of `string(parentmodule(T))` and `string(nameof(T))`, along with some additional regularizations and validations.
 
 ### `StructType.CustomStruct`
 
@@ -178,7 +178,7 @@ Two types with the same name but different type parameters will hash the same un
 
 ```julia
 struct MyType{T} end
-StableHashTraits.transform_type_value(::Type{T}) where {T<:MyType} = parentmodule_nameof(T)
+StableHashTraits.transform_type_value(::Type{T}) where {T<:MyType} = module_nameof_string(T)
 stable_hash(MyType{:a}) == stable_hash(MyType{:b}) # true
 ```
 
