@@ -36,12 +36,12 @@ end
 # how we hash when we haven't hoisted the type hash out of a loop
 function hash_type_and_value(x, hash_state, context)
     transform = transformer(typeof(x), context)::Transformer
-    if transform.preserves_structure
+    if transform.hoist_type
         hash_state = hash_type!(hash_state, context, typeof(x))
     end
     tx = transform(x)
     check_hash_method(x, transform, context)
-    if !transform.preserves_structure
+    if !transform.hoist_type
         hash_state = hash_type!(hash_state, context, typeof(tx))
     end
     return stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
@@ -98,122 +98,16 @@ hash_type!(hash_state, ::TypeHashContext, key::Type{<:Type}) = hash_state
 hash_type!(hash_state, ::TypeHashContext, key::Type) = hash_state
 
 function transformer(::Type{T}, context::TypeHashContext) where {T<:Type}
-    return Transformer(T -> transform_type(T, StructType_(T), parent_context(context)),
+    return Transformer(T -> transform_type(T, parent_context(context)),
                             internal_type_structure(T, StructType_(T)))
 
 end
 @inline StructType_(T) = StructType(T)
 StructType_(::Type{Union{}}) = StructTypes.NoStructType()
 
-"""
-   transform_type(::Type{T}, [context])
-
-The value to hash for type `T` when hashing an object's type. Users of `StableHashTraits`
-can implement a method that accepts one (`T`) or two arguments (`T` and `context`). If no
-method is implemented, the fallback `transform_type` value uses `StructType(T)` to decide
-how to hash `T`; this is documented under [What gets hashed? (hash version 3)](@ref).
-
-Any types returned by `transform_type` has `transform_type` applied to it, so make sure that
-you only return types when they are are some nested component of your type (do not return
-`T`!!)
-
-This method is used to add additional data to the hash of a type. Internally, the data
-listed below is always added, outside of the call to `transform_type`:
-
-- `fieldtypes(T)` of any `StructType.DataType` (e.g. StructType.Struct)
-- `eltype(T)` of any `StructType.ArrayType` or `StructType.DictType` or `AbstractRange`
-- `ndims(T)` of any `AbstractArray` that is an `StructType.ArrayTYpe` and that has a
-  concrete dimension
-
-These components of the type need not be returned by `transform_type` and you cannot prevent
-them from being included in a type's hash, since otherwise the assumptions necessary for
-efficient hash computation would be violated.
-
-## Examples
-
-### Singleton Types
-
-You can opt in to hashing novel singleton types by overwriting `transform_type`:
-
-```julia
-struct MySingleton end
-StructTypes.StructType(::MySingleton) = StructTypes.SingletonType()
-function StableHashTraits.transform_type(::Type{<:MySingleton})
-    return "MySingleton"
-end
-```
-If you do not own the type you wish to customize, you can use a context:
-
-```julia
-using AnotherPackage: PackageSingleton
-StableHashTriats.@context HashAnotherSingleton
-function StableHashTraits.transform_type(::Type{<:PackageSingleton}, ::HashAnotherSingleton)
-    return "AnotherPackage.PackageSingleton"
-end
-context = HashAnotherSingleton(HashVersion{3}())
-stable_hash([PackageSingleton(), 1, 2], context) # will not error
-```
-
-### Functions
-
-Overwriting `transform_type` can be used to opt-in to hashing functions.
-
-```julia
-f(x) = x+1
-StableHashTraits.transform_type(::typeof(fn)) = "Main.fn"
-```
-
-### Type Parameters
-
-To include additional type parameters in a type's hash, you can overwrite `transform_type`
-
-```julia
-struct MyStruct{T,K}
-    wrapped::T
-end
-
-function StableHashTraits.transform_type(::Type{<:MyStruct{T,K}})
-    return "MyStruct", K
-end
-```
-
-By adding this method for `type_structure` both `K` and `T` will impact the hash, `T`
-because it is included in `fieldtypes(<:MyStruct)` and `K` because it is included in
-`type_structure(<:MyStruct)`.
-
-If you do not own the type you want to customize, you can specialize `type_structure` using
-a specific hash context.
-
-```julia
-using Intervals
-
-StableHashTraits.@context IntervalEndpointsMatter
-
-function HashTraits.type_structure(::Type{<:I}, ::IntervalEndpointsMatter) where {T, L, R, I<:Interval{T, L, R}}
-    return (L, R)
-end
-
-context = IntervalEndpointsMatter(HashVersion{3}())
-stable_hash(Interval{Closed, Open}(1, 2), context) !=
-    stable_hash(Interval{Open, Closed}(1, 2), context) # true
-```
-
-## See Also
-
-[`transformer`](@ref) [`@context`](@ref)
-"""
-function transform_type(::Type{T}, context) where {T}
-    return transform_type(T, parent_context(context))
-end
-function transform_type(::Type{T}, ::HashVersion{3}) where {T}
-    return transform_type_by_trait(T, StructType(T))
-end
-transform_type_by_trait(::Type, ::S) where {S<:StructTypes.StructType} = parentmodule_nameof(S)
-
-
-# NOTE: `internal_type_structure` is like `type_structure` in form, but it implements mandatory
-# elements of the type structure that are always included; this method should not be
-# overwritten by users
+# NOTE: `internal_type_structure` implements mandatory elements of a type's structure that
+# are always included in the hash; this ensures that the invariants required by type
+# hoisting hold
 internal_type_structure(T, trait) = nothing
 
 #####
@@ -237,65 +131,6 @@ function transformer(::Type{<:Type}, context::TypeAsValueContext)
 
 end
 
-"""
-    transform_type_value(::Type{T}, [trait], [context]) where {T}
-
-The value that is hashed for type `T` when hashing a type as a value (e.g.
-`stable_hash(Int)`). Hashing types as values is an error by default, but you can use this
-method to opt-in to hashing a type as a value. You can return types (e.g. type parameters of
-`T`), but do not return `T` or you will get a stack overflow.
-
-## Example
-
-You can define a method of this function to opt in to hashing your type as a value.
-
-```julia
-struct MyType end
-StableHashTraits.transform_type_value(::Type{T}) where {T<:MyType} = parentmodule_nameof(T)
-stable_hash(MyType) # does not error
-```
-
-Likewise, you can opt in to this behavior for a type you don't own by defining a context.
-
-```julia
-StableHashTraits.@context HashNumberTypes
-function StableHashTraits.type_value_identifier(::Type{T},
-                                                ::HashNumberTypes) where {T <: Number}
-    return parentmodule_nameof(T)
-end
-stable_hash(Int, HashNumberTypes(HashVersion{3}())) # does not error
-```
-
-## See Also
-
-[`transformer`](@ref)
-[`transform_type`](@ref)
-
-"""
-function transform_type_value(::Type{T}, context) where {T}
-    return transform_type_value(T, parent_context(context))
-end
-function transform_type_value(::Type{T}, c::HashVersion{3}) where {T}
-    if !contains(nameof(T), "#")
-        msg = """
-        There is not a specific method of `transform_type_value` for type `$T
-
-        If you wish to opt in to hashing of this type as a value, you can implement that as
-        follows:
-
-            StableHashTraits.transform_type_value(::$(nameof(T))) = $(parentmodule_nameof(T))
-
-        You are responsible for ensuring this return value is stable following any non-breaking
-        updates to the type.
-
-        If you don't own the type, consider using `StableHashTraits.@context`.
-        """
-
-        @error msg
-    end
-    return throw(MethodError(transform_type_value, T))
-end
-
 hash_type!(hash_state, ::TypeAsValueContext, ::Type{<:Type}) = hash_state
 function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where {T}
     type_context = TypeAsValueContext(context)
@@ -316,24 +151,13 @@ end
 # remember: functions can have fields; in general StructTypes doesn't assume these are
 # serialized but here we want that to happen by default, so e.g. ==(2) will properly hash
 # both the name of `==` and `2`.
-hash_trait(x::Function) = StructTypes.UnorderedStruct()
+hash_trait(::Function) = StructTypes.UnorderedStruct()
 
 function transform_type(::Type{T}, c::HashVersion{3}) where {T<:Function}
     if !contains(nameof(T), "#")
-        msg = """
-        There is not a specific method of `transform_type` for `$(function_type_name(T))`.
-
-        If you wish to opt in to hashing of this function, you might implement that as follows:
-
-            StableHashTraits.transform_type(::$(function_type_name(T))) = "$(function_type_name(T))"
-
-        You are responsible for ensuring this return value is stable following any non-breaking
-        updates to the type.
-
-        If you don't own this function, consider using `StableHashTraits.@context`.
-        """
-
-        @error msg
+        @error fallback_error("transform_type", T)
+    else
+        throw(ArgumentError("Anonymous types cannot be hashed"))
     end
     return throw(MethodError(transform_type, T))
 end
@@ -382,7 +206,7 @@ function hash_fields(x, fields, hash_state, context)
         val = getfield(x, field)
         # can we optimize away the field's type_hash?
         transform = transformer(typeof(val), context)
-        if isconcretetype(fieldtype(typeof(x), field)) && transform.preserves_structure
+        if isconcretetype(fieldtype(typeof(x), field)) && transform.hoist_type
             # the fieldtype has been hashed as part of the type of the container
             hash_value(val, hash_state, context, transform)
         else
@@ -430,7 +254,7 @@ ndims_(::Type{<:AbstractArray{<:Any,N}}) where {N} = N
 ndims_(::Type{<:AbstractArray}) = nothing
 
 function transformer(::Type{<:AbstractArray}, ::HashVersion{3})
-    return Transformer(x -> (size(x), split_union(x)); preserves_structure=true)
+    return Transformer(x -> (size(x), split_union(x)); hoist_type=true)
 end
 
 split_union(array) = TransformIdentity(array)
@@ -479,7 +303,7 @@ end
 
 function hash_elements(items, hash_state, context, transform)
     # can we optimize away the element type hash?
-    if isconcretetype(eltype(items)) && transform.preserves_structure
+    if isconcretetype(eltype(items)) && transform.hoist_type
         # the eltype has already been hashed as part of the type structure of
         # the container
         for x in items
@@ -499,7 +323,7 @@ end
 
 transform_type(::Type{<:AbstractRange}) = "Base.AbstractRange"
 function transformer(::Type{<:AbstractRange}, ::HashVersion{3})
-    Transformer(x -> (first(x), step(x), last(x)); preserves_structure=true)
+    Transformer(x -> (first(x), step(x), last(x)); hoist_type=true)
 end
 
 #####
@@ -537,7 +361,7 @@ function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
 end
 
 function transformer(::Type{<:Pair}, ::HashVersion{3})
-    return Transformer(((a, b),) -> (a, b); preserves_structure=true)
+    return Transformer(((a, b),) -> (a, b); hoist_type=true)
 end
 
 function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
@@ -572,7 +396,7 @@ end
 
 transform_type(::Type{Symbol}) = "Base.Symbol"
 function transformer(::Type{<:Symbol}, ::HashVersion{3})
-    return Transformer(String; preserves_structure=true)
+    return Transformer(String; hoist_type=true)
 end
 
 function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
@@ -596,44 +420,20 @@ transform_type(::Type{Missing}) where {T} = "Base.Missing"
 transform_type(::Type{Nothing}) where {T} = "Base.Nothing"
 function transform_type_by_trait(::Type{T}, ::StructTypes.NullType)
     if !contains(nameof(T), "#")
-        msg = """
-        There is not a specific method of `transform_type` for null-type `$T
-
-        If you wish to opt in to hashing of this type as a value, you can implement that as
-        follows:
-
-            StableHashTraits.transform_type(::$(nameof(T))) = $(parentmodule_nameof(T))
-
-        You are responsible for ensuring this return value is stable following any non-breaking
-        updates to the type.
-
-        If you don't own the type, consider using `StableHashTraits.@context`.
-        """
-
-        @error msg
+        @error fallback_error("transform_type", T)
+    else
+        throw(ArgumentError("Anonymous types are not supported"))
     end
     return throw(MethodError(transform_type, T))
 end
 stable_hash_helper(_, hash_state, context, ::StructTypes.NullType) = hash_state
 
 # singleton types are encoded purely by their type hash
-function transform_type_by_trait(::Type{T}, ::StructTypes.NullType)
+function transform_type_by_trait(::Type{T}, ::StructTypes.SingletonType)
     if !contains(nameof(T), "#")
-        msg = """
-        There is not a specific method of `transform_type` for singleton-type `$T
-
-        If you wish to opt in to hashing of this type as a value, you can implement that as
-        follows:
-
-            StableHashTraits.transform_type(::$(nameof(T))) = $(parentmodule_nameof(T))
-
-        You are responsible for ensuring this return value is stable following any non-breaking
-        updates to the type.
-
-        If you don't own the type, consider using `StableHashTraits.@context`.
-        """
-
-        @error msg
+        @error fallback_error("transform_type", T)
+    else
+        throw(ArgumentError("Anonymous types are not supported"))
     end
     return throw(MethodError(transform_type, T))
 end

@@ -43,7 +43,7 @@ end
 StableHashTraits.hash_method(::TestType) = StructHash()
 StableHashTraits.hash_method(::TestType2) = FnHash(qualified_name), StructHash()
 function StableHashTraits.transformer(::Type{<:TestType2})
-    return StableHashTraits.Transformer(x -> (x.a, x.b); preserves_structure=true)
+    return StableHashTraits.Transformer(x -> (x.a, x.b); hoist_type=true)
 end
 StableHashTraits.hash_method(::TestType3) = StructHash(:ByName)
 function StableHashTraits.hash_method(::TestType4, context::HashVersion{V}) where {V}

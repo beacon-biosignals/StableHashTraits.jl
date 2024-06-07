@@ -44,8 +44,9 @@ include("setup_tests.jl")
                                 bytes2hex_(test_hash((a=1, b=2))))
                 @test_reference("references/ref04_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(Set(1:3))))
+                fc = V == 3 ? HashFunctions(ctx) : ctx
                 @test_reference("references/ref05_$(V)_$(nameof(hashfn)).txt",
-                                bytes2hex_(test_hash(sin)))
+                                bytes2hex_(test_hash(sin, fc)))
                 @test_reference("references/ref06_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(TestType2(1, 2))))
                 @test_reference("references/ref07_$(V)_$(nameof(hashfn)).txt",
@@ -209,34 +210,42 @@ include("setup_tests.jl")
 
             @testset "Singletons and nulls" begin
                 @test test_hash(missing) != test_hash(nothing)
-                @test test_hash(Singleton1) != test_hash(Singleton2)
+                if V == 3
+                    @test test_hash(Singleton1, HashSingletonTypes(ctx)) !=
+                        test_hash(Singleton2, HashSingletonTypes(ctx))
+                else
+                    @test test_hash(Singleton1) != test_hash(Singleton2)
+                end
             end
 
             @testset "Functions" begin
-                @test test_hash(sin) != test_hash(cos)
-                @test test_hash(sin) != test_hash(:sin)
-                @test test_hash(sin) != test_hash("sin")
-                @test test_hash(sin) != test_hash("Base.sin")
-                @test test_hash(==("foo")) == test_hash(==("foo"))
-                @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 1))
+                fc = V == 3 ? HashFunctions(ctx) : ctx
+                @test test_hash(sin, fc) != test_hash(cos, fc)
+                @test test_hash(sin, fc) != test_hash(:sin, fc)
+                @test test_hash(sin, fc) != test_hash("sin", fc)
+                @test test_hash(sin, fc) != test_hash("Base.sin", fc)
+                @test test_hash(==("foo"), fc) == test_hash(==("foo"), fc)
+                @test test_hash(Base.Fix1(-, 1), fc) == test_hash(Base.Fix1(-, 1), fc)
                 if V > 1
-                    @test test_hash(Base.Fix1(-, 1)) != test_hash(Base.Fix1(-, 2))
-                    @test test_hash(==("foo")) != test_hash(==("bar"))
+                    @test test_hash(Base.Fix1(-, 1), fc) != test_hash(Base.Fix1(-, 2), fc)
+                    @test test_hash(==("foo"), fc) != test_hash(==("bar"), fc)
                 else
-                    @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 2))
-                    @test test_hash(==("foo")) == test_hash(==("bar"))
+                    @test test_hash(Base.Fix1(-, 1), fc) == test_hash(Base.Fix1(-, 2), fc)
+                    @test test_hash(==("foo"), fc) == test_hash(==("bar"), fc)
                 end
-                @test_throws ArgumentError test_hash(x -> x + 1)
+                @test_throws ArgumentError test_hash(x -> x + 1, fc)
             end
 
             @testset "Types" begin
-                @test test_hash(Float64) != test_hash("Base.Float64")
-                @test test_hash(Int) != test_hash("Base.Int")
-                @test test_hash(Float64) != test_hash(Int)
+                tc = V == 3 ? HashTypeValues(ctx) : ctx
+
+                @test test_hash(Float64, tc) != test_hash("Base.Float64", tc)
+                @test test_hash(Int, tc) != test_hash("Base.Int", tc)
+                @test test_hash(Float64, tc) != test_hash(Int, tc)
                 if V >= 3
-                    @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
-                    @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
-                    @test test_hash(Array{Int}) != test_hash(Array{Float64})
+                    @test test_hash(Array{Int,3}, tc) != test_hash(Array{Int,4}, tc)
+                    @test test_hash(Array{<:Any,3}, tc) != test_hash(Array{<:Any,4}, tc)
+                    @test test_hash(Array{Int}, tc) != test_hash(Array{Float64}, tc)
                 end
             end
 

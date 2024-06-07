@@ -81,13 +81,13 @@ end
 
 """
     StableHashTraits.Transformer(fn=identity, result_method=nothing;
-                                 preserves_structure=StableHashTraits.preserves_structure(fn))
+                                 hoist_type=StableHashTraits.hoist_type(fn))
 
 Wraps the function used to transform values before they are hashed. The function is applied
 (`fn(x)`), and then its result is hashed according to the trait `@something result_method
 StructType(fn(x))`.
 
-The flag `preserves_structure` indicates if it is safe to hoist type hashes outside of
+The flag `hoist_type` indicates if it is safe to hoist type hashes outside of
 loops; this is always the case when `fn` is type stable. See the manual for details about
 other cases when it is safe to set this flag to true.
 
@@ -98,25 +98,26 @@ other cases when it is safe to set this flag to true.
 struct Transformer{F,H}
     fn::F
     result_method::H # if non-nothing, apply to result of `fn`
-    preserves_structure::Bool
+    hoist_type::Bool
     function Transformer(fn::Base.Callable=identity, result_method=nothing;
-                         preserves_structure=StableHashTraits.preserves_structure(fn))
-        return new{typeof(fn),typeof(result_method)}(fn, result_method, preserves_structure)
+                         hoist_type=StableHashTraits.hoist_type(fn))
+        return new{typeof(fn),typeof(result_method)}(fn, result_method, hoist_type)
     end
 end
 
 """
-    StableHashTraits.preserves_structure(fn)
+    StableHashTraits.hoist_type(fn)
 
-Returns true if it is known that `fn` preservess structure ala [`Transformer`](@ref). This
-is false by default for all functions but `identity`. You can define a method of this
+Returns true if it is known that `fn` preservess type structure ala [`Transformer`](@ref).
+See []
+This is false by default for all functions but `identity`. You can define a method of this
 function for your own fn's to signal that they their results can be safely optimized via
 hoisting the type hash outside of loops during hashing.
 """
-preserves_structure(::typeof(identity)) = true
-preserves_structure(::Function) = false
-preserves_structure(::typeof(parentmodule_nameof)) = true
-preserves_structure(::Type) = false
+hoist_type(::typeof(identity)) = true
+hoist_type(::Function) = false
+hoist_type(::typeof(parentmodule_nameof)) = true
+hoist_type(::Type) = false
 (tr::Transformer)(x) = tr.fn(x)
 
 """
@@ -132,18 +133,6 @@ specialized method for that context exists).
 transformer(::Type{T}, context) where {T} = transformer(T, parent_context(context))
 transformer(::Type{T}, ::HashVersion{3}) where {T} = transformer(T)
 transformer(x) = Transformer()
-
-"""
-    parentmodule_nameof(::Type{T})
-    parentmodule_nameof(T::Module)
-    parentmodule_nameof(::T) where {T}
-
-Get a stable name of `T`. The stable name includes the name of the module that `T` was
-defined in. Any uses of `Core` are replaced with `Base` to keep the name stable across
-versions of julia. Anonymous names (e.g. `parentmodule_nameof(x -> x+1)`) throw an error, as no
-stable name is possible in this case.
-"""
-parentmodule_nameof(x) = qualified_name_(x)
 
 """
     StableHashTraits.TransformIdentity(x)
@@ -163,7 +152,7 @@ struct MyArray <: AbstractVector{Int}
 end
 # other array methods go here...
 function StableHashTraits.transformer(::Type{<:MyArray})
-    return Transformer(x -> (x.meta, TransformIdentity(x)); preserves_structure=true)
+    return Transformer(x -> (x.meta, TransformIdentity(x)); hoist_type=true)
 end
 ```
 
@@ -174,7 +163,7 @@ struct TransformIdentity{T}
     val::T
 end
 function transformer(::Type{<:TransformIdentity}, ::HashVersion{3})
-    return Transformer(x -> x.val; preserves_structure=true)
+    return Transformer(x -> x.val; hoist_type=true)
 end
 
 function stable_hash_helper(x, hash_state, context, trait)
@@ -209,7 +198,7 @@ The parent context is typically another custom context, or the root context
 
 ```julia
 StableHashTraits.@context NumberAbs
-transformer(::Type{<:Number}, ::NumberAbs) = Transformer(abs; preserves_structure=true)
+transformer(::Type{<:Number}, ::NumberAbs) = Transformer(abs; hoist_type=true)
 stable_hash(10, NumberAbs(HashVersion{3}())) == stable_hash(-10, NumberAbs(HashVersion{3}()))
 ```
 
@@ -219,9 +208,197 @@ stable_hash(10, NumberAbs(HashVersion{3}())) == stable_hash(-10, NumberAbs(HashV
 """
 macro context(TypeName)
     quote
-        Base.@__doc__ struct $(TypeName){T}
+        Base.@__doc__ struct $(esc(TypeName)){T}
             parent::T
         end
-        StableHashTraits.parent_context(x::$(TypeName)) = x.parent
+        StableHashTraits.parent_context(x::$(esc(TypeName))) = x.parent
     end
+end
+
+"""
+    parentmodule_nameof(::Type{T})
+    parentmodule_nameof(T::Module)
+    parentmodule_nameof(::T) where {T}
+
+Get a (mostly!) stable name of `T`. This is a helpful utility for writing your own methods
+of [`transform_type`](@ref) and [`transform_type_value`](@ref). The stable name includes the
+name of the module that `T` was defined in. Any uses of `Core` are replaced with `Base` to
+keep the name stable across versions of julia. Anonymous names (e.g. `parentmodule_nameof(x
+-> x+1)`) throw an error, as no stable name is possible in this case.
+
+If the module or name of a type changes, this value will (obviously) change. The module of
+many types is considered an implementation detail and can change between non-breaking
+versions of a package. For this reason uses of `parentmodule_nameof` must be explicitly
+defined by user of `StableHashTraits`. This function is not used internally for the methods
+of `HashVersion{3}`.
+"""
+parentmodule_nameof(x) = qualified_name_(x)
+hoist_type(::typeof(parentmodule_nameof)) = true
+
+"""
+   transform_type(::Type{T}, [context])
+
+The value to hash for type `T` when hashing an object's type. Users of `StableHashTraits`
+can implement a method that accepts one (`T`) or two arguments (`T` and `context`). If no
+method is implemented, the fallback `transform_type` value uses `StructType(T)` to decide
+how to hash `T`; this is documented under [What gets hashed? (hash version 3)](@ref).
+
+Any types returned by `transform_type` has `transform_type` applied to it, so make sure that
+you only return types when they are are some nested component of your type (do not return
+`T`!!)
+
+This method is used to add additional data to the hash of a type. Internally, the data
+listed below is always added, outside of the call to `transform_type`:
+
+- `fieldtypes(T)` of any `StructType.DataType` (e.g. StructType.Struct)
+- `eltype(T)` of any `StructType.ArrayType` or `StructType.DictType` or `AbstractRange`
+
+These components of the type need not be returned by `transform_type` and you cannot prevent
+them from being included in a type's hash, since otherwise the assumptions necessary for
+efficient hash computation would be violated.
+
+## Examples
+
+### Singleton Types
+
+You can opt in to hashing novel singleton types by overwriting `transform_type`:
+
+```julia
+struct MySingleton end
+StructTypes.StructType(::MySingleton) = StructTypes.SingletonType()
+function StableHashTraits.transform_type(::Type{<:MySingleton})
+    return "MySingleton"
+end
+```
+If you do not own the type you wish to customize, you can use a context:
+
+```julia
+using AnotherPackage: PackageSingleton
+StableHashTriats.@context HashAnotherSingleton
+function StableHashTraits.transform_type(::Type{<:PackageSingleton}, ::HashAnotherSingleton)
+    return "AnotherPackage.PackageSingleton"
+end
+context = HashAnotherSingleton(HashVersion{3}())
+stable_hash([PackageSingleton(), 1, 2], context) # will not error
+```
+
+### Functions
+
+Overwriting `transform_type` can be used to opt-in to hashing functions.
+
+```julia
+f(x) = x+1
+StableHashTraits.transform_type(::typeof(fn)) = "Main.fn"
+```
+
+### Type Parameters
+
+To include additional type parameters in a type's hash, you can overwrite `transform_type`
+
+```julia
+struct MyStruct{T,K}
+    wrapped::T
+end
+
+function StableHashTraits.transform_type(::Type{<:MyStruct{T,K}})
+    return "MyStruct", K
+end
+```
+
+By adding this method for `type_structure` both `K` and `T` will impact the hash, `T`
+because it is included in `fieldtypes(<:MyStruct)` and `K` because it is included in
+`type_structure(<:MyStruct)`.
+
+If you do not own the type you want to customize, you can specialize `type_structure` using
+a specific hash context.
+
+```julia
+using Intervals
+
+StableHashTraits.@context IntervalEndpointsMatter
+
+function HashTraits.type_structure(::Type{<:I}, ::IntervalEndpointsMatter) where {T, L, R, I<:Interval{T, L, R}}
+    return (L, R)
+end
+
+context = IntervalEndpointsMatter(HashVersion{3}())
+stable_hash(Interval{Closed, Open}(1, 2), context) !=
+    stable_hash(Interval{Open, Closed}(1, 2), context) # true
+```
+
+## See Also
+
+[`transformer`](@ref) [`@context`](@ref)
+"""
+function transform_type(::Type{T}, context) where {T}
+    return transform_type(T, parent_context(context))
+end
+function transform_type(::Type{T}, ::HashVersion{3}) where {T}
+    return transform_type_by_trait(T, StructType(T))
+end
+transform_type_by_trait(::Type, ::S) where {S<:StructTypes.StructType} = parentmodule_nameof(S)
+
+"""
+    transform_type_value(::Type{T}, [trait], [context]) where {T}
+
+The value that is hashed for type `T` when hashing a type as a value (e.g.
+`stable_hash(Int)`). Hashing types as values is an error by default, but you can use this
+method to opt-in to hashing a type as a value. You can return types (e.g. type parameters of
+`T`), but do not return `T` or you will get a stack overflow.
+
+## Example
+
+You can define a method of this function to opt in to hashing your type as a value.
+
+```julia
+struct MyType end
+StableHashTraits.transform_type_value(::Type{T}) where {T<:MyType} = parentmodule_nameof(T)
+stable_hash(MyType) # does not error
+```
+
+Likewise, you can opt in to this behavior for a type you don't own by defining a context.
+
+```julia
+StableHashTraits.@context HashNumberTypes
+function StableHashTraits.type_value_identifier(::Type{T},
+                                                ::HashNumberTypes) where {T <: Number}
+    return parentmodule_nameof(T)
+end
+stable_hash(Int, HashNumberTypes(HashVersion{3}())) # does not error
+```
+
+## See Also
+
+[`transformer`](@ref)
+[`transform_type`](@ref)
+
+"""
+function transform_type_value(::Type{T}, context) where {T}
+    return transform_type_value(T, parent_context(context))
+end
+
+function transform_type_value(::Type{T}, c::HashVersion{3}) where {T}
+    if !contains(nameof(T), "#")
+        @error fallback_error("transform_type_value", T)
+    end
+    return throw(MethodError(transform_type_value, T))
+end
+
+function fallback_error(name, T)
+    return """
+    There is not a specific method of `$name` for type `$T
+
+    If you wish to avoid this error, you can implement a method:
+
+        StableHashTraits.$(name)(::$(nameof(T))) = $(parentmodule_nameof(T))
+
+    You are responsible for ensuring this return value is stable following any non-breaking
+    updates to the type.
+
+    If you don't own the type, consider using `StableHashTraits.@context`.
+    """
+end
+
+function transform_type_value(::Type{T}, c::HashVersion{3}) where {T<:Function}
+    return transform_type(T)
 end

@@ -8,7 +8,7 @@ You typically want to simply override a method of [`StableHashTraits.transformer
 
 {INSERT_EXAMPLE}
 
-In this example we also optimize our hash by setting `preserves_structure=true`. You can do this any time your function is type stable, but there are additional conditions under which you can still set this flag to true, discussed below.
+In this example we also optimize our hash by setting `hoist_type=true`. You can do this any time your function is type stable, but there are additional conditions under which you can still set this flag to true, discussed below.
 
 [`StableHashTraits.Transformer`](@ref) takes a second positional argument which is the `StructType` you wish to use on the transformed return value. By default `StructType` is applied to the result to determine this automatically, but in some cases it can be useful to modify this trait by passing a second argument (see the example below).
 
@@ -51,19 +51,23 @@ There are two useful, predefined contexts available in `StableHashTraits` that c
 
 ## Optimizing Transformers
 
-As noted `preserves_structure` can safely be set to true for any type-stable function. It is set to true by default for `identity`. When set to true, `stable_hash` will hoist type hashes outside of loops when possible, avoiding type hashes for any deeply nested fields, so long as the path to them includes all concrete types. For example, when hashing an `Array{Int}` the `Int` will only be hashed once, not once for every element.
+As noted, `hoist_type` can safely be set to true for any type-stable function. It is set to
+true by default for `identity`. When set to true, `stable_hash` will hoist the type of the
+pre-transformed object outside of loops when possible, avoiding type hashes for any deeply
+nested fields, so long as the path to them includes all concrete types. For example, when
+hashing an `Array{Int}` the `Int` will only be hashed once, not once for every element.
 
-When `preserves_structure=false` (the default for most functions) the type of the return value from `transformer` is always hashed alongside the transformed value.
+This hoisting is only valid when the pre-transformed type is sufficient to disambiguate the the hashed values that are produced downstream after transformation. When `hoist_type=false` (the default for most functions) this signals that the type of the return value from `transformer` should be hashed alongside the transformed value, which is much slower, but ensures the that no unexpected hash collisions will occur.
 
-This should give the reader some idea of when a type-unstable function can be safely marked as `preserves_structure=true`. In particular any case where each value passed to transform maps to a value that will be hashed as a unique bit-sequence should be fine. This would be violated, for instance, by `x -> x < 0 : Char(0) ? Int32(0)`, but not by `x -> x < 0 : Char(1) : Int32(2)`. In the latter case we could safely mark `preserves_structure=true`.
+This should give the reader some idea of when a type-unstable function can be safely marked as `hoist_type=true`. In particular any case where each value passed to transform maps to a value that will ultimately be hashed as a unique bit-sequence should be fine. This would be violated, for instance, by `x -> x < 0 : Char(0) ? Int32(0)`, but not by `x -> x < 0 : Char(1) : Int32(2)`. In the latter case we could safely mark `hoist_type=true`.
 
 ## Customizing Type Hashes
 
-Types are hashed by hashing a type name and a type structure. The structure is determined by the `StructType` as detailed above (e.g. `ArrayType`s hash their `eltype`). As noted there, the name will be based on the name of the `StructType` when hashing the type of an object, and the name of the type itself when hashing the type as a value.
+Types are hashed by hashing the return value of [`transform_type`](@ref) when hashing an object's type and the return value of [`transform_type_value`](@ref) when hashing a type as a value (e.g. `stable_hash(Int)`).
 
-You can change how a type name is hashed for an object using
-[`StableHashTraits.type_identifier`](@ref), how a type name is hashed as a value using
-[`StableHashTraits.type_value_identifier`](@ref) and how the structure is hashed using
-[`StableHashTraits.type_structure`](@ref). The latter is necessary to overwrite if you want
-to differentiate types that vary only in their type parameters, not their `fieldtypes` or
-`eltype`.
+In addition there is some structure of the type that is always hashed:
+
+- `fieldtypes(T)` of any `StructType.DataType` (e.g. StructType.Struct)
+- `eltype(T)` of any `StructType.ArrayType` or `StructType.DictType` or `AbstractRange`
+
+These get added internally so as to ensure that the type-hoisting describe above can rely on eltypes and fieldtypes storing all downstream children's concrete types.

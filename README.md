@@ -24,20 +24,19 @@ struct MyType
 end
 # ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
 StableHashTraits.transformer(::Type{<:MyType}) = Transformer(x -> (; x.data);
-                                                             preserves_structure=true)
+                                                             hoist_type=true)
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 stable_hash(a; version=3) == stable_hash(b; version=3) # true
 ```
 <!--END_EXAMPLE-->
 
-Useres can define a method of `transformer` to customize how an object is hashed. It should return a function wrapped in `Transformer`. During hashing, this function is called and its result is the value that is actually hashed. (The `preserves_structure` keyword shown above is an optional flag that can be used to further optimize performance of your transformer in some cases; you can do this any time the function is type stable, but some type-unstable functions are also possible. See the documentation for details).
+Useres can define a method of `transformer` to customize how an object is hashed. It should return a function wrapped in `Transformer`. During hashing, this function is called and its result is the value that is actually hashed. (The `hoist_type` keyword shown above is an optional flag that can be used to further optimize performance of your transformer in some cases; you can do this any time the function is type stable, but some type-unstable functions are also possible. See the documentation for details).
 
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
 > [!WARNING]
-> Hash versions 3 constitutes a substantial redesign of StableHashTraits so as to avoid reliance on some unstable Julia internals. Hash versions 1 and 2 are deprecated and will be removed in a soon-to-be released StableHashTraits 2.0. Hash version 3 will remain unchanged in this 2.0 release. Hash version 1 is the default version if you don't specify a version.
-You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
+> Hash versions 3 constitutes a substantial redesign of StableHashTraits so as to more conservatively avoid realiance on the internals of julia and packages. Hash versions 1 and 2 are deprecated and will be removed in a soon-to-be released StableHashTraits 2.0. Hash version 3 will remain unchanged in this 2.0 release. Hash version 1 is the default version if you don't specify a version. You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
 
 <!--The START_ and STOP_ comments are used to extract content that is also repeated in the documentation-->
 <!--START_OVERVIEW-->
@@ -47,14 +46,14 @@ StableHashTraits is designed to be used in cases where there is an object you wi
 
 ## What gets hashed? (hash version 3)
 
-This describes what gets hashed when using the latest hash version. You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
+This covers the behavior when using the latest hash version (3). You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
 
-StableHashTraits hashes a value `x` and its type `T`, normally according to `StructType(T)`. (ala
+When you call `stable_hash(x; version=3)`, StableHashTraits hashes both the value `x` and its type `T`, normally doing so according to `StructType(T)`. (ala
 [SructTypes](https://github.com/JuliaData/StructTypes.jl)).
 
 You can customize how the value is hashed using [`StableHashTraits.transformer`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer),
 and how the type is hashed using [`StableHashTraits.transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type).
-If you need to customize a type that you don't own, you can use a [@context](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.@context)
+If you need to customize either of these functions for a type that you don't own, you can use a [@context](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.@context)
 
 ### `StructType.DataType`
 
@@ -115,13 +114,13 @@ If `transform_type` for a singleton is defined, it will no longer error as the v
 Attempting to hash a function errors by default. You can opt in to hashing a function
 by defining [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.type_identifier). If `transform_type` is defined, functions will hash as if they were `UnorderedStructs`: functions can have fields if they are curried (e.g. `==(2)`), and so, for this reason, the fields are included in the hash by default.
 
-If a function value `fn` can be hashed in this way, so can values of `typeof(fn)`.
+If a function value `fn` can be hashed in this way, so can types of the form `typeof(fn)`.
 
 ### `Type`
 
-When a type is provided as a value (e.g. `Ref(Int)`) hashing it will error by default.
+When a type is provided as a value (e.g. `stable_hash(Int; version=3)`) hashing it will error by default.
 
-You can opt in to hashing of a type as a value by defining [`transform_type_value`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type_value) for your type.
+You can opt in to hashing a given type as a value by defining [`transform_type_value`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type_value) for your type.
 
 ## Examples
 

@@ -1,12 +1,105 @@
-######
+const WARN_UNSTABLE = """
+!!! warn "Unstable"
+    `parentmodule_nameof`'s return value can change with non-breaking changes
+    if e.g. the module of a function or type is changed because it's considered
+    an implementation detail of a package.
+"""
+
+macro checked_context(TypeName)
+    quote
+        Base.@__doc__ struct $(esc(TypeName)){T}
+            parent::T
+            function $(esc(TypeName))(parent)
+                root_version(parent) < 3 &&
+                    throw(ArgumentError("`WithTypeNames` does not support HashVersion 1 or 2"))
+                return new{typeof(parent)}(parent)
+            end
+        end
+        StableHashTraits.parent_context(x::$(TypeName)) = x.parent
+    end
+end
+
+#####
+##### HashTypeValues
+#####
+
+"""
+    HashTypeValues
+
+Hash all types as values, by returningn the value of `parentmodule_nameof`
+for [`transform_type_value`](@ref)
+"""
+
+#####
+##### HashFunctions
+#####
+
+"""
+    HashFunctions
+
+Hash functions by default, by returning the value of [`parentmodule_nameof`](@ref) for all
+`Function` types in [`transform_type`](@ref).
+
+$WARN_UNSTABLE
+"""
+@checked_context HashFunctions
+transform_type(::Type{T}, ::HashFunctions) where {T<:Function} = parentmodule_nameof(T)
+
+#####
+##### HashNullTypes
+#####
+
+"""
+    HashNullTypes
+
+Hash function any type `T` where `StructType(T) isa StructTypes.NullType`
+using [`parentmodule_nameof`](@ref).
+
+$WARN_UNSTABLE
+"""
+@checked_context HashNullTypes
+function transform_type(::Type{T}, c::HashNullTypes) where {T}
+    if StructType(T) <: StructTypes.NullType
+        return parentmodule_nameof(T)
+    else
+        return transform_type(T, parent(c))
+    end
+end
+
+#####
+##### HashNullTypes
+#####
+
+"""
+    HashSingletonTypes
+
+Hash function any type `T` where `StructType(T) isa StructTypes.SingletonType`
+using [`parentmodule_nameof`](@ref).
+
+$WARN_UNSTABLE
+"""
+@checked_context HashSingletonTypes
+function transform_type(::Type{T}, c::HashSingletonTypes) where {T}
+    if StructType(T) <: StructTypes.SingletonType
+        return parentmodule_nameof(T)
+    else
+        return transform_type(T, parent(c))
+    end
+end
+
+#####
 ##### WithTypeNames
 #####
 
 """
     WithTypeNames(parent_context)
 
-In this hash context, not only the structure, but also the name of the type (e.g. `Array`
-vs. `SubArray`) affects the hashed value.
+In this hash context, [`transform_type`](@ref) returns `parentmodule_nameof` for all types.
+This makes functions and singleton types hashable, and it means the kind of array or
+dictionary you use impacts the hash.
+
+$WARN_UNSTABLE
+
 """
 struct WithTypeNames{T}
     parent::T
@@ -17,7 +110,7 @@ struct WithTypeNames{T}
     end
 end
 parent_context(x::WithTypeNames) = x.parent
-type_identifier(::Type{T}, trait, c::WithTypeNames) where {T} = qualified_name_(T)
+transform_type(::Type{T}, c::WithTypeNames) where {T} = parentmodule_nameof(T)
 
 # NOTE: from this point below, only the `transformer` and `type_identifier`-related code is
 # new
@@ -51,11 +144,11 @@ function hash_method(x::T, m::TablesEq) where {T}
     return hash_method(x, parent_context(m))
 end
 
-function type_identifier(::Type{T}, ::StructTypes.DataType, context::TablesEq) where {T}
+function transform_type(::Type{T}, ::StructTypes.DataType, context::TablesEq) where {T}
     if Tables.istable(T)
         return "Tables.istable"
     else
-        type_identifier(T, parent_context(context))
+        transform_type(T, parent_context(context))
     end
 end
 
