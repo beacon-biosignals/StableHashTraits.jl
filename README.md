@@ -79,7 +79,7 @@ To hash the value, each key-value pair of a dict type is hashed, as returned by 
 
 If [`StableHashTraits.is_ordered`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.is_ordered) returns `false` the pairs are first `sort`ed according their keys using [`StableHashTraits.hash_sort_by`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.hash_sort_by).
 
-To hash the type `"StructTypes.DictType"` is hashed (ergo, the kind of dictionary won't matter), and the type of the `eltype` is hashed, according to its `StructType`.
+To hash the type `"StructTypes.DictType"` is hashed (ergo, the kind of dictionary won't matter), and the type of the `keytype` and `valtype` is hashed, according to its `StructType`.
 
 ### `AbstractRange`
 

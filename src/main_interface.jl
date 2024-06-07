@@ -116,7 +116,6 @@ type hash outside of loops.
 """
 hoist_type(::typeof(identity)) = true
 hoist_type(::Function) = false
-hoist_type(::typeof(parentmodule_nameof)) = true
 hoist_type(::Type) = false
 (tr::Transformer)(x) = tr.fn(x)
 
@@ -233,8 +232,27 @@ defined by user of `StableHashTraits`. This function is not used internally for 
 of `HashVersion{4}` but see [`HashFunctions`](@ref), [`HashTypeValues`](@ref),
 [`HashNullTypes`](@ref) and [`HashSingletonTypes`](@ref).
 """
-parentmodule_nameof(x) = qualified_name_(x)
+function parentmodule_nameof(::Type{Union{A, B}}) where {A, B}
+    # Main.@infiltrate
+    !@isdefined(A) && return ""
+    !@isdefined(B) && return qualified_name_(A)
+    return parentmodule_nameof(A)*","*parentmodule_nameof(B)
+end
 hoist_type(::typeof(parentmodule_nameof)) = true
+
+"""
+    clean_nameof(::Type{T})
+    clean_nameof(T::Module)
+    clean_nameof(::T) where {T}
+
+"""
+function clean_nameof(::Type{Union{A, B}}) where {A, B}
+    !@isdefined(A) && return ""
+    !@isdefined(B) && return nameof_(A)
+    return clean_nameof(A)*","*clean_nameof(B)
+end
+nameof_(T) = validate_name(cleanup_name(string(nameof(T))))
+
 
 """
    transform_type(::Type{T}, [context])
@@ -331,12 +349,13 @@ stable_hash(Interval{Closed, Open}(1, 2), context) !=
 
 [`transformer`](@ref) [`@context`](@ref)
 """
+
 function transform_type(::Type{T}, context) where {T}
     return transform_type(T, parent_context(context))
 end
-function transform_type(::Type{T}, ::HashVersion{4}) where {T}
-    return transform_type_by_trait(T, StructType(T))
-end
+transform_type(::Type{T}, ::HashVersion{4}) where {T} = transform_type(T)
+transform_type(::Type{Union{}}) = "Union{}"
+transform_type(::Type{T}) where {T} = transform_type_by_trait(T, StructType(T))
 transform_type_by_trait(::Type, ::S) where {S<:StructTypes.StructType} = parentmodule_nameof(S)
 
 """
@@ -379,7 +398,7 @@ function transform_type_value(::Type{T}, context) where {T}
 end
 
 function transform_type_value(::Type{T}, c::HashVersion{4}) where {T}
-    if !contains(nameof(T), "#")
+    if !contains(string(nameof(T)), "#")
         @error fallback_error("transform_type_value", T)
     end
     return throw(MethodError(transform_type_value, T))
@@ -391,7 +410,7 @@ function fallback_error(name, T)
 
     If you wish to avoid this error, you can implement a method:
 
-        StableHashTraits.$(name)(::$(nameof(T))) = $(parentmodule_nameof(T))
+        StableHashTraits.$(name)(::Type{$(nameof(T))}) = $(parentmodule_nameof(T))
 
     You are responsible for ensuring this return value is stable following any non-breaking
     updates to the type.

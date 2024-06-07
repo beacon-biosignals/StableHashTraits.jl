@@ -10,13 +10,13 @@ using StructTypes: StructType
 
 include("main_interface.jl")
 export stable_hash, HashVersion, parentmodule_nameof
-# Transformer, transformer, @context
+# Transformer, transformer, transform_type, transform_type_value, @context
 
 include("hash_algorithms.jl")
 # update_hash!, HashState, compute_hash!, start_nested_hash!, end_nested_hash!, similar_hash_state
 
 # deprecated type used by `hash_method` that needs to be defined earlier than the other
-# `deprecated.jl` content (to be used for a deprecation check in `hash_traits.jl`)
+# `deprecated.jl` content (to be used for a deprecation check in `transformer_traits.jl`)
 struct NotImplemented end
 is_implemented(::NotImplemented) = false
 is_implemented(_) = true

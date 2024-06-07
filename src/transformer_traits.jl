@@ -98,8 +98,8 @@ hash_type!(hash_state, ::TypeHashContext, key::Type{<:Type}) = hash_state
 hash_type!(hash_state, ::TypeHashContext, key::Type) = hash_state
 
 function transformer(::Type{T}, context::TypeHashContext) where {T<:Type}
-    return Transformer(T -> transform_type(T, parent_context(context)),
-                            internal_type_structure(T, StructType_(T)))
+    return Transformer(T -> (transform_type(T, parent_context(context)),
+                             internal_type_structure(T, StructType_(T))))
 
 end
 @inline StructType_(T) = StructType(T)
@@ -153,8 +153,8 @@ end
 # both the name of `==` and `2`.
 hash_trait(::Function) = StructTypes.UnorderedStruct()
 
-function transform_type(::Type{T}, c::HashVersion{4}) where {T<:Function}
-    if !contains(nameof(T), "#")
+function transform_type(::Type{T}) where {T<:Function}
+    if !contains(string(nameof(T)), "#")
         @error fallback_error("transform_type", T)
     else
         throw(ArgumentError("Anonymous types cannot be hashed"))
@@ -174,7 +174,7 @@ end
 ##### DataType
 #####
 
-transform_type_by_trait(::Type{T}, ::StructType.DataType) where {T} = string(nameof(T))
+transform_type_by_trait(::Type{T}, ::StructTypes.DataType) where {T} = clean_nameof(T)
 
 sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
 @generated function sorted_field_names(T)
@@ -248,7 +248,7 @@ end
 
 # include ndims in type hash when we can
 function transform_type(::Type{T}) where {T<:AbstractArray}
-    return transform_type_by_trait(T, StructTypes(T)), ndims_(T)
+    return transform_type_by_trait(T, StructType(T)), ndims_(T)
 end
 ndims_(::Type{<:AbstractArray{<:Any,N}}) where {N} = N
 ndims_(::Type{<:AbstractArray}) = nothing
@@ -357,7 +357,7 @@ end
 is_ordered(x::AbstractDict) = false
 
 function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
-    return eltype(T)
+    return keytype(T), valtype(T)
 end
 
 function transformer(::Type{<:Pair}, ::HashVersion{4})
@@ -416,10 +416,10 @@ function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
 end
 
 # null types are encoded purely by their type hash
-transform_type(::Type{Missing}) where {T} = "Base.Missing"
-transform_type(::Type{Nothing}) where {T} = "Base.Nothing"
-function transform_type_by_trait(::Type{T}, ::StructTypes.NullType)
-    if !contains(nameof(T), "#")
+transform_type(::Type{Missing}) = "Base.Missing"
+transform_type(::Type{Nothing}) = "Base.Nothing"
+function transform_type_by_trait(::Type{T}, ::StructTypes.NullType) where {T}
+    if !contains(string(nameof(T)), "#")
         @error fallback_error("transform_type", T)
     else
         throw(ArgumentError("Anonymous types are not supported"))
@@ -429,8 +429,8 @@ end
 stable_hash_helper(_, hash_state, context, ::StructTypes.NullType) = hash_state
 
 # singleton types are encoded purely by their type hash
-function transform_type_by_trait(::Type{T}, ::StructTypes.SingletonType)
-    if !contains(nameof(T), "#")
+function transform_type_by_trait(::Type{T}, ::StructTypes.SingletonType) where {T}
+    if !contains(string(nameof(T)), "#")
         @error fallback_error("transform_type", T)
     else
         throw(ArgumentError("Anonymous types are not supported"))

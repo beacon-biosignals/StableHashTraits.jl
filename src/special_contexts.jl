@@ -102,7 +102,6 @@ $WARN_UNSTABLE
 
 """
 @checked_context WithTypeNames
-parent_context(x::WithTypeNames) = x.parent
 transform_type(::Type{T}, c::WithTypeNames) where {T} = parentmodule_nameof(T)
 
 # NOTE: from this point below, only the `transformer` and `type_identifier`-related code is

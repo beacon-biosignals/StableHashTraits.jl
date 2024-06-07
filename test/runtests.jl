@@ -209,6 +209,7 @@ include("setup_tests.jl")
             end
 
             @testset "Singletons and nulls" begin
+                # TODO: currently failing test I'm working on
                 @test test_hash(missing) != test_hash(nothing)
                 if V == 4
                     @test test_hash(Singleton1, HashSingletonTypes(ctx)) !=

@@ -57,7 +57,7 @@ end
 StableHashTraits.hash_method(::TypeType) = StructHash()
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
 
-StableHashTraits.type_identifier(::Type{<:TestType2}) = "TestType2"
+StableHashTraits.transform_type(::Type{<:TestType2}) = "TestType2"
 StructTypes.StructType(::Type{<:TestType4}) = StructTypes.OrderedStruct()
 
 struct NonTableStruct
@@ -111,10 +111,8 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = IterateHash()
 struct ExtraTypeParams{P,T}
     value::T
 end
-function StableHashTraits.type_structure(::Type{T}, ::StructTypes.DataType,
-                                         ::HashVersion{4}) where {P,U,
-                                                                  T<:ExtraTypeParams{P,U}}
-    return (P, U)
+function StableHashTraits.transform_type(::Type{T}) where {P,U, T<:ExtraTypeParams{P,U}}
+    return "ExtraTypeParams", P, U
 end
 
 struct BadHashMethod end
