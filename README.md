@@ -226,7 +226,15 @@ julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
 
 ### In 1.3
 
-This release includes a new hash version 4 that has breaking API changes, documeted above. The prior API is deprecated. In version 2, which will be released in relatively short order, only hash version 4 will be available
+This release includes a new hash version 4 that has breaking API changes, documeted above. The prior API is deprecated. In version 2 of StableHashTraits, which will be released in relatively short order, only hash version 4 will be available.
+
+### In 1.2
+
+This release includes a bugfix to `stable_type_id` and the underlying hashes that depend on it (true for most types). This bug caused `stable_type_id` to yield a different value depending on the scope in which `stable_type_id` was first called for a given type. Now that 1.3 is available, 1.2 should not be used, as it addresses the same bug with a better API, rather than the hotfix applied here.
+
+1.2 provides defines hash version 3, which uses a fixed version of `stable_type_id` that can be used by leveraging hash version 3. E.g. if you call `stable_hash(x, version=3)` or use `HashVersion{3}()` where you would have used `HashVersion{2}()` you will not be susceptible to the bug. If you make use of `stable_type_id` directly and want to avoid this bug, you should use `StableHashTraits.stable_type_id_fixed`.
+
+Because existing uses of `StableHashTraits` might depend on the extant, broken behavior, versions 1 and 2 of hashing remain unchanged.
 
 ### In 1.1
 

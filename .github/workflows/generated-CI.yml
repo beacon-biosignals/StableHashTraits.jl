@@ -26,17 +26,11 @@ jobs:
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/setup-julia@v1
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: actions/cache@v1
-        env:
-          cache-name: cache-artifacts
-        with:
-          path: ~/.julia/artifacts
-          key: generated-function-test-${{ hashFiles('**/Project.toml') }}
       - uses: julia-actions/julia-buildpkg@v1
       - name: "Run `dev StableHashTraits`"
         shell: julia --color=yes --project {0}
@@ -45,7 +39,9 @@ jobs:
           Pkg.activate("test/ValidateGenerated")
           Pkg.develop(PackageSpec(; path="."))
           Pkg.status()
-      - uses: julia-actions/cache@v1
+      - uses: julia-actions/cache@v2
+        with:
+          cache-compiled: "true"
       - uses: julia-actions/julia-runtest@main
         with:
           compiled_modules: 'no'

@@ -224,17 +224,39 @@ function validate_name(str)
     return str
 end
 
-qname_(T, name) = validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
-qualified_name_(fn::Function) = qname_(fn, nameof)
-qualified_type_(fn::Function) = qname_(fn, string)
-qualified_name_(x::T) where {T} = qname_(T <: DataType ? x : T, nameof)
-qualified_type_(x::T) where {T} = qname_(T <: DataType ? x : T, string)
-qualified_(T, ::Val{:name}) = qualified_name_(T)
-qualified_(T, ::Val{:type}) = qualified_type_(T)
+# this version of qname is buggy!!! we keep the bug in to avoid changing
+# hashes that "depend" on this bug, only using the fixed variant for hash version 3.
+function qname_(T, name, ::Val{:broken})
+    return validate_name(cleanup_name(string(parentmodule(T), '.', name(T))))
+end
+function qname_(T, name, ::Val{:fixed})
+    sym = string(name(T))
+    parent = string(parentmodule(T))
+    # in some contexts `string(T)` will include the parent module as a prefix and in some
+    # other contexts it won't 😭, yet another reason we should be moving towards the design
+    # being worked out in https://github.com/beacon-biosignals/StableHashTraits.jl/pull/58
+    str = if startswith(sym, parent * ".")
+        sym
+    else
+        string(parent, ".", sym)
+    end
+    return validate_name(cleanup_name(str))
+end
+# the fix should only affect qualified_type not qualified_name (a fact verified by our reference tests)
+qualified_name_(fn::Function, ver=Val(:fixed)) = qname_(fn, nameof, ver)
+qualified_type_(fn::Function, ver=Val(:broken)) = qname_(fn, string, ver)
+function qualified_name_(x::T, ver=Val(:fixed)) where {T}
+    return qname_(T <: DataType ? x : T, nameof, Val(:fixed))
+end
+function qualified_type_(x::T, ver=Val(:broken)) where {T}
+    return qname_(T <: DataType ? x : T, string, ver)
+end
+qualified_(T, ::Val{:name}, ver) = qualified_name_(T)
+qualified_(T, ::Val{:type}, ver) = qualified_type_(T, ver)
 # we need `Type{Val}` methods below because the generated functions that call `qualified_`
 # only have access to the type of a value
-qualified_(T, ::Type{Val{:name}}) = qualified_name_(T)
-qualified_(T, ::Type{Val{:type}}) = qualified_type_(T)
+qualified_(T, ::Type{Val{:name}}, ver) = qualified_name_(T, ver)
+qualified_(T, ::Type{Val{:type}}, ver) = qualified_type_(T, ver)
 
 # deprecate external use of `qualified_name/type`
 function qualified_name(x)
@@ -246,7 +268,7 @@ end
 function qualified_type(x)
     Base.depwarn("`qualified_type` is deprecated, it will not be supported in the future.",
                  :qualified_type)
-    return qualified_type_(x)
+    return qualified_type_(x, Val{:broken}())
 end
 
 bytes_of_val(f) = reinterpret(UInt8, [f;])
@@ -291,11 +313,11 @@ julia> stable_typename_id(["a", "b"])
     Likewise, the type names of AbstractArray types are made uniform
     as their printing changes from Julia 1.6 -> 1.7.
 """
-stable_typename_id(x) = stable_id_helper(x, Val(:name))
-stable_id_helper(::Type{T}, of::Val) where {T} = hash64(qualified_(T, of))
-@generated function stable_id_helper(x, of)
+stable_typename_id(x) = stable_id_helper(x, Val(:name), Val(:fixed))
+stable_id_helper(::Type{T}, of::Val, ver::Val) where {T} = hash64(qualified_(T, of, ver))
+@generated function stable_id_helper(x, of, ver)
     T = x <: Function ? x.instance : x
-    str = qualified_(T, of)
+    str = qualified_(T, of, ver())
     number = hash64(str)
     :(return $number)
 end
@@ -321,8 +343,17 @@ julia> stable_type_id(["a", "b"])
     location of some types changes between `Core` to `Base` across julia versions.
     Likewise, the type names of AbstractArray types are made uniform
     as their printing changes from Julia 1.6 -> 1.7.
+
+!!! warn
+    This function has a known bug that has been left in to avoid breaking old hashes.
+    (The long-term plan is to eliminate this and `qualified_type` from the API,
+    see https://github.com/beacon-biosignals/StableHashTraits.jl/pull/55 for details).
+    The bug means that the type has can depend on the order in which you load modules
+    and call `stable_type_id`. To make use of the version of this function that has been
+    fixed you can call `stable_type_id_fixed`
 """
-stable_type_id(x) = stable_id_helper(x, Val(:type))
+stable_type_id(x) = stable_id_helper(x, Val(:type), Val(:broken))
+stable_type_id_fixed(x) = stable_id_helper(x, Val(:type), Val(:fixed))
 
 """
     stable_typefields_id(x)
@@ -495,10 +526,12 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     return (TypeHash(c), StructHash(:ByName))
 end
 TypeHash(::HashVersion{1}) = FnHash(qualified_type_)
-TypeHash(::HashVersion) = FnHash(stable_type_id, WriteHash())
+TypeHash(::HashVersion{2}) = FnHash(stable_type_id, WriteHash())
+TypeHash(::HashVersion) = FnHash(stable_type_id_fixed, WriteHash())
 TypeNameHash(::HashVersion{1}) = FnHash(qualified_name)
 # we can use a more conservative id here, we used a shorter one before to avoid hashing long strings
-TypeNameHash(::HashVersion) = FnHash(stable_type_id, WriteHash())
+TypeNameHash(::HashVersion{2}) = FnHash(stable_type_id, WriteHash())
+TypeNameHash(::HashVersion) = FnHash(stable_type_id_fixed, WriteHash())
 
 hash_method(::NamedTuple, c::HashVersion) = (TypeNameHash(c), StructHash())
 function hash_method(::AbstractRange, c::HashVersion)
@@ -508,8 +541,14 @@ function hash_method(::AbstractArray, c::HashVersion)
     return (TypeNameHash(c), FnHash(size), IterateHash())
 end
 function hash_method(::AbstractString, c::HashVersion{V}) where {V}
-    return (FnHash(V > 1 ? stable_type_id : qualified_name, WriteHash()),
-            WriteHash())
+    type_fn = if V == 1
+        qualified_name
+    elseif V == 2
+        stable_type_id
+    else
+        stable_type_id_fixed
+    end
+    return (FnHash(type_fn, WriteHash()), WriteHash())
 end
 hash_method(::Symbol, ::HashVersion{1}) = (PrivateConstantHash(":"), WriteHash())
 hash_method(::Symbol, ::HashVersion) = (@ConstantHash(":"), WriteHash())
