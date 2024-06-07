@@ -26,7 +26,7 @@ include("setup_tests.jl")
         @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
     end
 
-    for V in (1, 2, 3), hashfn in (sha256, sha1, crc32c)
+    for V in (1, 2, 3, 4), hashfn in (sha256, sha1, crc32c)
         hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
@@ -44,7 +44,7 @@ include("setup_tests.jl")
                                 bytes2hex_(test_hash((a=1, b=2))))
                 @test_reference("references/ref04_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(Set(1:3))))
-                fc = V == 3 ? HashFunctions(ctx) : ctx
+                fc = V == 4 ? HashFunctions(ctx) : ctx
                 @test_reference("references/ref05_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(sin, fc)))
                 @test_reference("references/ref06_$(V)_$(nameof(hashfn)).txt",
@@ -210,7 +210,7 @@ include("setup_tests.jl")
 
             @testset "Singletons and nulls" begin
                 @test test_hash(missing) != test_hash(nothing)
-                if V == 3
+                if V == 4
                     @test test_hash(Singleton1, HashSingletonTypes(ctx)) !=
                         test_hash(Singleton2, HashSingletonTypes(ctx))
                 else
@@ -219,7 +219,7 @@ include("setup_tests.jl")
             end
 
             @testset "Functions" begin
-                fc = V == 3 ? HashFunctions(ctx) : ctx
+                fc = V == 4 ? HashFunctions(ctx) : ctx
                 @test test_hash(sin, fc) != test_hash(cos, fc)
                 @test test_hash(sin, fc) != test_hash(:sin, fc)
                 @test test_hash(sin, fc) != test_hash("sin", fc)
@@ -237,12 +237,12 @@ include("setup_tests.jl")
             end
 
             @testset "Types" begin
-                tc = V == 3 ? HashTypeValues(ctx) : ctx
+                tc = V == 4 ? HashTypeValues(ctx) : ctx
 
                 @test test_hash(Float64, tc) != test_hash("Base.Float64", tc)
                 @test test_hash(Int, tc) != test_hash("Base.Int", tc)
                 @test test_hash(Float64, tc) != test_hash(Int, tc)
-                if V >= 3
+                if V >= 4
                     @test test_hash(Array{Int,3}, tc) != test_hash(Array{Int,4}, tc)
                     @test test_hash(Array{<:Any,3}, tc) != test_hash(Array{<:Any,4}, tc)
                     @test test_hash(Array{Int}, tc) != test_hash(Array{Float64}, tc)
@@ -345,7 +345,7 @@ include("setup_tests.jl")
                 end
             end
 
-            if V >= 3
+            if V >= 4
                 @testset "Type-stable vs. type-unstable hashing" begin
                     # arrays
                     xs = [isodd(n) ? Char(n) : Int32(n) for n in 1:10]
@@ -430,11 +430,11 @@ include("setup_tests.jl")
 
         # verify that if a type only has implementations for `hash_method`
         # and not `transformer` they'll get a warning
-        @test_logs (:warn, r"deprecated") stable_hash(TestType(1, 2); version=3)
+        @test_logs (:warn, r"deprecated") stable_hash(TestType(1, 2); version=4)
         # verify that if there are appropriate definitions of `transformer` and/or
         # `hash_method` this warning doesn't show up
-        @test_logs stable_hash(TestType4(1, 2); version=3)
-        @test_logs stable_hash(TestType2(1, 2); version=3)
+        @test_logs stable_hash(TestType4(1, 2); version=4)
+        @test_logs stable_hash(TestType2(1, 2); version=4)
     end
 
     if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION

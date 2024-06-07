@@ -77,9 +77,9 @@ macros to guarantee that their hashes are computed at compile time.
   12 │ numbers     sha256     270.958 μs  371.833 μs   1.37229
 ```
 
-# Version 1.2:
+# Version 1.3:
 
-Version 1.2 creates a new hash version (3) that abandones `@generated` functions and the
+Version 1.3 creates a new hash version (4) that abandones `@generated` functions and the
 goal of perfectly hashing type names and type parameters. It also redesigns the API for
 customizing hashes to leverage `StructTypes`. The goal of these changes is to have more
 stable and predictable hash behavior.
@@ -91,7 +91,7 @@ function of only the type brings this down to about x10-60 times slower (dependi
 row). It appears that the calls to `get!` on the cached type hashes are a quite a bit slower
 than the cost of hashing the content of the object.
 
-The implementation used in 1.2 reduces the times in this table beyond what caching can
+The implementation used in 1.3 reduces the times in this table beyond what caching can
 accomplish alone by hoisting type hashes outside of loops (and still caching their results
 for future use). For example when hashing `Vector{Int}` the hash of the type `Int` is
 computed only when hashing the array type, not when hashing the individual elements.

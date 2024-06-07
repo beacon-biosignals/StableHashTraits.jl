@@ -7,7 +7,7 @@ const NAMED_TUPLES_PRETTY_PRINT_VERSION = v"1.10.0-DEV.885"
     using PikaParser
 end
 
-# TODO: once we remove all deprecated functionality (anything before HashVersion{3}) we can
+# TODO: once we remove all deprecated functionality (anything before HashVersion{4}) we can
 # greatly simplify everything below. We will need to delete everything but `cleanup_name`;
 # furthermore `cleanup_name` will have a number of lines removed / simplified (see TODO's
 # below).
@@ -25,11 +25,11 @@ function cleanup_name(str)
     # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
     # https://discourse.julialang.org/t/difference-between-base-and-core/37426
     str = replace(str, r"^Core\." => "Base.")
-    # TODO: remove once <= HashVersion{3} has been removed
+    # TODO: remove once <= HashVersion{4} has been removed
     str = replace(str, ", " => ",") # spacing in type names vary across minor julia versions
     # in 1.6 and older AbstractVector and AbstractMatrix types get a `where` clause, but in
     # later versions of julia, they do not
-    # TODO: remove once <= HashVersion{3} have been removed
+    # TODO: remove once <= HashVersion{4} have been removed
     str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
     str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
 
@@ -59,7 +59,7 @@ function cleanup_name(str)
     # "@NamedTuple{a::Int64, b::@NamedTuple{x::Int64, y::Int64}}"
     # to be
     # "Base.NamedTuple{(:a,:b),Tuple{Int64,NamedTuple{(:x,:y),Tuple{Int64,Int64}}}}"
-    # TODO: remove once <= HashVersion{3} have been removed
+    # TODO: remove once <= HashVersion{4} have been removed
     str = cleanup_named_tuple_type(str)
     return str
 end

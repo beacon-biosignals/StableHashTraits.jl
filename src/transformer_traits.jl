@@ -21,7 +21,7 @@ function check_hash_method(x, transform, context)
 
            No specialized `transformer` method is defined for this type. This object's
            StableHashTraits customization may be deprecated, and may not work properly for
-           HashVersion{3}. If the default method for `transformer` is appropriate, you can
+           HashVersion{4}. If the default method for `transformer` is appropriate, you can
            prevent this warning from appearing by implementing a method similar to the
            following:
 
@@ -153,7 +153,7 @@ end
 # both the name of `==` and `2`.
 hash_trait(::Function) = StructTypes.UnorderedStruct()
 
-function transform_type(::Type{T}, c::HashVersion{3}) where {T<:Function}
+function transform_type(::Type{T}, c::HashVersion{4}) where {T<:Function}
     if !contains(nameof(T), "#")
         @error fallback_error("transform_type", T)
     else
@@ -253,7 +253,7 @@ end
 ndims_(::Type{<:AbstractArray{<:Any,N}}) where {N} = N
 ndims_(::Type{<:AbstractArray}) = nothing
 
-function transformer(::Type{<:AbstractArray}, ::HashVersion{3})
+function transformer(::Type{<:AbstractArray}, ::HashVersion{4})
     return Transformer(x -> (size(x), split_union(x)); hoist_type=true)
 end
 
@@ -322,7 +322,7 @@ end
 #####
 
 transform_type(::Type{<:AbstractRange}) = "Base.AbstractRange"
-function transformer(::Type{<:AbstractRange}, ::HashVersion{3})
+function transformer(::Type{<:AbstractRange}, ::HashVersion{4})
     Transformer(x -> (first(x), step(x), last(x)); hoist_type=true)
 end
 
@@ -360,7 +360,7 @@ function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
     return eltype(T)
 end
 
-function transformer(::Type{<:Pair}, ::HashVersion{3})
+function transformer(::Type{<:Pair}, ::HashVersion{4})
     return Transformer(((a, b),) -> (a, b); hoist_type=true)
 end
 
@@ -395,7 +395,7 @@ end
 #####
 
 transform_type(::Type{Symbol}) = "Base.Symbol"
-function transformer(::Type{<:Symbol}, ::HashVersion{3})
+function transformer(::Type{<:Symbol}, ::HashVersion{4})
     return Transformer(String; hoist_type=true)
 end
 

@@ -112,7 +112,7 @@ struct ExtraTypeParams{P,T}
     value::T
 end
 function StableHashTraits.type_structure(::Type{T}, ::StructTypes.DataType,
-                                         ::HashVersion{3}) where {P,U,
+                                         ::HashVersion{4}) where {P,U,
                                                                   T<:ExtraTypeParams{P,U}}
     return (P, U)
 end

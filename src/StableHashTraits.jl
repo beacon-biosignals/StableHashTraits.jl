@@ -30,6 +30,7 @@ export WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,
        stable_typename_id, stable_type_id
 
 include("special_contexts.jl")
-export TablesEq, ViewsEq, WithTypeNames
+export HashFunctions, HashTypeValues, HashNullTypes, HashSingletonTypes, TablesEq,
+       ViewsEq, WithTypeNames
 
 end

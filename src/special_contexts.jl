@@ -10,7 +10,7 @@ macro checked_context(TypeName)
         Base.@__doc__ struct $(esc(TypeName)){T}
             parent::T
             function $(esc(TypeName))(parent)
-                root_version(parent) < 3 &&
+                root_version(parent) < 4 &&
                     throw(ArgumentError("`WithTypeNames` does not support HashVersion 1 or 2"))
                 return new{typeof(parent)}(parent)
             end
@@ -101,14 +101,7 @@ dictionary you use impacts the hash.
 $WARN_UNSTABLE
 
 """
-struct WithTypeNames{T}
-    parent::T
-    function WithTypeNames(parent)
-        root_version(parent) < 3 &&
-            throw(ArgumentError("`WithTypeNames` does not support HashVersion 1 or 2"))
-        return new{typeof(parent)}(parent)
-    end
-end
+@checked_context WithTypeNames
 parent_context(x::WithTypeNames) = x.parent
 transform_type(::Type{T}, c::WithTypeNames) where {T} = parentmodule_nameof(T)
 
@@ -169,8 +162,8 @@ is, the type of the array or string (e.g. `SubString` vs. `String`) does not imp
 value.
 
 !!! warn "Deprecated"
-    In HashVersion{3} this is already true, so there is no need for `ViewsEq`. This
-    does not change the behavior of `HashVersion{3}` or later.
+    In HashVersion{4} this is already true, so there is no need for `ViewsEq`. This
+    does not change the behavior of `HashVersion{4}` or later.
 """
 struct ViewsEq{T}
     parent::T
@@ -195,5 +188,5 @@ function hash_method(::AbstractString, c::ViewsEq)
     return (root_version(c) > 1 ? @ConstantHash("Base.AbstractString") :
             PrivateConstantHash("Base.AbstractString", WriteHash()), WriteHash())
 end
-# NOTE: Views are already equal in HashVersion 3+, so we don't need a `transform` method
+# NOTE: Views are already equal in HashVersion 4+, so we don't need a `transform` method
 # here

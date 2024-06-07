@@ -1,8 +1,8 @@
 """
     HashVersion{V}()
 
-The default `hash_context` used by `stable_hash`. There are currently three versions (1-3).
-Version 3 should be favored when at all possible. Version 1 is the default version, so as to
+The default `hash_context` used by `stable_hash`. There are currently three versions (1-4).
+Version 4 should be favored when at all possible. Version 1 is the default version, so as to
 avoid changing the hash computed by existing code.
 
 By explicitly passing this hash version in `stable_hash` you ensure that hash values for
@@ -10,8 +10,8 @@ these fallback methods will not change even if new hash versions are developed.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
-        V < 3 &&
-            Base.depwarn("HashVersion{T} for T < 3 are deprecated, favor `HashVersion{3}` in " *
+        V < 4 &&
+            Base.depwarn("HashVersion{T} for T < 4 are deprecated, favor `HashVersion{4}` in " *
                          "all cases where backwards compatible hash values are not " *
                          "required.", :HashVersion)
         return new{V}()
@@ -27,14 +27,14 @@ hash is intended to remain unchanged across julia versions. The built-in context
 HashVersion{N}, and if you specify a `version`, this is equivalent to explicitly passing
 `HashVersion{version}`. To customize how the hash is copmuted see [Using Contexts](@ref).
 
-It is best to pass an explicit version, since `HashVersion{3}` is the only non-deprecated
+It is best to pass an explicit version, since `HashVersion{4}` is the only non-deprecated
 version; it is much faster than 1 and more stable than 2. Furthermore, a new hash version is
 provided in a future release, the hash you get by passing an explicit `HashVersion{N}`
 should *not* change. (Note that the number in `HashVersion` does not necessarily match the
 package version of `StableHashTraits`).
 
-In hash version 3, you customize how hashes are computed using [`transformer`](@ref), and in
-versions 1-2 using [`hash_method`](@ref).
+In hash version 4, you customize how hashes are computed using [`transformer`](@ref), and in
+versions 1-4 using [`hash_method`](@ref).
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
@@ -50,7 +50,7 @@ that both `hash_method` and `StableHashTraits.write` are deprecated.
 """
 stable_hash(x; alg=sha256, version=1) = return stable_hash(x, HashVersion{version}(); alg)
 function stable_hash(x, context; alg=sha256)
-    if root_version(context) < 3
+    if root_version(context) < 4
         return compute_hash!(deprecated_hash_helper(x, HashState(alg, context), context,
                                                     hash_method(x, context)))
     else
@@ -109,10 +109,10 @@ end
     StableHashTraits.hoist_type(fn)
 
 Returns true if it is known that `fn` preservess type structure ala [`Transformer`](@ref).
-See []
-This is false by default for all functions but `identity`. You can define a method of this
-function for your own fn's to signal that they their results can be safely optimized via
-hoisting the type hash outside of loops during hashing.
+See [Optimizing Transformers](@ref) for details. This is false by default for all functions
+but `identity` and [`parentmodule_nameof`](@ref). You can define a method of this function
+for your own fn's to signal that their results can be safely optimized via hoisting the
+type hash outside of loops.
 """
 hoist_type(::typeof(identity)) = true
 hoist_type(::Function) = false
@@ -127,11 +127,11 @@ Return [`Transformer`](@ref) indicating how to modify an object of type `T` befo
 it. Methods without `context` are called first, and if no method for that type exists there
 is a fallback that calls the method without a `context`. Users can therefore implement a
 method with a context object to customize transformations for that context only, or a single
-argument method when they wish to affect the transformation across all contexts (where no
+argument method when you wish to affect the transformation across all contexts (where no
 specialized method for that context exists).
 """
 transformer(::Type{T}, context) where {T} = transformer(T, parent_context(context))
-transformer(::Type{T}, ::HashVersion{3}) where {T} = transformer(T)
+transformer(::Type{T}, ::HashVersion{4}) where {T} = transformer(T)
 transformer(x) = Transformer()
 
 """
@@ -162,7 +162,7 @@ In this example we hash both some metadata about a custom array, and each of the
 struct TransformIdentity{T}
     val::T
 end
-function transformer(::Type{<:TransformIdentity}, ::HashVersion{3})
+function transformer(::Type{<:TransformIdentity}, ::HashVersion{4})
     return Transformer(x -> x.val; hoist_type=true)
 end
 
@@ -192,14 +192,14 @@ StableHashTraits.parent_context(x::MyContext) = x.parent
 ```
 
 The parent context is typically another custom context, or the root context
-`HashVersion{3}()`.
+`HashVersion{4}()`.
 
 ## Example
 
 ```julia
 StableHashTraits.@context NumberAbs
 transformer(::Type{<:Number}, ::NumberAbs) = Transformer(abs; hoist_type=true)
-stable_hash(10, NumberAbs(HashVersion{3}())) == stable_hash(-10, NumberAbs(HashVersion{3}()))
+stable_hash(10, NumberAbs(HashVersion{4}())) == stable_hash(-10, NumberAbs(HashVersion{4}()))
 ```
 
 ## See Also
@@ -230,7 +230,8 @@ If the module or name of a type changes, this value will (obviously) change. The
 many types is considered an implementation detail and can change between non-breaking
 versions of a package. For this reason uses of `parentmodule_nameof` must be explicitly
 defined by user of `StableHashTraits`. This function is not used internally for the methods
-of `HashVersion{3}`.
+of `HashVersion{4}` but see [`HashFunctions`](@ref), [`HashTypeValues`](@ref),
+[`HashNullTypes`](@ref) and [`HashSingletonTypes`](@ref).
 """
 parentmodule_nameof(x) = qualified_name_(x)
 hoist_type(::typeof(parentmodule_nameof)) = true
@@ -278,7 +279,7 @@ StableHashTriats.@context HashAnotherSingleton
 function StableHashTraits.transform_type(::Type{<:PackageSingleton}, ::HashAnotherSingleton)
     return "AnotherPackage.PackageSingleton"
 end
-context = HashAnotherSingleton(HashVersion{3}())
+context = HashAnotherSingleton(HashVersion{4}())
 stable_hash([PackageSingleton(), 1, 2], context) # will not error
 ```
 
@@ -321,7 +322,7 @@ function HashTraits.type_structure(::Type{<:I}, ::IntervalEndpointsMatter) where
     return (L, R)
 end
 
-context = IntervalEndpointsMatter(HashVersion{3}())
+context = IntervalEndpointsMatter(HashVersion{4}())
 stable_hash(Interval{Closed, Open}(1, 2), context) !=
     stable_hash(Interval{Open, Closed}(1, 2), context) # true
 ```
@@ -333,7 +334,7 @@ stable_hash(Interval{Closed, Open}(1, 2), context) !=
 function transform_type(::Type{T}, context) where {T}
     return transform_type(T, parent_context(context))
 end
-function transform_type(::Type{T}, ::HashVersion{3}) where {T}
+function transform_type(::Type{T}, ::HashVersion{4}) where {T}
     return transform_type_by_trait(T, StructType(T))
 end
 transform_type_by_trait(::Type, ::S) where {S<:StructTypes.StructType} = parentmodule_nameof(S)
@@ -364,7 +365,7 @@ function StableHashTraits.type_value_identifier(::Type{T},
                                                 ::HashNumberTypes) where {T <: Number}
     return parentmodule_nameof(T)
 end
-stable_hash(Int, HashNumberTypes(HashVersion{3}())) # does not error
+stable_hash(Int, HashNumberTypes(HashVersion{4}())) # does not error
 ```
 
 ## See Also
@@ -377,7 +378,7 @@ function transform_type_value(::Type{T}, context) where {T}
     return transform_type_value(T, parent_context(context))
 end
 
-function transform_type_value(::Type{T}, c::HashVersion{3}) where {T}
+function transform_type_value(::Type{T}, c::HashVersion{4}) where {T}
     if !contains(nameof(T), "#")
         @error fallback_error("transform_type_value", T)
     end
@@ -399,6 +400,6 @@ function fallback_error(name, T)
     """
 end
 
-function transform_type_value(::Type{T}, c::HashVersion{3}) where {T<:Function}
+function transform_type_value(::Type{T}, c::HashVersion{4}) where {T<:Function}
     return transform_type(T)
 end

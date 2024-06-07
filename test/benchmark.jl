@@ -50,7 +50,7 @@ benchmarks = [(; name="dataframes", a=data1, b=df);
 
 for hashfn in (crc, sha256)
     hstr = nameof(hashfn)
-    for V in (2, 3)
+    for V in (3, 4)
         for (; name, a, b) in benchmarks
             suite["$(name)_$(hstr)_$V"] = BenchmarkGroup([name])
             if name in ("strings", "symbols")

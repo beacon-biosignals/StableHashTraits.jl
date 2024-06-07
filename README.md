@@ -27,7 +27,7 @@ StableHashTraits.transformer(::Type{<:MyType}) = Transformer(x -> (; x.data);
                                                              hoist_type=true)
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
-stable_hash(a; version=3) == stable_hash(b; version=3) # true
+stable_hash(a; version=4) == stable_hash(b; version=4) # true
 ```
 <!--END_EXAMPLE-->
 
@@ -36,7 +36,7 @@ Useres can define a method of `transformer` to customize how an object is hashed
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
 > [!WARNING]
-> Hash versions 3 constitutes a substantial redesign of StableHashTraits so as to more conservatively avoid realiance on the internals of julia and packages. Hash versions 1 and 2 are deprecated and will be removed in a soon-to-be released StableHashTraits 2.0. Hash version 3 will remain unchanged in this 2.0 release. Hash version 1 is the default version if you don't specify a version. You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
+> Hash versions 4 constitutes a substantial redesign of StableHashTraits so as to more conservatively avoid realiance on the internals of julia and packages. Hash versions 1-3 are deprecated and will be removed in a soon-to-be released StableHashTraits 2.0. Hash version 4 will remain unchanged in this 2.0 release. Hash version 1 is the default version if you don't specify a version. You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
 
 <!--The START_ and STOP_ comments are used to extract content that is also repeated in the documentation-->
 <!--START_OVERVIEW-->
@@ -44,11 +44,11 @@ StableHashTraits aims to guarantee a stable hash so long as you only upgrade to 
 
 StableHashTraits is designed to be used in cases where there is an object you wish to serialize in a content-addressed cache. How and when objects pass the same input to a hashing algorithm is meant to be predictable and well defined, so that the user can reliably define methods of `transformer` to modify this behavior.
 
-## What gets hashed? (hash version 3)
+## What gets hashed? (hash version 4)
 
-This covers the behavior when using the latest hash version (3). You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
+This covers the behavior when using the latest hash version (4). You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
 
-When you call `stable_hash(x; version=3)`, StableHashTraits hashes both the value `x` and its type `T`, normally doing so according to `StructType(T)`. (ala
+When you call `stable_hash(x; version=4)`, StableHashTraits hashes both the value `x` and its type `T`, normally doing so according to `StructType(T)`. (ala
 [SructTypes](https://github.com/JuliaData/StructTypes.jl)).
 
 You can customize how the value is hashed using [`StableHashTraits.transformer`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer),
@@ -118,7 +118,7 @@ If a function value `fn` can be hashed in this way, so can types of the form `ty
 
 ### `Type`
 
-When a type is provided as a value (e.g. `stable_hash(Int; version=3)`) hashing it will error by default.
+When a type is provided as a value (e.g. `stable_hash(Int; version=4)`) hashing it will error by default.
 
 You can opt in to hashing a given type as a value by defining [`transform_type_value`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type_value) for your type.
 
@@ -131,7 +131,7 @@ Most of the behaviors described below can be customized/changed by using your ow
 The order of NamedTuple pairs does not matter
 
 ```julia
-stable_hash((;a=1,b=2); version=3) == stable_hash((;b=2,a=1); version=3)
+stable_hash((;a=1,b=2); version=4) == stable_hash((;b=2,a=1); version=4)
 ```
 
 Two structs with the same fields and name hash equivalently
@@ -151,26 +151,26 @@ module B
     end
 end
 
-stable_hash(B.X(2, 1); version=3) == stable_hash(A.X(1, 2); version=3)
+stable_hash(B.X(2, 1); version=4) == stable_hash(A.X(1, 2); version=4)
 ```
 
 Different array types with the same content hash to the same value.
 
 ```julia
-stable_hash(view([1,2,3], 1:2); version=3) == stable_hash([1,2]; version=3)
+stable_hash(view([1,2,3], 1:2); version=4) == stable_hash([1,2]; version=4)
 ```
 
 Byte equivalent arrays of all `NumberType` values will hash to the same value.
 
 ```julia
-stable_hash([0.0, 0.0]; version=3) == stable_hash([0, 0]; version=3)
+stable_hash([0.0, 0.0]; version=4) == stable_hash([0, 0]; version=4)
 ```
 
 But if the eltype has a different `StructType`, or if the bytes are different, the collision will not occur.
 
 ```julia
-stable_hash(Any[0.0, 0.0]; version=3) != stable_hash([0, 0]; version=3)
-stable_hash([1.0, 2.0]; version=3) != stable_hash([1, 2]; version=3)
+stable_hash(Any[0.0, 0.0]; version=4) != stable_hash([0, 0]; version=4)
+stable_hash([1.0, 2.0]; version=4) != stable_hash([1, 2]; version=4)
 ```
 
 Two types with the same name but different type parameters will hash the same unless your
@@ -199,7 +199,7 @@ In julia 1.9.4:
 
 ```julia
 
-julia> bytes2hex(stable_hash(rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006)); version=3))
+julia> bytes2hex(stable_hash(rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006)); version=4))
 "4ccdc172688dd2b5cd50ba81071a19217c3efe2e3b625e571542004c8f96c797"
 
 julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
@@ -211,7 +211,7 @@ julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
 In julia 1.6.7
 
 ```julia
-julia> bytes2hex(stable_hash(rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006)); version=3))
+julia> bytes2hex(stable_hash(rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006)); version=4))
 "3b8d998f3106c05f8b74ee710267775d0d0ce0e6780c1256f4926d3b7dcddf9e"
 
 julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
@@ -224,9 +224,9 @@ julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
 
 ## Breaking changes
 
-### In 1.2
+### In 1.3
 
-This release includes a new hash version 3 that has breaking API changes, documeted above. The prior API is deprecated. In version 2, which will be released in relatively short order, only hash version 3 will be available
+This release includes a new hash version 4 that has breaking API changes, documeted above. The prior API is deprecated. In version 2, which will be released in relatively short order, only hash version 4 will be available
 
 ### In 1.1
 

@@ -14,7 +14,11 @@ StableHashTraits.is_ordered
 StableHashTraits.hash_sort_by
 StableHashTraits.parent_context
 StableHashTraits.root_version
+HashFunctions
+HashNullTypes
+HashSingletonTypes
+HashTypeValues
+WithTypeNames
 TablesEq
 ViewsEq
-WithTypeNames
 ```
