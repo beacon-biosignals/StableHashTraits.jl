@@ -384,10 +384,20 @@ include("setup_tests.jl")
                                                   UInt32(1), Char(1)]
                     @test test_hash(xs) != test_hash(ys)
 
-                    # transforming from type-unstable to type-stable doesn't
-                    # botch the hash
-                    @test test_hash(UnstableStruct(nothing)) !=
-                          test_hash(UnstableStruct(missing))
+                    # narrowing fields doesn't generate hashing bugs
+                    @test test_hash(UnstableStruct1(nothing, 1)) !=
+                          test_hash(UnstableStruct1(missing, 2))
+                    @test test_hash(UnstableStruct1(1, 1)) !=
+                          test_hash(UnstableStruct1(2, 2))
+                    @test test_hash(UnstableStruct2(nothing, 1)) !=
+                          test_hash(UnstableStruct2(missing, 2))
+                    @test test_hash(UnstableStruct2(1, 1)) !=
+                          test_hash(UnstableStruct2(2, 2))
+
+                    # but if we use NamedTuple selection with `hoist_type=true`
+                    # we do get a bug
+                    @test test_hash(UnstableStruct3(nothing, 1)) ==
+                        test_hash(UnstableStruct3(missing, 2))
                 end
             end
 
