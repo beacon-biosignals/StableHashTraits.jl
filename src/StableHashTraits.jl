@@ -9,7 +9,8 @@ using SHA: SHA, sha256
 using StructTypes: StructType
 
 include("main_interface.jl")
-export stable_hash, HashVersion, module_nameof_string, nameof_string, pick_fields, omit_fields
+export stable_hash, HashVersion, module_nameof_string, nameof_string, pick_fields,
+       omit_fields
 # Transformer, transformer, transform_type, transform_type_value, @context
 
 include("hash_algorithms.jl")
