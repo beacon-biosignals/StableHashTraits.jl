@@ -131,11 +131,11 @@ hoist_type(::Type) = false
     StableHashTraits.transformer(::Type{T}, [context]) where {T}
 
 Return [`Transformer`](@ref) indicating how to modify an object of type `T` before hashing
-it. Methods without `context` are called first, and if no method for that type exists there
+it. Methods with a `context` are called first, and if no method for that type exists there
 is a fallback that calls the method without a `context`. Users can therefore implement a
 method with a context object to customize transformations for that context only, or a single
-argument method when you wish to affect the transformation across all contexts (where no
-specialized method for that context exists).
+argument method when they wish to affect the transformation across all contexts that don't
+have a context specific method.
 """
 transformer(::Type{T}, context) where {T} = transformer(T, parent_context(context))
 transformer(::Type{T}, ::HashVersion{4}) where {T} = transformer(T)
@@ -159,7 +159,7 @@ versions exist, which return a function for selecting the given fields.
 
 $TUPLE_DIFF
 """
-pick_fields(fields::NTuple{<:Any, Symbol}) = PickFields(fields)
+pick_fields(fields::NTuple{<:Any,Symbol}) = PickFields(fields)
 struct PickFields{T}
     fields::T
 end
@@ -167,9 +167,9 @@ hoist_type(::PickFields) = true
 function (p::PickFields)(x::T) where {T}
     vals = map(f -> getfield(x, f), p.fields)
     types = map(f -> fieldtype(T, f), p.fields)
-    return NamedTuple{p.fields, types}(vals)
+    return NamedTuple{p.fields,types}(vals)
 end
-pick_fields(x, fields::NTuple{<:Any, Symbol}) = pick_fields(fields)(x)
+pick_fields(x, fields::NTuple{<:Any,Symbol}) = pick_fields(fields)(x)
 pick_fields(fields::Symbol...) = pick_fields(fields)
 pick_fields(x, fields::Symbol...) = pick_fields(fields)(x)
 
@@ -184,7 +184,7 @@ versions exist, which return a function for selecting the given fields.
 
 $TUPLE_DIFF
 """
-omit_fields(fields::NTuple{<:Any, Symbol}) = OmitFields(fields)
+omit_fields(fields::NTuple{<:Any,Symbol}) = OmitFields(fields)
 struct OmitFields{T}
     fields::T
 end
@@ -193,9 +193,9 @@ function (p::OmitFields)(x::T) where {T}
     fields = TupleTools.filter(f ∉ o.fields, fieldnames(T))
     vals = map(f -> getfield(x, f), fields)
     types = map(f -> fieldtype(T, f), fields)
-    return NamedTuple{p.fields, types}(vals)
+    return NamedTuple{p.fields,types}(vals)
 end
-omit_fields(x, fields::NTuple{<:Any, Symbol}) = omit_fields(fields)(x)
+omit_fields(x, fields::NTuple{<:Any,Symbol}) = omit_fields(fields)(x)
 omit_fields(fields::Symbol...) = omit_fields(fields)
 omit_fields(x, fields::Symbol...) = omit_fields(fields)(x)
 
@@ -288,14 +288,17 @@ end
 Get a (mostly!) stable name of `T`. This is a helpful utility for writing your own methods
 of [`transform_type`](@ref) and [`transform_type_value`](@ref). The stable name includes the
 name of the module that `T` was defined in. Any uses of `Core` are replaced with `Base` to
-keep the name stable across versions of julia. Anonymous names (e.g. `module_nameof_string(x
--> x+1)`) throw an error, as no stable name is possible in this case.
+keep the name stable across versions of julia. Anonymous names
+(e.g. `module_nameof_string(x -> x+1)`) throw an error, as no stable name is possible in
+this case.
 
-If the module a type changes, this value will (obviously) change. The module of
-many types is considered an implementation detail and can change between non-breaking
-versions of a package. For this reason uses of `module_nameof_string` must be explicitly
-defined by user of `StableHashTraits`. This function is not used internally for the methods
-of `HashVersion{4}` but see:
+!!! danger "Unstable"
+    The module of many types is often considered an implementation detail and can change between
+    non-breaking versions of a package. For this reason uses of `module_nameof_string` must be
+    explicitly specified by user of `StableHashTraits`. This function is not used internally for
+    the default methods of `HashVersion{4}`.
+
+## See Also
 
 - [`HashFunctions`](@ref)
 - [`HashTypeValues`](@ref)
@@ -303,11 +306,11 @@ of `HashVersion{4}` but see:
 - [`HashSingletonTypes`](@ref)
 
 """
-function module_nameof_string(::Type{Union{A, B}}) where {A, B}
+function module_nameof_string(::Type{Union{A,B}}) where {A,B}
     # Main.@infiltrate
     !@isdefined(A) && return ""
     !@isdefined(B) && return module_nameof_string_(A)
-    return module_nameof_string(A)*","*module_nameof_string(B)
+    return module_nameof_string(A) * "," * module_nameof_string(B)
 end
 hoist_type(::typeof(module_nameof_string)) = true
 function module_nameof_string_(::Type{T}) where {T}
@@ -319,7 +322,7 @@ function module_nameof_string_(::Type{T}) where {T}
     end
 end
 function module_nameof_(::Type{T}) where {T}
-    return validate_name(cleanup_name(string(parentmodule(T))*"."*string(nameof(T))))
+    return validate_name(cleanup_name(string(parentmodule(T)) * "." * string(nameof(T))))
 end
 
 """
@@ -329,14 +332,13 @@ end
 
 Get a stable name of `T`. This is a helpful utility for writing your own methods of
 [`transform_type`](@ref) and [`transform_type_value`](@ref). The stable name is computed
-from `nameof`. Any uses of `Core` are replaced with `Base` to keep the name stable across
-versions of julia. Anonymous names (e.g. `module_nameof_string(x -> x+1)`) throw an error, as
+from `nameof`. Anonymous names (e.g. `module_nameof_string(x -> x+1)`) throw an error, as
 no stable name is possible in this case.
 """
-function nameof_string(::Type{Union{A, B}}) where {A, B}
+function nameof_string(::Type{Union{A,B}}) where {A,B}
     !@isdefined(A) && return ""
     !@isdefined(B) && return nameof_string_(A)
-    return nameof_string(A)*","*nameof_string(B)
+    return nameof_string(A) * "," * nameof_string(B)
 end
 function nameof_string_(::Type{T}) where {T}
     # special case for function types
@@ -348,7 +350,6 @@ function nameof_string_(::Type{T}) where {T}
     end
 end
 # TODO: rewrite to avoid redundancy above
-
 
 """
    transform_type(::Type{T}, [context])
@@ -452,7 +453,9 @@ end
 transform_type(::Type{T}, ::HashVersion{4}) where {T} = transform_type(T)
 transform_type(::Type{Union{}}) = "Union{}"
 transform_type(::Type{T}) where {T} = transform_type_by_trait(T, StructType(T))
-transform_type_by_trait(::Type, ::S) where {S<:StructTypes.StructType} = module_nameof_string(S)
+function transform_type_by_trait(::Type, ::S) where {S<:StructTypes.StructType}
+    return module_nameof_string(S)
+end
 
 """
     transform_type_value(::Type{T}, [trait], [context]) where {T}
@@ -494,7 +497,7 @@ function transform_type_value(::Type{T}, context) where {T}
 end
 
 function transform_type_value(::Type{T}, c::HashVersion{4}) where {T}
-    transform_type_value(T)
+    return transform_type_value(T)
 end
 transform_type_value(::Type{Union{}}) = "Union{}"
 function transform_type_value(::Type{T}) where {T}
