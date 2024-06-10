@@ -164,27 +164,27 @@ struct BadShowSyntax end
 Base.show(io::IO, ::Type{<:BadShowSyntax}) = print(io, "{")
 
 struct UnstableStruct1
-    a
-    b
+    a::Any
+    b::Any
 end
-function StableHashTraits.transformer(::Type{<:UnstableStruct})
+function StableHashTraits.transformer(::Type{<:UnstableStruct1})
     return StableHashTraits.Transformer(pick_fields(:a))
 end
 
 struct UnstableStruct2
-    a
-    b
+    a::Any
+    b::Any
 end
-function StableHashTraits.transformer(::Type{<:UnstableStruct})
+function StableHashTraits.transformer(::Type{<:UnstableStruct2})
     return StableHashTraits.Transformer(omit_fields(:b))
 end
 
 struct UnstableStruct3
-    a
-    b
+    a::Any
+    b::Any
 end
-function StableHashTraits.transformer(::Type{<:UnstableStruct})
-    return StableHashTraits.Transformer(x -> (;x.a); hoist_type=true)
+function StableHashTraits.transformer(::Type{<:UnstableStruct3})
+    return StableHashTraits.Transformer(x -> (; x.a); hoist_type=true)
 end
 
 # TODO: we need to rewrite the docs on when `hoist_type` is safe
