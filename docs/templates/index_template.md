@@ -8,7 +8,8 @@ You typically want to simply override a method of [`StableHashTraits.transformer
 
 {INSERT_EXAMPLE}
 
-In this example we also optimize our hash by setting `hoist_type=true`. You can do this any time your function is type stable, but there are additional conditions under which you can still set this flag to true, discussed below.
+!!! note "Use `pick_fields` and `omit_fields`
+    It is recommended you use [`pick_fields`](@ref) or [`omit_fields`](@ref) when you simply want to select some subset of fields to be hashed, as they allow for more optimized hashes than directly returning a named tuple of a field subset.
 
 [`StableHashTraits.Transformer`](@ref) takes a second positional argument which is the `StructType` you wish to use on the transformed return value. By default `StructType` is applied to the result to determine this automatically, but in some cases it can be useful to modify this trait by passing a second argument (see the example below).
 
@@ -51,19 +52,58 @@ There are two useful, predefined contexts available in `StableHashTraits` that c
 
 ## Optimizing Transformers
 
-As noted, `hoist_type` can safely be set to true for any type-stable function. It is set to
-true by default for `identity`. When set to true, `stable_hash` will hoist the type of the
-pre-transformed object outside of loops when possible, avoiding type hashes for any deeply
-nested fields, so long as the path to them includes all concrete types. For example, when
-hashing an `Array{Int}` the `Int` will only be hashed once, not once for every element.
+By default, stable hash traits follows a safe, but slower code path for arbitrary functions passed to `Transformer`. However, in some cases it can use a faster code path, given that some assumptions about the types returned by the transforming function are maintained.
+The `identity` function and the helper functions [`pick_fields`](@ref) and [`omit_fields`](@ref) use this faster code path by default.
 
-This hoisting is only valid when the pre-transformed type is sufficient to disambiguate the the hashed values that are produced downstream after transformation. When `hoist_type=false` (the default for most functions) this signals that the type of the return value from `transformer` should be hashed alongside the transformed value, which is much slower, but ensures the that no unexpected hash collisions will occur.
+In particular, a keyword argument to `Transformer`, `hoist_type` can be set to true to use this faster code path. Functions that implement `StableHashTraits.hoist_type(::typeof(fn))` can return `true` to signal that they are safe when using this faster code path.
 
-This should give the reader some idea of when a type-unstable function can be safely marked as `hoist_type=true`. In particular any case where each value passed to transform maps to a value that will ultimately be hashed as a unique bit-sequence should be fine. This would be violated, for instance, by `x -> x < 0 : Char(0) ? Int32(0)`, but not by `x -> x < 0 : Char(1) : Int32(2)`. In the latter case we could safely mark `hoist_type=true`.
+You can always safely use `hoist_type=true` if the return value of your function maintains any of the field and element types of the input argument in the value it returns. For example, if a field has type `Any` and it is used to compute some part of the transformed value, than that part should also be of type `Any`.
+
+This is because, when set to true, `hoist_type=true` hashes the type of the pre-transformed object, prior to looping over the contents of the post-transformed object: where the contents are the fields of a data type or the elements of an array or dict type. Once the contents of the object are being looped over, the hashing of each type of the elements or fields are skipped. For example, when hashing an `Array{Int}` the `Int` will only be hashed once, not once for every element.
+
+This hoisting is only valid when the pre-transformed type is sufficient to disambiguate the hashed values that are produced downstream after transformation and when the post-transformed types that are concrete depend only on pre-transformed types that are themselves concrete. When `hoist_type=false` (the default for most functions) this signals that the type of the return value from `transformer` should be hashed alongside the transformed value, which is much slower, but ensures the that no unexpected hash collisions will occur.
+
+### Examples
+
+Most type-unstable functions are unsafe to use with `hoist_type=true`. For instance, the assmuptions of `hoist_type=true` would be violated by the function `x -> x < 0 : Char(0) ? Int32(0)`.
+
+However, `x -> x < 0 : Char(1) : Int32(2)` is safe to use with `hoist_type=true`, since the byte sequence is unique irrespective of the type returned.
+
+These two examples hopefully help to clarify when type-unstable functions can lead to incorrect hashes when `hoist_type=true`.
+
+However type stable functions can also lead to invalid hashes with `hoist_type=true`. For example:
+
+```julia
+struct MyType
+    a::Any
+end
+# ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
+# DO NOT DO IT THIS WAY; YOUR CODE WILL BE BUGGY!!!
+StableHashTraits.transformer(::Type{<:MyType}) = Transformer(x -> (;x.a); hoist_type=true)
+stable_hash(MyType(missing)) == stable_hash(MyType(nothing)) ## OOPS, we wanted these to be different but this returns `true`
+```
+
+Setting the flag to `hoist_type=true` here causes the type of the `missing` and `nothing` to be hoisted, since the field `a` is a concrete type in the return value of `Transformer`'s function. Since only the type of these two values is hashed, their hashes now collide. If the field of the pre-transformed type `a` was concrete, there wouldn't be any problem, because its type would be hashed, and would include either the `Missing` or `Nothing` type hash.
+
+This is why `pick_fields` and `omit_fields` exist, to provide a way to select or remove fields from a type you want to transform that can safely use `hoist_type`.
+
+```julia
+struct MyType
+    a::Any
+end
+# ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
+StableHashTraits.transformer(::Type{<:MyType}) = Transformer(x -> (;x.a); hoist_type=false)
+stable_hash(MyType(missing)) != stable_hash(MyType(nothing)) ## this works
+
+# NOTE: pick_fields sets `hoist_type=true` by default; it is set here to clearly illustrate
+# what is happening.
+StableHashTraits.transformer(::Type{<:MyType}) = Transformer(pick_fields(:a); hoist_type=true)
+stable_hash(MyType(missing)) != stable_hash(MyType(nothing)) ## this also works and is faster than the previous implementation
+```
 
 ## Customizing Type Hashes
 
-Types are hashed by hashing the return value of [`transform_type`](@ref) when hashing an object's type and the return value of [`transform_type_value`](@ref) when hashing a type as a value (e.g. `stable_hash(Int)`).
+Types are hashed by hashing the return value of [`transform_type`](@ref) when hashing an object's type and the return value of [`transform_type_value`](@ref) when hashing a type as a value (e.g. `stable_hash(Int)`). The docs for these functions provide several examples of their usage.
 
 In addition there is some structure of the type that is always hashed:
 

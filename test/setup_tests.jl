@@ -162,3 +162,13 @@ end
 
 struct BadShowSyntax end
 Base.show(io::IO, ::Type{<:BadShowSyntax}) = print(io, "{")
+
+struct UnstableStruct
+    a
+end
+function StableHashTraits.transformer(::Type{<:UnstableStruct})
+    return StableHashTraits.Transformer(x -> NamedTuple{(:a,), Tuple{Any}}((x.a,)); hoist_type=true)
+end
+# TODO: we need to rewrite the docs on when `hoist_type` is safe
+# TODO: we need to probably write some helper functions for
+# `omit` and `keep` that maintain feildtypes

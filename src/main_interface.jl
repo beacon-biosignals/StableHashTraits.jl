@@ -84,12 +84,20 @@ end
                                  hoist_type=StableHashTraits.hoist_type(fn))
 
 Wraps the function used to transform values before they are hashed. The function is applied
-(`fn(x)`), and then its result is hashed according to the trait `@something result_method
-StructType(fn(x))`.
+(`fn(x)`), and then its result is hashed according to the trait
+`@something result_method StructType(fn(x))`.
 
-The flag `hoist_type` indicates if it is safe to hoist type hashes outside of
-loops; this is always the case when `fn` is type stable. See the manual for details about
-other cases when it is safe to set this flag to true.
+The flag `hoist_type` indicates if it is safe to hoist type hashes outside of loops. If set
+to true your has will be computed more quickly. However, this hoisting is only valid when
+the pre-transformed type is sufficient to disambiguate the hashed values that are produced
+downstream AND when the post-transformed types that are concrete depend only on
+pre-transformed types that are themselves concrete.
+
+!!! danger "Use `hoist_type=true` with care"
+    It is easy to introduce subtle bugs that occur in rare edge cases when using
+    `hoist_type=true`. Refer to [Optimizing Transformers](@ref) for a detailed discussion
+    and examples of when you can safely set `hoist_type=true`. It is better to use a
+    pre-defined function such as [`pick_fields`](@ref) or [`omit_fields`](@ref).
 
 ## See Also
 
@@ -132,6 +140,64 @@ specialized method for that context exists).
 transformer(::Type{T}, context) where {T} = transformer(T, parent_context(context))
 transformer(::Type{T}, ::HashVersion{4}) where {T} = transformer(T)
 transformer(x) = Transformer()
+
+const TUPLE_DIFF = """
+This function differs from returning a named tuple of fields (e.g. `x -> (;x.a, x.b)``) in
+that it does not narrow the types of the returned fields. A field of type `Any` of `x` is a
+field of type `Any` in the returned value. This ensures that pick_fields can be safely
+used with `hoist_type` of [`Transformer`](@ref)
+"""
+
+"""
+    pick_fields(x, fields::Symbol...)
+    pick_fields(x, fields::NTuple{<:Any, Symbol})
+    pick_fields(fields::Symbol...)
+    pick_fields(fields::NTuple{<:Any, Symbol})
+
+Return an object including `fields` from the fields of `x`, as per `getfield`. Curried
+versions exist, which return a function for selecting the given fields.
+
+$TUPLE_DIFF
+"""
+pick_fields(fields::NTuple{<:Any, Symbol}) = PickFields(fields)
+struct PickFields{T}
+    fields::T
+end
+hoist_type(::PickFields) = true
+function (p::PickFields)(x::T) where {T}
+    vals = map(f -> getfield(x, f), p.fields)
+    types = map(f -> fieldtype(T, f), p.fields)
+    return NamedTuple{p.fields, types}(vals)
+end
+pick_fields(x, fields::NTuple{<:Any, Symbol}) = pick_fields(fields)(x)
+pick_fields(fields::Symbol...) = pick_fields(fields)
+pick_fields(x, fields::Symbol...) = pick_fields(fields)(x)
+
+"""
+    omit_fields(x, fields::Symbol...)
+    omit_fields(x, fields::NTuple{<:Any, Symbol})
+    omit_fields(fields::Symbol...)
+    omit_fields(fields::NTuple{<:Any, Symbol})
+
+Return an object excluding `fields` from the fields of `x`, as per `getfield`. Curried
+versions exist, which return a function for selecting the given fields.
+
+$TUPLE_DIFF
+"""
+omit_fields(fields::NTuple{<:Any, Symbol}) = OmitFields(fields)
+struct OmitFields{T}
+    fields::T
+end
+hoist_type(::OmitFields) = true
+function (p::OmitFields)(x::T) where {T}
+    fields = TupleTools.filter(f ∉ o.fields, fieldnames(T))
+    vals = map(f -> getfield(x, f), fields)
+    types = map(f -> fieldtype(T, f), fields)
+    return NamedTuple{p.fields, types}(vals)
+end
+omit_fields(x, fields::NTuple{<:Any, Symbol}) = omit_fields(fields)(x)
+omit_fields(fields::Symbol...) = omit_fields(fields)
+omit_fields(x, fields::Symbol...) = omit_fields(fields)(x)
 
 """
     StableHashTraits.TransformIdentity(x)
@@ -225,12 +291,17 @@ name of the module that `T` was defined in. Any uses of `Core` are replaced with
 keep the name stable across versions of julia. Anonymous names (e.g. `module_nameof_string(x
 -> x+1)`) throw an error, as no stable name is possible in this case.
 
-If the module or name of a type changes, this value will (obviously) change. The module of
+If the module a type changes, this value will (obviously) change. The module of
 many types is considered an implementation detail and can change between non-breaking
 versions of a package. For this reason uses of `module_nameof_string` must be explicitly
 defined by user of `StableHashTraits`. This function is not used internally for the methods
-of `HashVersion{4}` but see [`HashFunctions`](@ref), [`HashTypeValues`](@ref),
-[`HashNullTypes`](@ref) and [`HashSingletonTypes`](@ref).
+of `HashVersion{4}` but see:
+
+- [`HashFunctions`](@ref)
+- [`HashTypeValues`](@ref)
+- [`HashNullTypes`](@ref)
+- [`HashSingletonTypes`](@ref)
+
 """
 function module_nameof_string(::Type{Union{A, B}}) where {A, B}
     # Main.@infiltrate
@@ -238,13 +309,10 @@ function module_nameof_string(::Type{Union{A, B}}) where {A, B}
     !@isdefined(B) && return module_nameof_string_(A)
     return module_nameof_string(A)*","*module_nameof_string(B)
 end
-function module_nameof_string(::Type{T}) where {T}
-    module_nameof_string_(T)
-end
 hoist_type(::typeof(module_nameof_string)) = true
 function module_nameof_string_(::Type{T}) where {T}
     # special case for function types
-    if hasproperty(T, :instance) && isdefined(T, :instance) && T.instance isa Function
+    if T <: Function && hasproperty(T, :instance) && isdefined(T, :instance)
         return "typeof($(qualified_name_(T.instance)))"
     else
         module_nameof_(T)
@@ -270,20 +338,16 @@ function nameof_string(::Type{Union{A, B}}) where {A, B}
     !@isdefined(B) && return nameof_string_(A)
     return nameof_string(A)*","*nameof_string(B)
 end
-function nameof_string(::Type{T}) where {T}
-    nameof_string_(T)
-end
 function nameof_string_(::Type{T}) where {T}
     # special case for function types
-    if hasproperty(T, :instance) && isdefined(T, :instance)
-        return "typeof($(name_(T.instance)))"
+    if T <: Function && hasproperty(T, :instance) && isdefined(T, :instance)
+        x = validate_name(cleanup_name(string(nameof(T.instance))))
+        return "typeof($x)"
     else
-        name_(T)
+        return validate_name(cleanup_name(string(nameof(T))))
     end
 end
-function name_(::Type{T}) where {T}
-    return validate_name(cleanup_name(string(nameof(T))))
-end
+# TODO: rewrite to avoid redundancy above
 
 
 """

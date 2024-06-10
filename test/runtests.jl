@@ -383,6 +383,11 @@ include("setup_tests.jl")
                     ys = Union{Int32,UInt32,Char}[Int32(1), UInt32(1), Int32(1), Char(1),
                                                   UInt32(1), Char(1)]
                     @test test_hash(xs) != test_hash(ys)
+
+                    # transforming from type-unstable to type-stable doesn't
+                    # botch the hash
+                    @test test_hash(UnstableStruct(nothing)) !=
+                          test_hash(UnstableStruct(missing))
                 end
             end
 

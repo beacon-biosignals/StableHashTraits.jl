@@ -5,6 +5,8 @@ stable_hash
 HashVersion
 StableHashTraits.transformer
 StableHashTraits.Transformer
+pickfields
+omitfields
 StableHashTraits.TransformIdentity
 StableHashTraits.hoist_type
 StableHashTraits.transform_type

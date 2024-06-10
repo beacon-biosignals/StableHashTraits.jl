@@ -23,15 +23,17 @@ struct MyType
    metadata::Dict{Symbol, Any}
 end
 # ignore `metadata`, `data` will be hashed using fallbacks for `AbstractArray` type
-StableHashTraits.transformer(::Type{<:MyType}) = Transformer(x -> (; x.data);
-                                                             hoist_type=true)
+StableHashTraits.transformer(::Type{<:MyType}) = Transformer(pick_fields(:data))
+# NOTE: `pick_fields` is a helper function implemented by `StableHashTraits`
+# it creates a named tuple with the given object fields; in the above code it is used
+# in its curried form e.g. `pick_fields(:data)` is the same as `x -> pick_fields(x, :data)`
 a = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 b = MyType(read("myfile.txt"), Dict{Symbol, Any}(:read => Dates.now()))
 stable_hash(a; version=4) == stable_hash(b; version=4) # true
 ```
 <!--END_EXAMPLE-->
 
-Useres can define a method of `transformer` to customize how an object is hashed. It should return a function wrapped in `Transformer`. During hashing, this function is called and its result is the value that is actually hashed. (The `hoist_type` keyword shown above is an optional flag that can be used to further optimize performance of your transformer in some cases; you can do this any time the function is type stable, but some type-unstable functions are also possible. See the documentation for details).
+Useres can define a method of `transformer` to customize how an object is hashed. It should return a function wrapped in `Transformer`. During hashing, this function is called and its result is the value that is actually hashed.
 
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
