@@ -47,16 +47,17 @@ function StableHashTraits.transformer(::Type{<:TestType2})
 end
 StableHashTraits.hash_method(::TestType3) = StructHash(:ByName)
 
+# make TestType3 look exactly like TestType
 StableHashTraits.transform_type(::Type{<:TestType3}) = "TestType"
 function StableHashTraits.transformer(::Type{<:TestType3})
-    return StableHashTraits.Transformer(x -> (x.a, x.b); hoist_type=false)
+    return StableHashTraits.Transformer(pick_fields(:a, :b))
 end
 function StableHashTraits.hash_method(::TestType4, context::HashVersion{V}) where {V}
-    V > 2 && return StableHashTraits.NotImplemented()
+    V > 3 && return StableHashTraits.NotImplemented()
     return StructHash(propertynames => getproperty)
 end
 function StableHashTraits.hash_method(::TestType4, context)
-    StableHashTraits.root_version(context) > 2 && return StableHashTraits.NotImplemented()
+    StableHashTraits.root_version(context) > 3 && return StableHashTraits.NotImplemented()
     return StructHash(propertynames => getproperty)
 end
 StableHashTraits.hash_method(::TypeType) = StructHash()
@@ -116,7 +117,7 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = IterateHash()
 struct ExtraTypeParams{P,T}
     value::T
 end
-function StableHashTraits.transform_type(::Type{T}) where {P,U, T<:ExtraTypeParams{P,U}}
+function StableHashTraits.transform_type(::Type{T}) where {P,U,T<:ExtraTypeParams{P,U}}
     return "ExtraTypeParams", P, U
 end
 

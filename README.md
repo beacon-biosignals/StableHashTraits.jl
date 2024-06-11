@@ -33,12 +33,12 @@ stable_hash(a; version=4) == stable_hash(b; version=4) # true
 ```
 <!--END_EXAMPLE-->
 
-Useres can define a method of `transformer` to customize how an object is hashed. It should return a function wrapped in `Transformer`. During hashing, this function is called and its result is the value that is actually hashed.
+Users can define a method of `transformer` to customize how an object is hashed. It should dispatch on the type to be transformed, and return a function wrapped in `Transformer`. During hashing, this function is called and its result is the value that is actually hashed.
 
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
 > [!WARNING]
-> Hash versions 4 constitutes a substantial redesign of StableHashTraits so as to more conservatively avoid realiance on the internals of julia and packages. Hash versions 1-3 are deprecated and will be removed in a soon-to-be released StableHashTraits 2.0. Hash version 4 will remain unchanged in this 2.0 release. Hash version 1 is the default version if you don't specify a version. You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
+> Hash versions 4 constitutes a substantial redesign of StableHashTraits so as to more conservatively avoid realiance on the internals of Base julia and packages. Hash versions 1-3 are deprecated and will be removed in a soon-to-be released StableHashTraits 2.0. Hash version 4 will remain unchanged in this 2.0 release. Hash version 1 is the default version if you don't specify a version. You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2-3 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
 
 <!--The START_ and STOP_ comments are used to extract content that is also repeated in the documentation-->
 <!--START_OVERVIEW-->
@@ -48,22 +48,22 @@ StableHashTraits is designed to be used in cases where there is an object you wi
 
 ## What gets hashed? (hash version 4)
 
-This covers the behavior when using the latest hash version (4). You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
+This covers the behavior when using the latest hash version (4). You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2-3 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
 
 When you call `stable_hash(x; version=4)`, StableHashTraits hashes both the value `x` and its type `T`, normally doing so according to `StructType(T)`. (ala
 [SructTypes](https://github.com/JuliaData/StructTypes.jl)).
 
 You can customize how the value is hashed using [`StableHashTraits.transformer`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer),
-and how the type is hashed using [`StableHashTraits.transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type).
-If you need to customize either of these functions for a type that you don't own, you can use a [@context](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.@context)
+and how its type is hashed using [`StableHashTraits.transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type).
+If you need to customize either of these functions for a type that you don't own, you can use a [@context](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.@context) to avoid type piracy.
 
 ### `StructType.DataType`
 
 To hash the value, each field value of a data type is hashed.
 
-If `StructType(T) <: StructTypes.UnorderedStruct`, the values are first sorted by the lexographic order of the fieldnames.
+If `StructType(T) <: StructTypes.UnorderedStruct`, the values are first sorted by the lexographic order of the field names.
 
-The type of a data type is hashed as `string(nameof(T))`, the `fieldnames(T)`, (sorting them if for `UnorderedStruct`), and hash the type of each element of `fieldtypes(T)` according to their `StructType`.
+The type of a data type is hashed using `string(nameof(T))`, the `fieldnames(T)`, (sorting them for `UnorderedStruct`), along with a hash of the type of each element of `fieldtypes(T)` according to their `StructType`.
 
 No type parameters are hashed by default. To hash these you need to specialize on [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type) for your struct. Note that because `fieldtypes(T)` is hashed, you don't need to do this unless your type parameters are not used in the specification of your field types.
 
@@ -73,29 +73,29 @@ To hash the value, each element of an array type is hashed using `iterate`. If t
 
 If [`StableHashTraits.is_ordered`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.is_ordered) returns `false` the elements are first `sort`ed according to [`StableHashTraits.hash_sort_by`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.hash_sort_by).
 
-To hash the type, the string `"StructTypes.ArrayTYpe"` is hashed (ergo, the kind of array won't matter), and the type of the `elype` is hashed, according to its `StructType`. If the type `<: AbstractArray`, the `ndims(T)` is hashed if it is available.
+To hash the type, the string `"StructTypes.ArrayTYpe"` is hashed (meaning that the kind of array won't matter to the hash value), and the type of the `elype` is hashed, according to its `StructType`. If the type `<: AbstractArray`, the `ndims(T)` is hashed.
 
 ### `StructTypes.DictType`
 
 To hash the value, each key-value pair of a dict type is hashed, as returned by `StructType.keyvaluepairs(x)`.
 
-If [`StableHashTraits.is_ordered`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.is_ordered) returns `false` the pairs are first `sort`ed according their keys using [`StableHashTraits.hash_sort_by`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.hash_sort_by).
+If [`StableHashTraits.is_ordered`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.is_ordered) returns `false` (which is the default return value) the pairs are first `sort`ed according their keys using [`StableHashTraits.hash_sort_by`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.hash_sort_by).
 
-To hash the type `"StructTypes.DictType"` is hashed (ergo, the kind of dictionary won't matter), and the type of the `keytype` and `valtype` is hashed, according to its `StructType`.
+To hash the type, the string `"StructTypes.DictType"` is hashed (meaning that the kind of dictionary won't matter), and the type of the `keytype` and `valtype` is hashed, according to its `StructType`.
 
 ### `AbstractRange`
 
-`AbbstractRange` constitutes an exception to the rule that we use `StructType`: for efficient hashing, ranges are treated as another first-class container object, separate from array types.
+`AbstractRange` constitutes an exception to the rule that we use `StructType`: for efficient hashing, ranges are treated as another first-class container object, separate from array types.
 
 The value is hashed as `(first(x), step(x), last(x))`.
 
-The type is hashed as `"Base.AbstractRange"` along with the type of the `eltype`, according to its `StructType`. Ergo, the type of range doesn't matter (just that it is a range).
+The type is hashed as `"Base.AbstractRange"` along with the type of the `eltype`, according to its `StructType`. Thus, the type of range doesn't matter (just that it is a range).
 
 ### `StructTypes{Number/String/Bool}Type`
 
 To hash the value, the result of `Base.write`ing the object is hashed.
 
-To hash the type, the value of `module_nameof_string(StructType))` is used. [`module_nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.parentmodule_name) can be used to provide a relatively stable name for an object composed of `string(parentmodule(T))` and `string(nameof(T))`, along with some additional regularizations and validations.
+To hash the type, the value of `module_nameof_string(StructType))` is used. [`module_nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.parentmodule_name) can be used to provide a name for an object composed of `string(parentmodule(T))` and `string(nameof(T))`, along with some additional regularizations and validations. Note that many packages consider the module of a type to be an implementation detail, and that this can change in a non-breaking release of a package.
 
 ### `StructType.CustomStruct`
 

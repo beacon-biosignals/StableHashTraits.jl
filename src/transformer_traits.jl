@@ -162,14 +162,6 @@ function transform_type(::Type{T}) where {T<:Function}
     return throw(MethodError(transform_type, T))
 end
 
-function function_type_name(::Type{T}) where {T}
-    if hasproperty(T, :instance) && isdefined(T, :instance)
-        return "typeof($(qualified_name_(T.instance)))"
-    else
-        return qualified_name_(T)
-    end
-end
-
 #####
 ##### DataType
 #####

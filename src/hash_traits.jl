@@ -519,7 +519,7 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
     # arguments.
     default_method = hash_method(x, parent_context(c)) # we call `parent_context` to exercise all fallbacks
     is_implemented(default_method) && return default_method
-    root_version(c) > 2 && return NotImplemented()
+    root_version(c) > 3 && return NotImplemented()
     Base.isprimitivetype(T) && return WriteHash()
     # merely reordering a struct's fields should be considered an implementation detail, and
     # should not change the hash
@@ -527,10 +527,12 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
 end
 TypeHash(::HashVersion{1}) = FnHash(qualified_type_)
 TypeHash(::HashVersion{2}) = FnHash(stable_type_id, WriteHash())
+TypeHash(::HashVersion{3}) = FnHash(stable_type_id, WriteHash())
 TypeHash(::HashVersion) = FnHash(stable_type_id_fixed, WriteHash())
 TypeNameHash(::HashVersion{1}) = FnHash(qualified_name)
 # we can use a more conservative id here, we used a shorter one before to avoid hashing long strings
 TypeNameHash(::HashVersion{2}) = FnHash(stable_type_id, WriteHash())
+TypeNameHash(::HashVersion{3}) = FnHash(stable_type_id, WriteHash())
 TypeNameHash(::HashVersion) = FnHash(stable_type_id_fixed, WriteHash())
 
 hash_method(::NamedTuple, c::HashVersion) = (TypeNameHash(c), StructHash())
@@ -589,6 +591,7 @@ hash_method(::AbstractArray, c::HashVersion{4}) = NotImplemented()
 hash_method(::AbstractString, c::HashVersion{4}) = NotImplemented()
 hash_method(::AbstractDict, c::HashVersion{4}) = NotImplemented()
 hash_method(::Symbol, c::HashVersion{4}) = NotImplemented()
+hash_method(::Pair, c::HashVersion{4}) = NotImplemented()
 hash_method(::Tuple, ::HashVersion{4}) = NotImplemented()
 hash_method(::Type, ::HashVersion{4}) = NotImplemented()
 hash_method(::Function, ::HashVersion{4}) = NotImplemented()

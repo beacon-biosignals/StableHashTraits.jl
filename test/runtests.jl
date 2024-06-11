@@ -26,7 +26,7 @@ include("setup_tests.jl")
         @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
     end
 
-    for V in (1, 2, 3, 4, 3), hashfn in (sha256, sha1, crc32c)
+    for V in (1, 2, 3, 4), hashfn in (sha256, sha1, crc32c)
         hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
@@ -90,7 +90,7 @@ include("setup_tests.jl")
                                                       d=(d1=1, d2=2)))))
             end
             # verifies that transform can be called recursively
-            if V <= 2
+            if V <= 3
                 @testset "FnHash" begin
                     @test test_hash(GoodTransform(2)) == test_hash(GoodTransform("-0.2"))
                     @test test_hash(GoodTransform(3)) != test_hash(GoodTransform("-0.2"))
@@ -105,7 +105,7 @@ include("setup_tests.jl")
                 @test test_hash(Dict(:a => 1, :b => 2)) == test_hash(Dict(:b => 2, :a => 1))
                 @test ((; kwargs...) -> test_hash(kwargs))(; a=1, b=2) ==
                       ((; kwargs...) -> test_hash(kwargs))(; b=2, a=1)
-                if V <= 2
+                if V <= 3
                     @test test_hash((; a=1, b=2)) != test_hash((; b=2, a=1))
                 else
                     @test test_hash((; a=1, b=2)) == test_hash((; b=2, a=1))
@@ -142,7 +142,7 @@ include("setup_tests.jl")
 
             # test out HashAndContext
             @testset "Contexts" begin
-                if V <= 2
+                if V <= 3
                     @test test_hash(CustomHashObject(1:5, 1:10)) !=
                           test_hash(BasicHashObject(1:5, 1:10))
                 end
@@ -152,7 +152,7 @@ include("setup_tests.jl")
 
             @testset "Sequences" begin
                 @test test_hash([1 2; 3 4]) != test_hash(vec([1 2; 3 4]))
-                if V <= 2
+                if V <= 3
                     @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4]')
                 else
                     @test test_hash([1 2; 3 4]) == test_hash([1 3; 2 4]')
@@ -165,7 +165,7 @@ include("setup_tests.jl")
                 @test test_hash([1 2; 3 4], ViewsEq(ctx)) !=
                       test_hash([1 3; 2 4], ViewsEq(ctx))
                 @test test_hash(reshape(1:10, 2, 5)) != test_hash(reshape(1:10, 5, 2))
-                if V <= 2
+                if V <= 3
                     @test test_hash(view(collect(1:5), 1:2)) != test_hash([1, 2])
                 else
                     @test test_hash(view(collect(1:5), 1:2)) == test_hash([1, 2])
@@ -196,7 +196,7 @@ include("setup_tests.jl")
                 @test test_hash(["ab"]) != test_hash(["a", "b"])
                 @test test_hash(:foo) != test_hash("foo")
                 @test test_hash(:foo) != test_hash(:bar)
-                if V <= 2
+                if V <= 3
                     @test test_hash(view("bob", 1:2)) != test_hash("bo")
                 else
                     @test test_hash(view("bob", 1:2)) == test_hash("bo")
@@ -213,7 +213,7 @@ include("setup_tests.jl")
                 @test test_hash(missing) != test_hash(nothing)
                 if V == 4
                     @test test_hash(Singleton1(), HashSingletonTypes(ctx)) !=
-                        test_hash(Singleton2(), HashSingletonTypes(ctx))
+                          test_hash(Singleton2(), HashSingletonTypes(ctx))
                 else
                     @test test_hash(Singleton1()) != test_hash(Singleton2())
                 end
@@ -263,7 +263,7 @@ include("setup_tests.jl")
                 @test test_hash(TestType4(1, 2)) != test_hash(TestType3(1, 2))
                 @test test_hash(TestType(1, 2)) != test_hash(TestType4(2, 1))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
-                if V <= 2
+                if V <= 3
                     @test_throws ArgumentError test_hash(BadHashMethod())
                 else
                     @test_throws TypeError test_hash(BadHashMethod())
@@ -397,7 +397,7 @@ include("setup_tests.jl")
                     # but if we use NamedTuple selection with `hoist_type=true`
                     # we do get a bug
                     @test test_hash(UnstableStruct3(nothing, 1)) ==
-                        test_hash(UnstableStruct3(missing, 2))
+                          test_hash(UnstableStruct3(missing, 2))
                 end
             end
 

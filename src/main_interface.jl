@@ -160,14 +160,14 @@ versions exist, which return a function for selecting the given fields.
 $TUPLE_DIFF
 """
 pick_fields(fields::NTuple{<:Any,Symbol}) = PickFields(fields)
-struct PickFields{T}
+struct PickFields{T} <: Function
     fields::T
 end
 hoist_type(::PickFields) = true
 function (p::PickFields)(x::T) where {T}
     vals = map(f -> getfield(x, f), p.fields)
     types = map(f -> fieldtype(T, f), p.fields)
-    return NamedTuple{p.fields,types}(vals)
+    return NamedTuple{p.fields,Tuple{types...}}(vals)
 end
 pick_fields(x, fields::NTuple{<:Any,Symbol}) = pick_fields(fields)(x)
 pick_fields(fields::Symbol...) = pick_fields(fields)
@@ -185,15 +185,15 @@ versions exist, which return a function for selecting the given fields.
 $TUPLE_DIFF
 """
 omit_fields(fields::NTuple{<:Any,Symbol}) = OmitFields(fields)
-struct OmitFields{T}
+struct OmitFields{T} <: Function
     fields::T
 end
 hoist_type(::OmitFields) = true
-function (p::OmitFields)(x::T) where {T}
-    fields = TupleTools.filter(f ∉ o.fields, fieldnames(T))
+function (o::OmitFields)(x::T) where {T}
+    fields = TupleTools.filter(f -> f ∉ o.fields, fieldnames(T))
     vals = map(f -> getfield(x, f), fields)
     types = map(f -> fieldtype(T, f), fields)
-    return NamedTuple{p.fields,types}(vals)
+    return NamedTuple{o.fields,Tuple{types...}}(vals)
 end
 omit_fields(x, fields::NTuple{<:Any,Symbol}) = omit_fields(fields)(x)
 omit_fields(fields::Symbol...) = omit_fields(fields)
@@ -292,11 +292,11 @@ keep the name stable across versions of julia. Anonymous names
 (e.g. `module_nameof_string(x -> x+1)`) throw an error, as no stable name is possible in
 this case.
 
-!!! danger "Unstable"
-    The module of many types is often considered an implementation detail and can change between
+!!! danger "A type's module often changes"
+    The module of many types areconsidered an implementation detail and can change between
     non-breaking versions of a package. For this reason uses of `module_nameof_string` must be
     explicitly specified by user of `StableHashTraits`. This function is not used internally for
-    the default methods of `HashVersion{4}`.
+    `HashVersion{4}` for types that are not defined in `StableHashTraits`.
 
 ## See Also
 
@@ -306,23 +306,30 @@ this case.
 - [`HashSingletonTypes`](@ref)
 
 """
-function module_nameof_string(::Type{Union{A,B}}) where {A,B}
-    # Main.@infiltrate
-    !@isdefined(A) && return ""
-    !@isdefined(B) && return module_nameof_string_(A)
-    return module_nameof_string(A) * "," * module_nameof_string(B)
+@inline module_nameof_string(::T) where {T} = module_nameof_string(T)
+@inline module_nameof_string(m::Module) = module_nameof_(m)
+@inline module_nameof_string(::Type{T}) where {T} = handle_unions_(T, module_nameof_)
+@inline function module_nameof_(::Type{T}) where {T}
+    return validate_name(cleanup_name(string(parentmodule(T)) * "." * string(nameof(T))))
 end
+@inline function module_nameof_(T)
+    return validate_name(cleanup_name(string(parentmodule(T)) * "." * string(nameof(T))))
+end
+function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
+    !@isdefined(A) && return ""
+    !@isdefined(B) && return handle_function_types_(A, namer)
+    return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
+end
+# not all types are concrete, so they must be passed through a generic "handle_unions_"
+handle_unions_(T, namer) = handle_function_types_(T, namer)
 hoist_type(::typeof(module_nameof_string)) = true
-function module_nameof_string_(::Type{T}) where {T}
+@inline function handle_function_types_(::Type{T}, namer) where {T}
     # special case for function types
     if T <: Function && hasproperty(T, :instance) && isdefined(T, :instance)
-        return "typeof($(qualified_name_(T.instance)))"
+        return "typeof($(namer(T.instance)))"
     else
-        module_nameof_(T)
+        namer(T)
     end
-end
-function module_nameof_(::Type{T}) where {T}
-    return validate_name(cleanup_name(string(parentmodule(T)) * "." * string(nameof(T))))
 end
 
 """
@@ -335,19 +342,14 @@ Get a stable name of `T`. This is a helpful utility for writing your own methods
 from `nameof`. Anonymous names (e.g. `module_nameof_string(x -> x+1)`) throw an error, as
 no stable name is possible in this case.
 """
-function nameof_string(::Type{Union{A,B}}) where {A,B}
-    !@isdefined(A) && return ""
-    !@isdefined(B) && return nameof_string_(A)
-    return nameof_string(A) * "," * nameof_string(B)
+@inline nameof_string(m::Module) = nameof_(m)
+@inline nameof_string(::T) where {T} = nameof_(T)
+@inline nameof_string(::Type{T}) where {T} = handle_unions_(T, nameof_)
+@inline function nameof_(::Type{T}) where {T}
+    validate_name(cleanup_name(string(nameof(T))))
 end
-function nameof_string_(::Type{T}) where {T}
-    # special case for function types
-    if T <: Function && hasproperty(T, :instance) && isdefined(T, :instance)
-        x = validate_name(cleanup_name(string(nameof(T.instance))))
-        return "typeof($x)"
-    else
-        return validate_name(cleanup_name(string(nameof(T))))
-    end
+@inline function nameof_(T)
+    validate_name(cleanup_name(string(nameof(T))))
 end
 # TODO: rewrite to avoid redundancy above
 
