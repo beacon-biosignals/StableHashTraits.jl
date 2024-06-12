@@ -49,14 +49,15 @@ include("setup_tests.jl")
                                 bytes2hex_(test_hash(sin, fc)))
                 @test_reference("references/ref06_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(TestType2(1, 2))))
+                tc = V == 4 ? HashTypeValues(ctx) : ctx
                 @test_reference("references/ref07_$(V)_$(nameof(hashfn)).txt",
-                                bytes2hex_(test_hash(TypeType(Array))))
+                                bytes2hex_(test_hash(TypeType(Array), tc)))
                 @test_reference("references/ref08_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(TestType5("bobo"))))
                 @test_reference("references/ref09_$(V)_$(nameof(hashfn)).txt",
-                                bytes2hex_(test_hash(Nothing)))
+                                bytes2hex_(test_hash(Nothing, tc)))
                 @test_reference("references/ref10_$(V)_$(nameof(hashfn)).txt",
-                                bytes2hex_(test_hash(Missing)))
+                                bytes2hex_(test_hash(Missing, tc)))
                 @test_reference("references/ref11_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(v"0.1.0")))
                 @test_reference("references/ref12_$(V)_$(nameof(hashfn)).txt",
@@ -76,7 +77,7 @@ include("setup_tests.jl")
                 @test_reference("references/ref19_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(ExtraTypeParams{:A,Int}(2))))
                 @test_reference("references/ref20_$(V)_$(nameof(hashfn)).txt",
-                                bytes2hex_(test_hash(==("test"))))
+                                bytes2hex_(test_hash(==("test"), fc)))
                 @test_reference("references/ref21_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash((1, (a=1, b=(x=1, y=2), c=(1, 2))))))
                 @test_reference("references/ref22_$(V)_$(nameof(hashfn)).txt",

@@ -107,14 +107,14 @@ There is no value hashed for `missing` or `nothing`; the type is hashed as the s
 
 ### `StructType.{Null/Singleton}Type`
 
-These types error by default. You can opt in to behavior similar to `missing` and `nothing` by defining an appropriate [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.type_identifier).
+These types error by default. You can opt in to behavior similar to `missing` and `nothing` by defining an appropriate [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.type_identifier) or by using [HashNullTypes](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.HashNullTypes) and/or [HashSingletonTypes](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.HashSingletonTypes).
 
 If `transform_type` for a singleton is defined, it will no longer error as the value is already defined to be empty.
 
 ### `Function`
 
 Attempting to hash a function errors by default. You can opt in to hashing a function
-by defining [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.type_identifier). If `transform_type` is defined, functions will hash as if they were `UnorderedStructs`: functions can have fields if they are curried (e.g. `==(2)`), and so, for this reason, the fields are included in the hash by default.
+by defining [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.type_identifier), or by using [HashFunctions](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.HashFunctions). If `transform_type` is defined, functions will hash as if they were `UnorderedStructs`: functions can have fields if they are curried (e.g. `==(2)`), and so, for this reason, the fields are included in the hash by default.
 
 If a function value `fn` can be hashed in this way, so can types of the form `typeof(fn)`.
 
@@ -122,7 +122,7 @@ If a function value `fn` can be hashed in this way, so can types of the form `ty
 
 When a type is provided as a value (e.g. `stable_hash(Int; version=4)`) hashing it will error by default.
 
-You can opt in to hashing a given type as a value by defining [`transform_type_value`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type_value) for your type.
+You can opt in to hashing a given type as a value by defining [`transform_type_value`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type_value) for your type, or by using [HashTypeValues](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.HashTypeValues)
 
 ## Examples
 

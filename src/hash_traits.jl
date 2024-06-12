@@ -527,13 +527,11 @@ function hash_method(x::T, c::HashVersion{V}) where {T,V}
 end
 TypeHash(::HashVersion{1}) = FnHash(qualified_type_)
 TypeHash(::HashVersion{2}) = FnHash(stable_type_id, WriteHash())
-TypeHash(::HashVersion{3}) = FnHash(stable_type_id, WriteHash())
-TypeHash(::HashVersion) = FnHash(stable_type_id_fixed, WriteHash())
+TypeHash(::HashVersion{3}) = FnHash(stable_type_id_fixed, WriteHash())
 TypeNameHash(::HashVersion{1}) = FnHash(qualified_name)
 # we can use a more conservative id here, we used a shorter one before to avoid hashing long strings
 TypeNameHash(::HashVersion{2}) = FnHash(stable_type_id, WriteHash())
-TypeNameHash(::HashVersion{3}) = FnHash(stable_type_id, WriteHash())
-TypeNameHash(::HashVersion) = FnHash(stable_type_id_fixed, WriteHash())
+TypeNameHash(::HashVersion{3}) = FnHash(stable_type_id_fixed, WriteHash())
 
 hash_method(::NamedTuple, c::HashVersion) = (TypeNameHash(c), StructHash())
 function hash_method(::AbstractRange, c::HashVersion)
