@@ -58,6 +58,7 @@ and how its type is hashed using [`StableHashTraits.transform_type`](https://bea
 If you need to customize either of these functions for a type that you don't own, you can use a [@context](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.@context) to avoid type piracy.
 
 ### `StructType.DataType`
+
 `StructType.DataType` denotes a type that is some kind of "record"; i.e. its content is defined by the fields (`getfield(f) for f in fieldnames(T)`) of the type. Since it is the default, it is used to hash most types.
 
 To hash the value, each field value (`getfield(f) for f in fieldnames(T)`) is hashed.
@@ -98,7 +99,7 @@ The type is hashed as `"Base.AbstractRange"` along with the type of the `eltype`
 
 To hash the value, the result of `Base.write`ing the object is hashed.
 
-To hash the type, the value of `string("StructType.", nameof_string(StructType(T))))` is used (c.f. [`StableHashTraits.nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.nameof_string) for details). Note this means the type of the value itself is not being hashed, rather a string related to its struct type.
+To hash the type, the value of `string("StructType.", nameof_string(StructType(T))))` is used (c.f. [`StableHashTraits.nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.nameof_string) for details). Note that this means the type of the value itself is not being hashed, rather a string related to its struct type.
 
 ### `StructType.CustomStruct`
 
@@ -115,11 +116,14 @@ Null and Singleton types are hashed solely according to their type (no value is 
 Their types is hashed by [`StableHashTraits.nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.nameof_string)
 This means the module of the type does not matter: the module of a type is often considered an implementation detail, so it is left out to avoid unexpected hash changes from non-breaking releases that change the module of a type.
 
+> [!NOTE]
+> If you wish to disambiguate functions or types that have the same name but that come from different modules you can overload [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type) for those functions. If you want to include the module name for a broad set of types, rather than explicitly specifying a module name for each type, you may want to consider calling [`parentmodule_nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.parentmodule_nameof_string) in the body of your `transform_type` method. This can avoid a number of footguns when including the module names: for example, `parentmodule_nameof_string` renames `Core` to `Base` to elide Base julia changes to the location of a functions between these two modules and it renames pluto workspace modules to prevent structs from having a different hash each time the notebook is run.
+
 ### `Function`
 
-Function values are hashed according to their their fields (`getfield(f) for f in fieldnames(f)`) as per `StructType.UnorderedStruct`; functions can have fields when when they are curried (e.g. `==(2)`), and so, for this reason, the fields are included in the hash by default.
+Function values are hashed according to their their fields (`getfield(f) for f in fieldnames(f)`) as per `StructType.UnorderedStruct`; functions can have fields when they are curried (e.g. `==(2)`), and so, for this reason, the fields are included in the hash by default.
 
-The type of the function is hashed according to its [`StableHashTraits.nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.nameof_string), therefore excluding its module. The exact module of a function is often considered an implementation detail, so it is left out to avoid unexpected hash changes from non-breaking releases that change the module of a function. If you wish to disambiguate functions that have the same name and that come from different modules you can overload [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type) for those functions. You may consider using [`parentmodule_nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.parentmodule_nameof_string) to avoid some foot guns if you use the module name of a function (e.g. the function causes `Core` to be renamed to `Base` to elide Base julia changes to the location of a function).
+The type of the function is hashed according to its [`StableHashTraits.nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.nameof_string), therefore excluding its module. The exact module of a function is often considered an implementation detail, so it is left out to avoid unexpected hash changes from non-breaking releases that change the module of a function.
 
 ### `Type`
 
