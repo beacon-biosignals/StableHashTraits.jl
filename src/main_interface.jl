@@ -457,7 +457,7 @@ transform_type(::Type{T}, ::HashVersion{4}) where {T} = transform_type(T)
 transform_type(::Type{Union{}}) = "Union{}"
 transform_type(::Type{T}) where {T} = transform_type_by_trait(T, StructType(T))
 function transform_type_by_trait(::Type, ::S) where {S<:StructTypes.StructType}
-    return "StructTypes."*nameof_string(S)
+    return "StructTypes." * nameof_string(S)
 end
 
 """
@@ -503,27 +503,7 @@ function transform_type_value(::Type{T}, c::HashVersion{4}) where {T}
     return transform_type_value(T)
 end
 transform_type_value(::Type{Union{}}) = "Union{}"
-function transform_type_value(::Type{T}) where {T}
-    if !contains(string(nameof(T)), "#")
-        @error fallback_error("transform_type_value", T)
-    end
-    return throw(MethodError(transform_type_value, T))
-end
-
-function fallback_error(name, T)
-    return """
-    There is not a specific method of `$name` for type `$T
-
-    If you wish to avoid this error, you can implement a method:
-
-        StableHashTraits.$(name)(::Type{$(nameof(T))}) = $(module_nameof_string(T))
-
-    You are responsible for ensuring this return value is stable following any non-breaking
-    updates to the type.
-
-    If you don't own the type, consider using `StableHashTraits.@context`.
-    """
-end
+transform_type_value(::Type{T}) where {T} = nameof_string(T)
 
 function transform_type_value(::Type{T}, c::HashVersion{4}) where {T<:Function}
     return transform_type(T)

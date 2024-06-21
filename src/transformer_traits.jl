@@ -153,14 +153,7 @@ end
 # both the name of `==` and `2`.
 hash_trait(::Function) = StructTypes.UnorderedStruct()
 
-function transform_type(::Type{T}) where {T<:Function}
-    if !contains(string(nameof(T)), "#")
-        @error fallback_error("transform_type", T)
-    else
-        throw(ArgumentError("Anonymous types cannot be hashed"))
-    end
-    return throw(MethodError(transform_type, T))
-end
+transform_type(::Type{T}) where {T<:Function} = nameof_string(T)
 
 #####
 ##### DataType
@@ -241,6 +234,9 @@ end
 # include ndims in type hash when we can
 function transform_type(::Type{T}) where {T<:AbstractArray}
     return transform_type_by_trait(T, StructType(T)), ndims_(T)
+end
+function transform_type_value(::Type{T}) where {T<:AbstractArray}
+    return nameof_string(T), ndims_(T)
 end
 ndims_(::Type{<:AbstractArray{<:Any,N}}) where {N} = N
 ndims_(::Type{<:AbstractArray}) = nothing
@@ -410,23 +406,9 @@ end
 # null types are encoded purely by their type hash
 transform_type(::Type{Missing}) = "Base.Missing"
 transform_type(::Type{Nothing}) = "Base.Nothing"
-function transform_type_by_trait(::Type{T}, ::StructTypes.NullType) where {T}
-    if !contains(string(nameof(T)), "#")
-        @error fallback_error("transform_type", T)
-    else
-        throw(ArgumentError("Anonymous types are not supported"))
-    end
-    return throw(MethodError(transform_type, T))
-end
+transform_type_by_trait(::Type{T}, ::StructTypes.NullType) where {T} = nameof_string(T)
 stable_hash_helper(_, hash_state, context, ::StructTypes.NullType) = hash_state
 
 # singleton types are encoded purely by their type hash
-function transform_type_by_trait(::Type{T}, ::StructTypes.SingletonType) where {T}
-    if !contains(string(nameof(T)), "#")
-        @error fallback_error("transform_type", T)
-    else
-        throw(ArgumentError("Anonymous types are not supported"))
-    end
-    return throw(MethodError(transform_type, T))
-end
+transform_type_by_trait(::Type{T}, ::StructTypes.SingletonType) where {T} = nameof_string(T)
 stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType) = hash_state

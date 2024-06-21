@@ -1,100 +1,3 @@
-# TODO: now that we like nameof_string, maybe we should default to hashing without the
-# module qualification and make one context that lets one use module if you want it
-# (but is more unstable)
-
-const WARN_UNSTABLE = """
-!!! warn "Unstable"
-    `module_nameof_string`'s return value can change with non-breaking changes
-    if e.g. the module of a function or type is changed because it's considered
-    an implementation detail of a package.
-"""
-
-macro checked_context(TypeName)
-    quote
-        Base.@__doc__ struct $(esc(TypeName)){T}
-            parent::T
-            function $(esc(TypeName))(parent)
-                root_version(parent) < 4 &&
-                    throw(ArgumentError("`WithTypeNames` does not support HashVersion 1 or 2"))
-                return new{typeof(parent)}(parent)
-            end
-        end
-        StableHashTraits.parent_context(x::$(TypeName)) = x.parent
-    end
-end
-
-#####
-##### HashTypeValues
-#####
-
-"""
-    HashTypeValues
-
-Hash all types as values, by returning the value of `module_nameof_string`
-for [`transform_type_value`](@ref)
-"""
-@checked_context HashTypeValues
-transform_type_value(::Type{T}, ::HashTypeValues) where {T} = module_nameof_string(T)
-function transform_type_value(::Type{T}, ::HashTypeValues) where {T<:AbstractArray}
-    return module_nameof_string(T), ndims_(T)
-end
-
-#####
-##### HashFunctions
-#####
-
-"""
-    HashFunctions
-
-Hash functions by default, by returning the value of [`module_nameof_string`](@ref) for all
-`Function` types in [`transform_type`](@ref).
-
-$WARN_UNSTABLE
-"""
-@checked_context HashFunctions
-transform_type(::Type{T}, ::HashFunctions) where {T<:Function} = module_nameof_string(T)
-
-#####
-##### HashNullTypes
-#####
-
-"""
-    HashNullTypes
-
-Hash function any type `T` where `StructType(T) isa StructTypes.NullType`
-using [`module_nameof_string`](@ref).
-
-$WARN_UNSTABLE
-"""
-@checked_context HashNullTypes
-function transform_type(::Type{T}, c::HashNullTypes) where {T}
-    if StructType(T) <: StructTypes.NullType
-        return module_nameof_string(T)
-    else
-        return transform_type(T, parent(c))
-    end
-end
-
-#####
-##### HashNullTypes
-#####
-
-"""
-    HashSingletonTypes
-
-Hash function any type `T` where `StructType(T) isa StructTypes.SingletonType`
-using [`module_nameof_string`](@ref).
-
-$WARN_UNSTABLE
-"""
-@checked_context HashSingletonTypes
-function transform_type(::Type{T}, c::HashSingletonTypes) where {T}
-    if StructType(T) isa StructTypes.SingletonType
-        return module_nameof_string(T)
-    else
-        return transform_type(T, parent(c))
-    end
-end
 
 #####
 ##### WithTypeNames
@@ -103,14 +6,25 @@ end
 """
     WithTypeNames(parent_context)
 
-In this hash context, [`transform_type`](@ref) returns `module_nameof_string` for all types.
-This makes functions and singleton types hashable, and it means the kind of array or
-dictionary you use impacts the hash.
+In this hash context, [`transform_type`](@ref) returns [`module_nameof_string`](@ref) for
+all types, in contrast to the default behavior (which mostly uses
+`nameof_string(StructType(T))`).
 
-$WARN_UNSTABLE
+!!! warn "Unstable"
+    `module_nameof_string`'s return value can change with non-breaking
+    changes if e.g. the module of a function or type is changed because it's considered an
+    implementation detail of a package.
 
 """
-@checked_context WithTypeNames
+struct WithTypeNames{T}
+    parent::T
+    function WithTypeNames(parent)
+        root_version(parent) < 4 &&
+        throw(ArgumentError("`WithTypeNames` does not support HashVersion 1 or 2"))
+        return new{typeof(parent)}(parent)
+    end
+end
+StableHashTraits.parent_context(x::WithTypeNames) = x.parent
 transform_type(::Type{T}, c::WithTypeNames) where {T} = module_nameof_string(T)
 
 # NOTE: from this point below, only the `transformer` and `type_identifier`-related code is

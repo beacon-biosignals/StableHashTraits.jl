@@ -44,20 +44,18 @@ include("setup_tests.jl")
                                 bytes2hex_(test_hash((a=1, b=2))))
                 @test_reference("references/ref04_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(Set(1:3))))
-                fc = V == 4 ? HashFunctions(ctx) : ctx
                 @test_reference("references/ref05_$(V)_$(nameof(hashfn)).txt",
-                                bytes2hex_(test_hash(sin, fc)))
+                                bytes2hex_(test_hash(sin)))
                 @test_reference("references/ref06_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(TestType2(1, 2))))
-                tc = V == 4 ? HashTypeValues(ctx) : ctx
                 @test_reference("references/ref07_$(V)_$(nameof(hashfn)).txt",
-                                bytes2hex_(test_hash(TypeType(Array), tc)))
+                                bytes2hex_(test_hash(TypeType(Array))))
                 @test_reference("references/ref08_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(TestType5("bobo"))))
                 @test_reference("references/ref09_$(V)_$(nameof(hashfn)).txt",
-                                bytes2hex_(test_hash(Nothing, tc)))
+                                bytes2hex_(test_hash(Nothing)))
                 @test_reference("references/ref10_$(V)_$(nameof(hashfn)).txt",
-                                bytes2hex_(test_hash(Missing, tc)))
+                                bytes2hex_(test_hash(Missing)))
                 @test_reference("references/ref11_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(v"0.1.0")))
                 @test_reference("references/ref12_$(V)_$(nameof(hashfn)).txt",
@@ -77,7 +75,7 @@ include("setup_tests.jl")
                 @test_reference("references/ref19_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(ExtraTypeParams{:A,Int}(2))))
                 @test_reference("references/ref20_$(V)_$(nameof(hashfn)).txt",
-                                bytes2hex_(test_hash(==("test"), fc)))
+                                bytes2hex_(test_hash(==("test"))))
                 @test_reference("references/ref21_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash((1, (a=1, b=(x=1, y=2), c=(1, 2))))))
                 @test_reference("references/ref22_$(V)_$(nameof(hashfn)).txt",
@@ -210,44 +208,35 @@ include("setup_tests.jl")
             end
 
             @testset "Singletons and nulls" begin
-                # TODO: currently failing test I'm working on
                 @test test_hash(missing) != test_hash(nothing)
-                if V == 4
-                    @test test_hash(Singleton1(), HashSingletonTypes(ctx)) !=
-                          test_hash(Singleton2(), HashSingletonTypes(ctx))
-                else
-                    @test test_hash(Singleton1()) != test_hash(Singleton2())
-                end
+                @test test_hash(Singleton1()) != test_hash(Singleton2())
             end
 
             @testset "Functions" begin
-                fc = V == 4 ? HashFunctions(ctx) : ctx
-                @test test_hash(sin, fc) != test_hash(cos, fc)
-                @test test_hash(sin, fc) != test_hash(:sin, fc)
-                @test test_hash(sin, fc) != test_hash("sin", fc)
-                @test test_hash(sin, fc) != test_hash("Base.sin", fc)
-                @test test_hash(==("foo"), fc) == test_hash(==("foo"), fc)
-                @test test_hash(Base.Fix1(-, 1), fc) == test_hash(Base.Fix1(-, 1), fc)
+                @test test_hash(sin) != test_hash(cos)
+                @test test_hash(sin) != test_hash(:sin)
+                @test test_hash(sin) != test_hash("sin")
+                @test test_hash(sin) != test_hash("Base.sin")
+                @test test_hash(==("foo")) == test_hash(==("foo"))
+                @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 1))
                 if V > 1
-                    @test test_hash(Base.Fix1(-, 1), fc) != test_hash(Base.Fix1(-, 2), fc)
-                    @test test_hash(==("foo"), fc) != test_hash(==("bar"), fc)
+                    @test test_hash(Base.Fix1(-, 1)) != test_hash(Base.Fix1(-, 2))
+                    @test test_hash(==("foo")) != test_hash(==("bar"))
                 else
-                    @test test_hash(Base.Fix1(-, 1), fc) == test_hash(Base.Fix1(-, 2), fc)
-                    @test test_hash(==("foo"), fc) == test_hash(==("bar"), fc)
+                    @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 2))
+                    @test test_hash(==("foo")) == test_hash(==("bar"))
                 end
-                @test_throws ArgumentError test_hash(x -> x + 1, fc)
+                @test_throws ArgumentError test_hash(x -> x + 1)
             end
 
             @testset "Types" begin
-                tc = V == 4 ? HashTypeValues(ctx) : ctx
-
-                @test test_hash(Float64, tc) != test_hash("Base.Float64", tc)
-                @test test_hash(Int, tc) != test_hash("Base.Int", tc)
-                @test test_hash(Float64, tc) != test_hash(Int, tc)
+                @test test_hash(Float64) != test_hash("Base.Float64")
+                @test test_hash(Int) != test_hash("Base.Int")
+                @test test_hash(Float64) != test_hash(Int)
                 if V >= 4
-                    @test test_hash(Array{Int,3}, tc) != test_hash(Array{Int,4}, tc)
-                    @test test_hash(Array{<:Any,3}, tc) != test_hash(Array{<:Any,4}, tc)
-                    @test test_hash(Array{Int}, tc) != test_hash(Array{Float64}, tc)
+                    @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
+                    @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
+                    @test test_hash(Array{Int}) != test_hash(Array{Float64})
                 end
             end
 
