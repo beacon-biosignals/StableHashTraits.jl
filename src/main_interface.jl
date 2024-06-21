@@ -95,7 +95,7 @@ pre-transformed types that are themselves concrete.
 
 !!! danger "Use `hoist_type=true` with care"
     It is easy to introduce subtle bugs that occur in rare edge cases when using
-    `hoist_type=true`. Refer to [Optimizing Transformers](@ref) for a detailed discussion
+    `hoist_type=true`. Refer to [Optimizing Custom Transformers](@ref) for a detailed discussion
     and examples of when you can safely set `hoist_type=true`. It is better to use a
     pre-defined function such as [`pick_fields`](@ref) or [`omit_fields`](@ref).
 
@@ -117,7 +117,7 @@ end
     StableHashTraits.hoist_type(fn)
 
 Returns true if it is known that `fn` preservess type structure ala [`Transformer`](@ref).
-See [Optimizing Transformers](@ref) for details. This is false by default for all functions
+See [Optimizing Custom Transformers](@ref) for details. This is false by default for all functions
 but `identity` and [`module_nameof_string`](@ref). You can define a method of this function
 for your own fn's to signal that their results can be safely optimized via hoisting the
 type hash outside of loops.
@@ -310,10 +310,10 @@ this case.
 @inline module_nameof_string(m::Module) = module_nameof_(m)
 @inline module_nameof_string(::Type{T}) where {T} = handle_unions_(T, module_nameof_)
 @inline function module_nameof_(::Type{T}) where {T}
-    return validate_name(cleanup_name(string(parentmodule(T)) * "." * string(nameof(T))))
+    return validate_name(cleanup_name(string(parentmodule(T)) * "." * String(nameof(T))))
 end
 @inline function module_nameof_(T)
-    return validate_name(cleanup_name(string(parentmodule(T)) * "." * string(nameof(T))))
+    return validate_name(cleanup_name(string(parentmodule(T)) * "." * String(nameof(T))))
 end
 function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
     !@isdefined(A) && return ""
@@ -347,10 +347,10 @@ no stable name is possible in this case.
 @inline nameof_string(::Type{T}) where {T} = handle_unions_(T, nameof_)
 hoist_type(::typeof(nameof_string)) = true
 @inline function nameof_(::Type{T}) where {T}
-    validate_name(cleanup_name(string(nameof(T))))
+    validate_name(cleanup_name(String(nameof(T))))
 end
 @inline function nameof_(T)
-    validate_name(cleanup_name(string(nameof(T))))
+    validate_name(cleanup_name(String(nameof(T))))
 end
 # TODO: rewrite to avoid redundancy above
 
@@ -457,7 +457,7 @@ transform_type(::Type{T}, ::HashVersion{4}) where {T} = transform_type(T)
 transform_type(::Type{Union{}}) = "Union{}"
 transform_type(::Type{T}) where {T} = transform_type_by_trait(T, StructType(T))
 function transform_type_by_trait(::Type, ::S) where {S<:StructTypes.StructType}
-    return module_nameof_string(S)
+    return "StructTypes."*nameof_string(S)
 end
 
 """
