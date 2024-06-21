@@ -308,13 +308,31 @@ end
 @inline function module_nameof_(T)
     return validate_name(cleanup_name(string(parentmodule(T)) * "." * String(nameof(T))))
 end
-function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
-    !@isdefined(A) && return ""
-    !@isdefined(B) && return handle_function_types_(A, namer)
-    return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
+@static if VERSION < v"1.9"
+    # in julia v 1.8 and lower dispatching over Unions will not work, we need to
+    # dynamically check the type of `T`
+    function handle_unions_(T, namer)
+        if T isa Union
+            handle_unions_helper_(T, namer)
+        else
+            handle_function_types_(T, namer)
+        end
+    end
+    function handle_unions_helper_(::Union{A,B}, namer) where {A,B}
+        !@isdefined(A) && return ""
+        !@isdefined(B) && return handle_function_types_(A, namer)
+        return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
+    end
+else
+    # in later version of julia, handling unions can be handled via dispatch
+    function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
+        !@isdefined(A) && return ""
+        !@isdefined(B) && return handle_function_types_(A, namer)
+        return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
+    end
+    # not all types are concrete, so they must be passed through a generic "handle_unions_"
+    handle_unions_(T, namer) = handle_function_types_(T, namer)
 end
-# not all types are concrete, so they must be passed through a generic "handle_unions_"
-handle_unions_(T, namer) = handle_function_types_(T, namer)
 hoist_type(::typeof(module_nameof_string)) = true
 @inline function handle_function_types_(::Type{T}, namer) where {T}
     # special case for function types
