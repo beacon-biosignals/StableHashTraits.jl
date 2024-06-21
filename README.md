@@ -38,7 +38,7 @@ Users can define a method of `transformer` to customize how an object is hashed.
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
 > [!WARNING]
-> Hash versions 4 constitutes a substantial redesign of StableHashTraits so as to more conservatively avoid realiance on the internals of Base julia and packages. Hash versions 1-3 are deprecated and will be removed in a soon-to-be released StableHashTraits 2.0. Hash version 4 will remain unchanged in this 2.0 release. Hash version 1 is the default version if you don't specify a version. You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2-3 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
+> Hash versions 4 constitutes a substantial redesign of StableHashTraits so as to avoid realiance on the internals of Base julia and packages. Hash versions 1-3 are deprecated and will be removed in a soon-to-be released StableHashTraits 2.0. Hash version 4 will remain unchanged in this 2.0 release. For backwards compatibility, hash version 1 is currently the default version if you don't specify a version. You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2-3 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
 
 <!--The START_ and STOP_ comments are used to extract content that is also repeated in the documentation-->
 <!--START_OVERVIEW-->
@@ -58,10 +58,11 @@ and how its type is hashed using [`StableHashTraits.transform_type`](https://bea
 If you need to customize either of these functions for a type that you don't own, you can use a [@context](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.@context) to avoid type piracy.
 
 ### `StructType.DataType`
+`StructType.DataType` denotes a type that is some kind of "record"; i.e. its content is defined by the fields (`getfield(f) for f in fieldnames(T)`) of the type. Since it is the default, it is used to hash most types.
 
-To hash the value, each field value of a data type is hashed.
+To hash the value, each field value (`getfield(f) for f in fieldnames(T)`) is hashed.
 
-If `StructType(T) <: StructTypes.UnorderedStruct`, the values are first sorted by the lexographic order of the field names.
+If `StructType(T) <: StructTypes.UnorderedStruct`, the field values are first sorted by the lexographic order of the field names.
 
 The type of a data type is hashed using `string(nameof(T))`, the `fieldnames(T)`, (sorting them for `UnorderedStruct`), along with a hash of the type of each element of `fieldtypes(T)` according to their `StructType`.
 
@@ -69,11 +70,13 @@ No type parameters are hashed by default. To hash these you need to specialize o
 
 ### `StructType.ArrayType`
 
+`ArrayType` is used when hashing a sequence of values.
+
 To hash the value, each element of an array type is hashed using `iterate`. If the object `isa AbstractArray`, the `size(x)` of the object is also hashed.
 
 If [`StableHashTraits.is_ordered`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.is_ordered) returns `false` the elements are first `sort`ed according to [`StableHashTraits.hash_sort_by`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.hash_sort_by).
 
-To hash the type, the string `"StructTypes.ArrayTYpe"` is hashed (meaning that the kind of array won't matter to the hash value), and the type of the `elype` is hashed, according to its `StructType`. If the type `<: AbstractArray`, the `ndims(T)` is hashed.
+To hash the type, the string `"StructTypes.ArrayType"` is hashed (meaning that the kind of array won't matter to the hash value), and the type of the `elype` is hashed, according to its `StructType`. If the type `<: AbstractArray`, the `ndims(T)` is hashed.
 
 ### `StructTypes.DictType`
 
@@ -95,7 +98,7 @@ The type is hashed as `"Base.AbstractRange"` along with the type of the `eltype`
 
 To hash the value, the result of `Base.write`ing the object is hashed.
 
-To hash the type, the value of `module_nameof_string(StructType))` is used. [`module_nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.parentmodule_name) can be used to provide a name for an object composed of `string(parentmodule(T))` and `string(nameof(T))`, along with some additional regularizations and validations. Note that many packages consider the module of a type to be an implementation detail, and that this can change in a non-breaking release of a package.
+To hash the type, the value of `string("StructType.", nameof_string(StructType(T))))` is used (c.f. [`StableHashTraits.nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.nameof_string) for details). Note this means the type of the value itself is not being hashed, rather a string related to its struct type.
 
 ### `StructType.CustomStruct`
 
@@ -103,40 +106,38 @@ For any `StructType.CustomStruct`, the object is first `StructType.lower`ed and 
 
 ### `missing` and `nothing`
 
-There is no value hashed for `missing` or `nothing`; the type is hashed as the string `"Base.Missing"` and `"Base.Nothing"` respectively.
+There is no value hashed for `missing` or `nothing`; the type is hashed as the string `"Base.Missing"` and `"Base.Nothing"` respectively. Note in particular the string `"Base.Missing"` does not have the same hash as `missing`, since the former would have it's struct type hashed.
 
 ### `StructType.{Null/Singleton}Type`
 
-These types error by default. You can opt in to behavior similar to `missing` and `nothing` by defining an appropriate [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.type_identifier) or by using [HashNullTypes](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.HashNullTypes) and/or [HashSingletonTypes](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.HashSingletonTypes).
+Null and Singleton types are hashed solely according to their type (no value is hashed)
 
-If `transform_type` for a singleton is defined, it will no longer error as the value is already defined to be empty.
+Their types is hashed by [`StableHashTraits.nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.nameof_string)
+This means the module of the type does not matter: the module of a type is often considered an implementation detail, so it is left out to avoid unexpected hash changes from non-breaking releases that change the module of a type.
 
 ### `Function`
 
-Attempting to hash a function errors by default. You can opt in to hashing a function
-by defining [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.type_identifier), or by using [HashFunctions](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.HashFunctions). If `transform_type` is defined, functions will hash as if they were `UnorderedStructs`: functions can have fields if they are curried (e.g. `==(2)`), and so, for this reason, the fields are included in the hash by default.
+Function values are hashed according to their their fields (`getfield(f) for f in fieldnames(f)`) as per `StructType.UnorderedStruct`; functions can have fields when when they are curried (e.g. `==(2)`), and so, for this reason, the fields are included in the hash by default.
 
-If a function value `fn` can be hashed in this way, so can types of the form `typeof(fn)`.
+The type of the function is hashed according to its [`StableHashTraits.nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.nameof_string), therefore excluding its module. The exact module of a function is often considered an implementation detail, so it is left out to avoid unexpected hash changes from non-breaking releases that change the module of a function. If you wish to disambiguate functions that have the same name and that come from different modules you can overload [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type) for those functions. You may consider using [`parentmodule_nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.parentmodule_nameof_string) to avoid some foot guns if you use the module name of a function (e.g. the function causes `Core` to be renamed to `Base` to elide Base julia changes to the location of a function).
 
 ### `Type`
 
-When a type is provided as a value (e.g. `stable_hash(Int; version=4)`) hashing it will error by default.
-
-You can opt in to hashing a given type as a value by defining [`transform_type_value`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type_value) for your type, or by using [HashTypeValues](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.HashTypeValues)
+When hashing a type as a value (e.g. `stable_hash(Int; version=4)`) the value of [`StableHashTraits.nameof_string](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.nameof_string) is hashed. The exact module of a type is often considered an implementation detail, so it is left out to avoid unexpected hash changes from non-breaking releases that change the module of a type.
 
 ## Examples
 
 All of the following hash examples follow directly from the definitions above, but may not be so obvious to the reader.
 
-Most of the behaviors described below can be customized/changed by using your own hash [`@context`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.@context), which can be passed as the second argument to [`stable_hash`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_hash).
+Most of the behaviors described below can be customized/changed by using your own hash [`@context`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.@context), which can be passed as the second argument to [`stable_hash`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_hash). StableHashTraits tries to defer to StructTypes for most defaults instead of making more opinionated choices.
 
-The order of NamedTuple pairs does not matter
+The order of NamedTuple pairs does not matter, because `NamedTuple` has a struct type of `UnorderedStruct`.
 
 ```julia
 stable_hash((;a=1,b=2); version=4) == stable_hash((;b=2,a=1); version=4)
 ```
 
-Two structs with the same fields and name hash equivalently
+Two structs with the same fields and name hash equivalently, because the default struct type is `UnorderedStruct`.
 
 ```julia
 module A
@@ -166,12 +167,23 @@ Byte equivalent arrays of all `NumberType` values will hash to the same value.
 
 ```julia
 stable_hash([0.0, 0.0]; version=4) == stable_hash([0, 0]; version=4)
+stable_hash([0.0f0, 0.0f0]; version=4) != stable_hash([0, 0]; version=4) # not byte equivalent
 ```
 
-But if the eltype has a different `StructType`, or if the bytes are different, the collision will not occur.
+Also, even though the bytes are the same, since the size is hashed, we have:
+```julia
+stable_hash([0.0f0, 0.0f0]; version=4) != stable_hash([0]; version=4)
+```
+
+If the eltype has a different `StructType`, no collision will occur.
 
 ```julia
 stable_hash(Any[0.0, 0.0]; version=4) != stable_hash([0, 0]; version=4)
+```
+
+Even if the mathematical values are the same, if the bytes are not the same no collision will occur.
+
+```julia
 stable_hash([1.0, 2.0]; version=4) != stable_hash([1, 2]; version=4)
 ```
 
@@ -180,7 +192,6 @@ Two types with the same name but different type parameters will hash the same un
 
 ```julia
 struct MyType{T} end
-StableHashTraits.transform_type_value(::Type{T}) where {T<:MyType} = module_nameof_string(T)
 stable_hash(MyType{:a}) == stable_hash(MyType{:b}) # true
 ```
 
@@ -232,9 +243,11 @@ This release includes a new hash version 4 that has breaking API changes, docume
 
 ### In 1.2
 
-This release includes a bugfix to `stable_type_id` and the underlying hashes that depend on it (true for most types). This bug caused `stable_type_id` to yield a different value depending on the scope in which `stable_type_id` was first called for a given type. Now that 1.3 is available, 1.2 should not be used, as it addresses the same bug with a better API, rather than the hotfix applied here.
+This release includes a bugfix to `stable_type_id` and the underlying hashes that depend on it (true for most types). This bug caused `stable_type_id` to yield a different value depending on the scope in which `stable_type_id` was first called for a given type.
 
-1.2 provides defines hash version 3, which uses a fixed version of `stable_type_id` that can be used by leveraging hash version 3. E.g. if you call `stable_hash(x, version=3)` or use `HashVersion{3}()` where you would have used `HashVersion{2}()` you will not be susceptible to the bug. If you make use of `stable_type_id` directly and want to avoid this bug, you should use `StableHashTraits.stable_type_id_fixed`.
+Now that 1.3 is available, 1.2 should not be used, as it addresses the same bug with a better API, rather than the hotfix applied here.
+
+1.2 defines hash version 3, which uses a fixed version of `stable_type_id` that can be used by leveraging hash version 3. E.g. if you call `stable_hash(x, version=3)` or use `HashVersion{3}()` where you would have used `HashVersion{2}()` you will not be susceptible to the bug. If you make use of `stable_type_id` directly and want to avoid this bug, you should use `StableHashTraits.stable_type_id_fixed`.
 
 Because existing uses of `StableHashTraits` might depend on the extant, broken behavior, versions 1 and 2 of hashing remain unchanged.
 
