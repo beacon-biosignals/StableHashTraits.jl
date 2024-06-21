@@ -63,7 +63,7 @@ end
     StableHashTraits.parent_context(context)
 
 Return the parent context of the given context object. (See [`hash_method`](@ref) and
-[`@context`](@ref) for details of using context). The default method falls back to returning
+[`StableHashTraits.@context`](@ref) for details of using context). The default method falls back to returning
 `HashVersion{1}`, but this is flagged as a deprecation warning; in the future it is expected
 that all contexts define this method.
 
@@ -245,7 +245,7 @@ Shorthand for declaring a hash context.
 
 Contexts are used to customize the behavior of a hash for a type you don't own, by passing
 the context as the second argument to `stable_hash`, and specializing methods of
-[`transform`](@ref) or [`transform_type`](@ref) on your context (see example below).
+[`transformer`](@ref) or [`StableHashTraits.transform_type`](@ref) on your context (see example below).
 
 The clause `@context MyContext` is re-written to:
 
@@ -286,25 +286,18 @@ end
     module_nameof_string(::T) where {T}
 
 Get a (mostly!) stable name of `T`. This is a helpful utility for writing your own methods
-of [`transform_type`](@ref) and [`transform_type_value`](@ref). The stable name includes the
-name of the module that `T` was defined in. Any uses of `Core` are replaced with `Base` to
-keep the name stable across versions of julia. Anonymous names
-(e.g. `module_nameof_string(x -> x+1)`) throw an error, as no stable name is possible in
-this case.
+of [`StableHashTraits.transform_type`](@ref) and
+[`StableHashTraits.transform_type_value`](@ref). The stable name includes the name of the
+module that `T` was defined in. Any uses of `Core` are replaced with `Base` to keep the name
+stable across versions of julia. Anonymous names (e.g. `module_nameof_string(x -> x+1)`)
+throw an error, as no stable name is possible in this case.
 
 !!! danger "A type's module often changes"
-    The module of many types areconsidered an implementation detail and can change between
-    non-breaking versions of a package. For this reason uses of `module_nameof_string` must be
-    explicitly specified by user of `StableHashTraits`. This function is not used internally for
-    `HashVersion{4}` for types that are not defined in `StableHashTraits`.
-
-## See Also
-
-- [`HashFunctions`](@ref)
-- [`HashTypeValues`](@ref)
-- [`HashNullTypes`](@ref)
-- [`HashSingletonTypes`](@ref)
-
+    The module of many types areconsidered an
+    implementation detail and can change between non-breaking versions of a package. For
+    this reason uses of `module_nameof_string` must be explicitly specified by user of
+    `StableHashTraits`. This function is not used internally for `HashVersion{4}` for types
+    that are not defined in `StableHashTraits`.
 """
 @inline module_nameof_string(::T) where {T} = module_nameof_string(T)
 @inline module_nameof_string(m::Module) = module_nameof_(m)
@@ -338,9 +331,10 @@ end
     nameof_string(::T) where {T}
 
 Get a stable name of `T`. This is a helpful utility for writing your own methods of
-[`transform_type`](@ref) and [`transform_type_value`](@ref). The stable name is computed
-from `nameof`. Anonymous names (e.g. `module_nameof_string(x -> x+1)`) throw an error, as
-no stable name is possible in this case.
+[`StableHashTraits.transform_type`](@ref) and
+[`StableHashTraits.transform_type_value`](@ref). The stable name is computed from `nameof`.
+Anonymous names (e.g. `module_nameof_string(x -> x+1)`) throw an error, as no stable name is
+possible in this case.
 """
 @inline nameof_string(m::Module) = nameof_(m)
 @inline nameof_string(::T) where {T} = nameof_(T)
@@ -360,7 +354,7 @@ end
 The value to hash for type `T` when hashing an object's type. Users of `StableHashTraits`
 can implement a method that accepts one (`T`) or two arguments (`T` and `context`). If no
 method is implemented, the fallback `transform_type` value uses `StructType(T)` to decide
-how to hash `T`; this is documented under [What gets hashed? (hash version 3)](@ref).
+how to hash `T`; this is documented under [What gets hashed? (hash version 4)](@ref).
 
 Any types returned by `transform_type` has `transform_type` applied to it, so make sure that
 you only return types when they are are some nested component of your type (do not return
@@ -449,7 +443,6 @@ stable_hash(Interval{Closed, Open}(1, 2), context) !=
 
 [`transformer`](@ref) [`@context`](@ref)
 """
-
 function transform_type(::Type{T}, context) where {T}
     return transform_type(T, parent_context(context))
 end
@@ -492,7 +485,7 @@ stable_hash(Int, HashNumberTypes(HashVersion{4}())) # does not error
 ## See Also
 
 [`transformer`](@ref)
-[`transform_type`](@ref)
+[`StableHashTraits.transform_type`](@ref)
 
 """
 function transform_type_value(::Type{T}, context) where {T}

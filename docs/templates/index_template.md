@@ -16,7 +16,7 @@ To customize hashing, you typically want to simply override a method of [`Stable
 !!! tip "Avoid StackOverflow using `TransformIdentity`"
     Make sure you don't return the object itself as an element of some collection. It can be tempting to do e.g. `(mymetadata(x), x)` as a return value for `transformer`'s function. Instead you can use [`StableHashTraits.TransformIdentity`](@ref) to make sure this won't lead to an infinite regress: e.g. `(mymetadata(x), TransformIdentity(x))`. Using [`StableHashTraits.TransformIdentity`](@ref) will cause `x`'s transformed result to be `x` itself, thereby avoiding the infinite regress.
 
-`transformer` customizes how the *content* of your object is hashed. The hash of the type is customized separately using [`transform_type`](@ref).
+`transformer` customizes how the *content* of your object is hashed. The hash of the type is customized separately using [`StableHashTraits.transform_type`](@ref).
 
 ## Using Contexts
 
@@ -132,7 +132,7 @@ Bottom line: It is not sufficient for the function to be type stable to safely s
 
 ## Customizing Type Hashes
 
-Types are hashed by hashing the return value of [`transform_type`](@ref) when hashing an object's type and the return value of [`transform_type_value`](@ref) when hashing a type as a value (e.g. `stable_hash(Int)`). The docs for these functions provide several examples of their usage.
+Types are hashed by hashing the return value of [`StableHashTraits.transform_type`](@ref) when hashing an object's type and the return value of [`StableHashTraits.transform_type_value`](@ref) when hashing a type as a value (e.g. `stable_hash(Int)`). The docs for these functions provide several examples of their usage.
 
 In addition there is some structure of the type that is always hashed:
 

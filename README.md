@@ -67,7 +67,7 @@ If `StructType(T) <: StructTypes.UnorderedStruct`, the field values are first so
 
 The type of a data type is hashed using `string(nameof(T))`, the `fieldnames(T)`, (sorting them for `UnorderedStruct`), along with a hash of the type of each element of `fieldtypes(T)` according to their `StructType`.
 
-No type parameters are hashed by default. To hash these you need to specialize on [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type) for your struct. Note that because `fieldtypes(T)` is hashed, you don't need to do this unless your type parameters are not used in the specification of your field types.
+No type parameters are hashed by default. To hash these you need to specialize on [`StableHashTraits.transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type) for your struct. Note that because `fieldtypes(T)` is hashed, you don't need to do this unless your type parameters are not used in the specification of your field types.
 
 ### `StructType.ArrayType`
 
@@ -117,7 +117,7 @@ Their types is hashed by [`StableHashTraits.nameof_string`](https://beacon-biosi
 This means the module of the type does not matter: the module of a type is often considered an implementation detail, so it is left out to avoid unexpected hash changes from non-breaking releases that change the module of a type.
 
 > [!NOTE]
-> If you wish to disambiguate functions or types that have the same name but that come from different modules you can overload [`transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type) for those functions. If you want to include the module name for a broad set of types, rather than explicitly specifying a module name for each type, you may want to consider calling [`parentmodule_nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.parentmodule_nameof_string) in the body of your `transform_type` method. This can avoid a number of footguns when including the module names: for example, `parentmodule_nameof_string` renames `Core` to `Base` to elide Base julia changes to the location of a functions between these two modules and it renames pluto workspace modules to prevent structs from having a different hash each time the notebook is run.
+> If you wish to disambiguate functions or types that have the same name but that come from different modules you can overload [`StableHashTraits.transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type) for those functions. If you want to include the module name for a broad set of types, rather than explicitly specifying a module name for each type, you may want to consider calling [`StableHashTraits.module_nameof_string`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.module_nameof_string) in the body of your `transform_type` method. This can avoid a number of footguns when including the module names: for example, `module_nameof_string` renames `Core` to `Base` to elide Base julia changes to the location of a functions between these two modules and it renames pluto workspace modules to prevent structs from having a different hash each time the notebook is run.
 
 ### `Function`
 
@@ -133,7 +133,7 @@ When hashing a type as a value (e.g. `stable_hash(Int; version=4)`) the value of
 
 All of the following hash examples follow directly from the definitions above, but may not be so obvious to the reader.
 
-Most of the behaviors described below can be customized/changed by using your own hash [`@context`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.@context), which can be passed as the second argument to [`stable_hash`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_hash). StableHashTraits tries to defer to StructTypes for most defaults instead of making more opinionated choices.
+Most of the behaviors described below can be customized/changed by using your own hash [`StableHashTraits.@context`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.@context), which can be passed as the second argument to [`stable_hash`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.stable_hash). StableHashTraits tries to defer to StructTypes for most defaults instead of making more opinionated choices.
 
 The order of NamedTuple pairs does not matter, because `NamedTuple` has a struct type of `UnorderedStruct`.
 

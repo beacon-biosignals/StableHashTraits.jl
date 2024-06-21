@@ -6,7 +6,7 @@
 """
     WithTypeNames(parent_context)
 
-In this hash context, [`transform_type`](@ref) returns [`module_nameof_string`](@ref) for
+In this hash context, [`StableHashTraits.transform_type`](@ref) returns [`module_nameof_string`](@ref) for
 all types, in contrast to the default behavior (which mostly uses
 `nameof_string(StructType(T))`).
 
