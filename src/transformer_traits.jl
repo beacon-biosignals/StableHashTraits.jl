@@ -100,7 +100,6 @@ hash_type!(hash_state, ::TypeHashContext, key::Type) = hash_state
 function transformer(::Type{T}, context::TypeHashContext) where {T<:Type}
     return Transformer(T -> (transform_type(T, parent_context(context)),
                              internal_type_structure(T, StructType_(T))))
-
 end
 @inline StructType_(T) = StructType(T)
 StructType_(::Type{Union{}}) = StructTypes.NoStructType()
@@ -128,7 +127,6 @@ end
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
     return Transformer(T -> (transform_type_value(T, context),
                              internal_type_structure(T, StructType_(T))))
-
 end
 
 hash_type!(hash_state, ::TypeAsValueContext, ::Type{<:Type}) = hash_state
@@ -311,7 +309,7 @@ end
 
 transform_type(::Type{<:AbstractRange}) = "Base.AbstractRange"
 function transformer(::Type{<:AbstractRange}, ::HashVersion{4})
-    Transformer(x -> (first(x), step(x), last(x)); hoist_type=true)
+    return Transformer(x -> (first(x), step(x), last(x)); hoist_type=true)
 end
 
 #####

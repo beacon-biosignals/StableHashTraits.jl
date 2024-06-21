@@ -347,10 +347,10 @@ no stable name is possible in this case.
 @inline nameof_string(::Type{T}) where {T} = handle_unions_(T, nameof_)
 hoist_type(::typeof(nameof_string)) = true
 @inline function nameof_(::Type{T}) where {T}
-    validate_name(cleanup_name(String(nameof(T))))
+    return validate_name(cleanup_name(String(nameof(T))))
 end
 @inline function nameof_(T)
-    validate_name(cleanup_name(String(nameof(T))))
+    return validate_name(cleanup_name(String(nameof(T))))
 end
 # TODO: rewrite to avoid redundancy above
 
