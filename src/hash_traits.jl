@@ -1,3 +1,5 @@
+# This file is used for HashVersions 1-3
+
 """
     StableHashTraits.hash_method(x, [context])
 
