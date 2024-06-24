@@ -63,7 +63,7 @@ If you need to customize either of these functions for a type that you don't own
 
 To hash the value, each field value (`getfield(f) for f in fieldnames(T)`) is hashed.
 
-If `StructType(T) <: StructTypes.UnorderedStruct`, the field values are first sorted by the lexographic order of the field names.
+If `StructType(T) <: StructTypes.UnorderedStruct` (the default), the field values are first sorted by the lexographic order of the field names.
 
 The type of a data type is hashed using `string(nameof(T))`, the `fieldnames(T)`, (sorting them for `UnorderedStruct`), along with a hash of the type of each element of `fieldtypes(T)` according to their `StructType`.
 
