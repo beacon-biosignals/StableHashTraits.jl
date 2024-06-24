@@ -293,10 +293,10 @@ stable across versions of julia. Anonymous names (e.g. `module_nameof_string(x -
 throw an error, as no stable name is possible in this case.
 
 !!! danger "A type's module often changes"
-    The module of many types areconsidered an
+    The module of many types are considered an
     implementation detail and can change between non-breaking versions of a package. For
     this reason uses of `module_nameof_string` must be explicitly specified by user of
-    `StableHashTraits`. This function is not used internally for `HashVersion{4}` for types
+    `StableHashTraits`. This function is not used internally hor `HashVersion{4}` for types
     that are not defined in `StableHashTraits`.
 """
 @inline module_nameof_string(::T) where {T} = module_nameof_string(T)
@@ -318,13 +318,19 @@ end
             handle_function_types_(T, namer)
         end
     end
-    function handle_unions_helper_(::Union{A,B}, namer) where {A,B}
+    function handle_unions_helper_(T, namer)
+        # NOTE we are relying on julia intenrals here; thankfully we are doing so for a
+        # finite number of julia versions (1.6-1.8) and can test the latest patch release of
+        # each to ensure they keep workiing
+        A = T.a
+        B = T.b
         !@isdefined(A) && return ""
         !@isdefined(B) && return handle_function_types_(A, namer)
         return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
     end
 else
-    # in later version of julia, handling unions can be handled via dispatch
+    # in later version of julia, handling unions can be accomplished via dispatch (and does
+    # not require the use of julia internals)
     function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
         !@isdefined(A) && return ""
         !@isdefined(B) && return handle_function_types_(A, namer)
