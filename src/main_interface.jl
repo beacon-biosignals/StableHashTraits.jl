@@ -105,13 +105,14 @@ pre-transformed types that are themselves concrete.
 """
 struct Transformer{F,H}
     fn::F
-    result_method::H # if non-nothing, apply to result of `fn`
+    result_method::H # <:StructType, if non-nothing, associate to result of `fn`
     hoist_type::Bool
     function Transformer(fn::Base.Callable=identity, result_method=nothing;
                          hoist_type=StableHashTraits.hoist_type(fn))
         return new{typeof(fn),typeof(result_method)}(fn, result_method, hoist_type)
     end
 end
+(tr::Transformer)(x) = tr.fn(x)
 
 """
     StableHashTraits.hoist_type(fn)
@@ -125,7 +126,6 @@ type hash outside of loops.
 hoist_type(::typeof(identity)) = true
 hoist_type(::Function) = false
 hoist_type(::Type) = false
-(tr::Transformer)(x) = tr.fn(x)
 
 """
     StableHashTraits.transformer(::Type{T}, [context]) where {T}
@@ -142,10 +142,10 @@ transformer(::Type{T}, ::HashVersion{4}) where {T} = transformer(T)
 transformer(x) = Transformer()
 
 const TUPLE_DIFF = """
-This function differs from returning a named tuple of fields (e.g. `x -> (;x.a, x.b)``) in
+This function differs from returning a named tuple of fields (e.g. `x -> (;x.a, x.b)`) in
 that it does not narrow the types of the returned fields. A field of type `Any` of `x` is a
 field of type `Any` in the returned value. This ensures that pick_fields can be safely
-used with `hoist_type` of [`Transformer`](@ref)
+used with `hoist_type` of [`Transformer`](@ref).
 """
 
 """
@@ -319,9 +319,10 @@ end
         end
     end
     function handle_unions_helper_(T, namer)
-        # NOTE we are relying on julia intenrals here; thankfully we are doing so for a
-        # finite number of julia versions (1.6-1.8) and can test the latest patch release of
-        # each to ensure they keep workiing
+        # NOTE we are relying on julia intenrals here; thankfully we are doing so for a just
+        # a few julia versions (1.6-1.8) and can test the latest patch release of each to
+        # ensure they keep workiing (once the next LTS is settled, we can remove support for
+        # these older version and remove reliance on internals)
         A = T.a
         B = T.b
         !@isdefined(A) && return ""
