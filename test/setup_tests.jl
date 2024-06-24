@@ -60,7 +60,12 @@ function StableHashTraits.hash_method(::TestType4, context)
     StableHashTraits.root_version(context) > 3 && return StableHashTraits.NotImplemented()
     return StructHash(propertynames => getproperty)
 end
-StableHashTraits.hash_method(::TypeType) = StructHash()
+
+function StableHashTraits.hash_method(::TypeType, context::HashVersion{V}) where {V}
+    V > 3 && return StableHashTraits.NotImplemented()
+    return StructHash()
+end
+
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
 
 StableHashTraits.transform_type(::Type{<:TestType2}) = "TestType2"
@@ -191,3 +196,6 @@ end
 # TODO: we need to rewrite the docs on when `hoist_type` is safe
 # TODO: we need to probably write some helper functions for
 # `omit` and `keep` that maintain feildtypes
+
+struct WeirdTypeValue; end
+StableHashTraits.transform_type_value(::Type{<:WeirdTypeValue}) = Int

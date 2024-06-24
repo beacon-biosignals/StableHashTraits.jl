@@ -59,14 +59,6 @@ function hash_method(x::T, m::TablesEq) where {T}
     return hash_method(x, parent_context(m))
 end
 
-function transform_type(::Type{T}, ::StructTypes.DataType, context::TablesEq) where {T}
-    if Tables.istable(T)
-        return "Tables.istable"
-    else
-        transform_type(T, parent_context(context))
-    end
-end
-
 function transformer(::Type{T}, c::TablesEq) where {T}
     Tables.istable(T) && return Transformer(columntable)
     return transformer(T, parent_context(c))

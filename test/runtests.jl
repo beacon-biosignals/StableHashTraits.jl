@@ -230,13 +230,19 @@ include("setup_tests.jl")
             end
 
             @testset "Types" begin
-                @test test_hash(Float64) != test_hash("Base.Float64")
-                @test test_hash(Int) != test_hash("Base.Int")
+                if V < 4
+                    @test test_hash(Float64) != test_hash("Base.Float64")
+                    @test test_hash(Int) != test_hash("Base.Int")
+                end
                 @test test_hash(Float64) != test_hash(Int)
                 if V >= 4
+                    @test test_hash(Vector{Int}) != test_hash(Vector{String})
+                    @test test_hash(Array{Int}) != test_hash(Array{String})
+                    @test test_hash(Float64) != test_hash("Float64")
+                    @test test_hash(Int) != test_hash("Int")
+                    @test test_hash(WeirdTypeValue) == test_hash(Int)
                     @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
                     @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
-                    @test test_hash(Array{Int}) != test_hash(Array{Float64})
                 end
             end
 

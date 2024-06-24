@@ -26,7 +26,7 @@ function check_hash_method(x, transform, context)
            following:
 
            function hash_method(::MyType, context::SomeContextType)
-               StableHashTraits.root_version(context) > 2 && return StableHashTraits.NotImplemented()
+               StableHashTraits.root_version(context) > 3 && return StableHashTraits.NotImplemented()
                # implement `hash_method` for `MyType`
            end
            """ _id = Symbol(module_nameof_string(typeof(x))) maxlog = 1
@@ -94,12 +94,18 @@ struct TypeHashContext{T}
 end
 TypeHashContext(x::TypeHashContext) = x
 parent_context(x::TypeHashContext) = x.parent
-hash_type!(hash_state, ::TypeHashContext, key::Type{<:Type}) = hash_state
 hash_type!(hash_state, ::TypeHashContext, key::Type) = hash_state
 
+# pair_structure: When the internal structure of a type is `nothing`, avoid additional
+# tuple-nesting in the returned value to hash. This ensures that if we want two types to
+# transform to the same string, the hashed value doesn't depend on how many transformations
+# deep we go to "find" this identical string (unless there is distinct structure that *must*
+# be hashed give its `StructType`).
+pair_structure(x, ::Nothing) = x
+pair_structure(x, y) = (x, y)
 function transformer(::Type{T}, context::TypeHashContext) where {T<:Type}
-    return Transformer(T -> (transform_type(T, parent_context(context)),
-                             internal_type_structure(T, StructType_(T))))
+    return Transformer(T -> pair_structure(transform_type(T, parent_context(context)),
+                                           internal_type_structure(T, StructType_(T))))
 end
 @inline StructType_(T) = StructType(T)
 StructType_(::Type{Union{}}) = StructTypes.NoStructType()
@@ -124,22 +130,25 @@ parent_context(x::TypeAsValueContext) = x.parent
 function hash_type!(hash_state, context, ::Type{<:Type})
     return update_hash!(hash_state, "Base.Type", context)
 end
-function transformer(::Type{<:Type}, context::TypeAsValueContext)
-    return Transformer(T -> (transform_type_value(T, context),
-                             internal_type_structure(T, StructType_(T))))
+# these methods are required to avoid method ambiguities
+function hash_type!(hash_state, context::TypeHashContext, ::Type{<:Type})
+    return update_hash!(hash_state, "Base.Type", context)
+end
+function hash_type!(hash_state, context::TypeAsValueContext, ::Type{<:Type})
+    return update_hash!(hash_state, "Base.Type", context)
 end
 
-hash_type!(hash_state, ::TypeAsValueContext, ::Type{<:Type}) = hash_state
+function transformer(::Type{<:Type}, context::TypeAsValueContext)
+    return Transformer(T -> pair_structure(transform_type_value(T, context),
+                                           internal_type_structure(T, StructType_(T))))
+end
+
+hash_type!(hash_state, ::TypeAsValueContext, ::Type) = hash_state
 function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where {T}
     type_context = TypeAsValueContext(context)
     transform = transformer(typeof(T), type_context)::Transformer
     tT = transform(T)
     return stable_hash_helper(tT, hash_state, type_context, hash_trait(transform, tT))
-end
-
-function stable_hash_helper(::Type{T}, hash_state, context::TypeHashContext,
-                            ::TypeAsValue) where {T}
-    return hash_type!(hash_state, context, T)
 end
 
 #####
