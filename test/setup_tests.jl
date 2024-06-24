@@ -197,5 +197,5 @@ end
 # TODO: we need to probably write some helper functions for
 # `omit` and `keep` that maintain feildtypes
 
-struct WeirdTypeValue; end
+struct WeirdTypeValue end
 StableHashTraits.transform_type_value(::Type{<:WeirdTypeValue}) = Int
