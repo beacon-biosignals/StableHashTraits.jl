@@ -77,7 +77,7 @@ The exact criteria for when this code path is unsafe are somewhat subtle, and wi
 2. The type that `transformer` dispatches on contains no abstract types: that is, for any contained array type or dict types, their eltypes are concrete and for any contained data type, its `fieldtypes` are concrete.
 3. The function you pass to `Transformer` is type stable
 
-When set to true, `hoist_type=true` hashes the type of the pre-transformed object, prior to looping over the contents of the post-transformed object: its fields (for a data type) or the elements (for an array or dict type). Once the contents of the object are being looped over, the hashing of each concrete-typed elements or fields are skipped. For example, when hashing an `Array{Int}` the `Int` will only be hashed once, not once for every element.
+When set to true, `hoist_type=true` hashes the type of the pre-transformed object, prior to looping over the contents of the post-transformed object: its fields (for a data type) or the elements (for an array or dict type). Once the contents of the object are being looped over, hashing the type of each concrete-typed element or field is skipped. For example, when hashing an `Array{Int}` the `Int` will only be hashed once, not once for every element.
 
 When `hoist_type=false` (the default for most functions) the type of the return value from `transformer` is hashed alongside the transformed value. This can be a lot slower, but ensures the that no unexpected hash collisions will occur.
 
@@ -86,7 +86,7 @@ More precisely, this hoisting is only valid when one of these two criteria are s
 1. the pre-transformed type is sufficient to disambiguate the hash of the downstream object *values* absent their object *types*.
 2. the post-transformed types do not change unless the *caller inferred* type of the input it depends on changes
 
-The latter criteria is more stringent than type stability. A function input could have a caller inferred type of `Any`, be type stable, and return either `Char` or an `Int` depending on the value of its input. Such a function would violate this second criteria.
+The latter criteria is more stringent than type stability. A function input could have a caller-inferred type of `Any`, be type stable, and return either `Char` or an `Int` depending on the value of its input. Such a function would violate this second criteria.
 
 ### Examples
 

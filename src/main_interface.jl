@@ -379,7 +379,6 @@ end
 @inline function nameof_(T)
     return validate_name(cleanup_name(String(nameof(T))))
 end
-# TODO: rewrite to avoid redundancy above
 
 """
    transform_type(::Type{T}, [context])

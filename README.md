@@ -107,7 +107,7 @@ For any `StructType.CustomStruct`, the object is first `StructType.lower`ed and 
 
 ### `missing` and `nothing`
 
-There is no value hashed for `missing` or `nothing`; the type is hashed as the string `"Base.Missing"` and `"Base.Nothing"` respectively. Note in particular the string `"Base.Missing"` does not have the same hash as `missing`, since the former would have it's struct type hashed.
+There is no value hashed for `missing` or `nothing`; the type is hashed as the string `"Base.Missing"` and `"Base.Nothing"` respectively. Note in particular the string `"Base.Missing"` does not have the same hash as `missing`, since the former would have its struct type hashed.
 
 ### `StructType.{Null/Singleton}Type`
 
