@@ -79,7 +79,7 @@ macros to guarantee that their hashes are computed at compile time.
 
 # Version 1.3:
 
-Version 1.3 creates a new hash version (4) that abandones `@generated` functions and the
+Version 1.3 creates a new hash version (4) that abandons `@generated` functions and the
 goal of perfectly hashing type names and type parameters. It also redesigns the API for
 customizing hashes to leverage `StructTypes`. The goal of these changes is to have more
 stable and predictable hash behavior.
@@ -106,8 +106,8 @@ This implementation makes two additional, smaller improvements:
    Vector{Union{Missing, Int}} hashes quickly in the below benchmarks.
 
 Note that, while the benchmarks here are quite good, this implementation is likely slower
-than Version 1.1 for deeply nested, type-unstable data structures (e.g. nested `Dict{Any,
-Any}`), as this use case will hit the `get!` calls that seem to be fairly slow, while the
+than Version 1.1 for deeply nested, type-unstable data structures
+(e.g. nested `Dict{Any, Any}`), as this use case will hit the `get!` calls that seem to be fairly slow, while the
 older implementation would hit the `@generated` function calls. However, such structures
 are presumably already quite slow to hash because of their type-instability.
 

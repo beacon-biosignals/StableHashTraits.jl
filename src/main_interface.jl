@@ -325,16 +325,24 @@ end
         # these older version and remove reliance on internals)
         A = T.a
         B = T.b
-        !@isdefined(A) && return ""
+        !@isdefined(A) && !@isdefined(B) && return ""
         !@isdefined(B) && return handle_function_types_(A, namer)
+        # NOTE: The following line never gets run, because of the way julia's type dispatch
+        # is currently implemented, but it is here to avoid regressions in future julia
+        # version
+        !@isdefined(A) && return handle_function_types_(B, namer)
         return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
     end
 else
     # in later version of julia, handling unions can be accomplished via dispatch (and does
     # not require the use of julia internals)
     function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
-        !@isdefined(A) && return ""
+        !@isdefined(A) && !@isdefined(B) && return ""
         !@isdefined(B) && return handle_function_types_(A, namer)
+        # NOTE: The following line never gets run, because of the way julia's type dispatch
+        # is currently implemented, but it is here to avoid regressions in future julia
+        # version
+        !@isdefined(A) && return handle_function_types_(B, namer)
         return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
     end
     # not all types are concrete, so they must be passed through a generic "handle_unions_"

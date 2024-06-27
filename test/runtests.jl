@@ -236,6 +236,8 @@ include("setup_tests.jl")
                 end
                 @test test_hash(Float64) != test_hash(Int)
                 if V >= 4
+                    @test test_hash(missing) != test_hash("Base.Missing")
+                    @test test_hash(nothing) != test_hash("Base.Nothing")
                     @test test_hash(Vector{Int}) != test_hash(Vector{String})
                     @test test_hash(Array{Int}) != test_hash(Array{String})
                     @test test_hash(Float64) != test_hash("Float64")
@@ -266,7 +268,7 @@ include("setup_tests.jl")
                 end
             end
 
-            @testset "Pluto-defined strucst are stable" begin
+            @testset "Pluto-defined structs are stable" begin
                 notebook_project_dir = joinpath(@__DIR__, "..")
                 @info "Notebook project: $notebook_project_dir"
 
