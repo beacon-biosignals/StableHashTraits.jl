@@ -7,6 +7,11 @@ const NAMED_TUPLES_PRETTY_PRINT_VERSION = v"1.10.0-DEV.885"
     using PikaParser
 end
 
+# TODO: once we remove all deprecated functionality (anything before HashVersion{4}) we can
+# greatly simplify everything below. We will need to delete everything but `cleanup_name`;
+# furthermore `cleanup_name` will have a number of lines removed / simplified (see TODO's
+# below).
+
 # NOTE: over time, generating a stable name for a type that is consistent across julia
 # versions has become quite complicated. In particular, julia has not considered the string
 # output of a type to be a breaking change and so minor versions often include improvements
@@ -20,9 +25,11 @@ function cleanup_name(str)
     # `Core` changes, e.g. Base.Pair in 1.6, becomes Core.Pair in 1.9; also see
     # https://discourse.julialang.org/t/difference-between-base-and-core/37426
     str = replace(str, r"^Core\." => "Base.")
+    # TODO: remove once <= HashVersion{4} has been removed
     str = replace(str, ", " => ",") # spacing in type names vary across minor julia versions
     # in 1.6 and older AbstractVector and AbstractMatrix types get a `where` clause, but in
     # later versions of julia, they do not
+    # TODO: remove once <= HashVersion{4} have been removed
     str = replace(str, "AbstractVector{T} where T" => "AbstractVector")
     str = replace(str, "AbstractMatrix{T} where T" => "AbstractMatrix")
 
@@ -40,6 +47,9 @@ function cleanup_name(str)
 
     # NOTE: in more recent julia versions (>= 1.8) the values are surrounded by `var`
     # qualifiers
+    # TODO: the solution here can be replaced with a more general solution once we delete
+    # all deprecated functionality (we should be able to adapt the solution from
+    # https://github.com/beacon-biosignals/StableHashTraits.jl/pull/46)
     str = replace(str, r"var\"workspace#[0-9]+\"" => "PlutoWorkspace")
     str = replace(str, r"workspace#[0-9]+" => "PlutoWorkspace")
 
@@ -49,6 +59,7 @@ function cleanup_name(str)
     # "@NamedTuple{a::Int64, b::@NamedTuple{x::Int64, y::Int64}}"
     # to be
     # "Base.NamedTuple{(:a,:b),Tuple{Int64,NamedTuple{(:x,:y),Tuple{Int64,Int64}}}}"
+    # TODO: remove once <= HashVersion{4} have been removed
     str = cleanup_named_tuple_type(str)
     return str
 end

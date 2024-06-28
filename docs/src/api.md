@@ -1,0 +1,24 @@
+# API
+
+```@docs
+stable_hash
+HashVersion
+StableHashTraits.transformer
+StableHashTraits.Transformer
+pick_fields
+omit_fields
+StableHashTraits.TransformIdentity
+StableHashTraits.hoist_type
+StableHashTraits.transform_type
+StableHashTraits.transform_type_value
+nameof_string
+StableHashTraits.module_nameof_string
+StableHashTraits.is_ordered
+StableHashTraits.hash_sort_by
+StableHashTraits.parent_context
+StableHashTraits.@context
+StableHashTraits.root_version
+WithTypeNames
+TablesEq
+ViewsEq
+```

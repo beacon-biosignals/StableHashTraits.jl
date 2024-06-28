@@ -94,11 +94,10 @@ function end_nested_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
     return hash_state
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
-HashState(x::SHA.SHA_CTX, ctx) = x
 similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
 
 #####
-##### RecursiveHashState: handles a function of the form hash(bytes, [old_hash])
+##### RecursiveHashState: handles a function of the form hash64(bytes, [old_hash])
 #####
 
 function HashState(fn::Function, context)
@@ -123,7 +122,6 @@ function end_nested_hash!(fn::RecursiveHashState, nested::RecursiveHashState)
     return update_hash!(fn, reinterpret(UInt8, [nested.val;]))
 end
 compute_hash!(x::RecursiveHashState) = x.val
-HashState(x::RecursiveHashState) = x
 similar_hash_state(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
 
 #####
@@ -177,6 +175,8 @@ function end_nested_hash!(root::BufferedHashState, x::BufferedHashState)
 end
 
 function update_hash!(hasher::BufferedHashState, obj, context)
+    # TODO: when we remove `deprecated.jl`, change this to `Base.write` and remove the
+    # `context` parameters
     write(hasher.io, obj, context)
     flush_bytes!(hasher)
     return hasher
@@ -192,7 +192,6 @@ function compute_hash!(x::BufferedHashState)
 
     return compute_hash!(state)
 end
-HashState(x::BufferedHashState, ctx) = x
 function similar_hash_state(x::BufferedHashState)
     return BufferedHashState(similar_hash_state(x.content_hash_state), x.limit)
 end
