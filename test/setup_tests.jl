@@ -10,6 +10,7 @@ using DataFrames
 using Tables
 using AWSS3
 using Pluto
+using StructTypes
 
 struct TestType
     a::Any
@@ -41,10 +42,34 @@ end
 
 StableHashTraits.hash_method(::TestType) = StructHash()
 StableHashTraits.hash_method(::TestType2) = FnHash(qualified_name), StructHash()
+function StableHashTraits.transformer(::Type{<:TestType2})
+    return StableHashTraits.Transformer(x -> (x.a, x.b); hoist_type=true)
+end
 StableHashTraits.hash_method(::TestType3) = StructHash(:ByName)
-StableHashTraits.hash_method(::TestType4) = StructHash(propertynames => getproperty)
-StableHashTraits.hash_method(::TypeType) = StructHash()
+
+# make TestType3 look exactly like TestType
+StableHashTraits.transform_type(::Type{<:TestType3}) = "TestType"
+function StableHashTraits.transformer(::Type{<:TestType3})
+    return StableHashTraits.Transformer(pick_fields(:a, :b))
+end
+function StableHashTraits.hash_method(::TestType4, context::HashVersion{V}) where {V}
+    V > 3 && return StableHashTraits.NotImplemented()
+    return StructHash(propertynames => getproperty)
+end
+function StableHashTraits.hash_method(::TestType4, context)
+    StableHashTraits.root_version(context) > 3 && return StableHashTraits.NotImplemented()
+    return StructHash(propertynames => getproperty)
+end
+
+function StableHashTraits.hash_method(::TypeType, context::HashVersion{V}) where {V}
+    V > 3 && return StableHashTraits.NotImplemented()
+    return StructHash()
+end
+
 StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
+
+StableHashTraits.transform_type(::Type{<:TestType2}) = "TestType2"
+StructTypes.StructType(::Type{<:TestType4}) = StructTypes.OrderedStruct()
 
 struct NonTableStruct
     x::Vector{Int}
@@ -97,13 +122,21 @@ StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = IterateHash()
 struct ExtraTypeParams{P,T}
     value::T
 end
+function StableHashTraits.transform_type(::Type{T}) where {P,U,T<:ExtraTypeParams{P,U}}
+    return "ExtraTypeParams", P, U
+end
 
 struct BadHashMethod end
 StableHashTraits.hash_method(::BadHashMethod) = "garbage"
+StableHashTraits.transformer(::Type{<:BadHashMethod}) = "garbage"
+
+struct Singleton1 end
+struct Singleton2 end
 
 struct BadRootContext end
 StableHashTraits.parent_context(::BadRootContext) = nothing
 StableHashTraits.hash_method(::Int, ::BadRootContext) = WriteHash()
+StableHashTraits.transformer(::Type{Int}, ::BadRootContext) = StableHashTraits.Transformer()
 
 mutable struct CountedBufferState
     state::StableHashTraits.BufferedHashState
@@ -111,6 +144,9 @@ mutable struct CountedBufferState
 end
 CountedBufferState(x::StableHashTraits.BufferedHashState) = CountedBufferState(x, Int[])
 StableHashTraits.HashState(x::CountedBufferState, ctx) = x
+function StableHashTraits.similar_hash_state(x::CountedBufferState)
+    return CountedBufferState(StableHashTraits.similar_hash_state(x.state), Int[])
+end
 
 function StableHashTraits.update_hash!(x::CountedBufferState, args...)
     x.state = StableHashTraits.update_hash!(x.state, args...)
@@ -132,3 +168,34 @@ end
 
 struct BadShowSyntax end
 Base.show(io::IO, ::Type{<:BadShowSyntax}) = print(io, "{")
+
+struct UnstableStruct1
+    a::Any
+    b::Any
+end
+function StableHashTraits.transformer(::Type{<:UnstableStruct1})
+    return StableHashTraits.Transformer(pick_fields(:a))
+end
+
+struct UnstableStruct2
+    a::Any
+    b::Any
+end
+function StableHashTraits.transformer(::Type{<:UnstableStruct2})
+    return StableHashTraits.Transformer(omit_fields(:b))
+end
+
+struct UnstableStruct3
+    a::Any
+    b::Any
+end
+function StableHashTraits.transformer(::Type{<:UnstableStruct3})
+    return StableHashTraits.Transformer(x -> (; x.a); hoist_type=true)
+end
+
+# TODO: we need to rewrite the docs on when `hoist_type` is safe
+# TODO: we need to probably write some helper functions for
+# `omit` and `keep` that maintain feildtypes
+
+struct WeirdTypeValue end
+StableHashTraits.transform_type_value(::Type{<:WeirdTypeValue}) = Int

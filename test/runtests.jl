@@ -26,7 +26,7 @@ include("setup_tests.jl")
         @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
     end
 
-    for V in (1, 2, 3), hashfn in (sha256, sha1, crc32c)
+    for V in (1, 2, 3, 4), hashfn in (sha256, sha1, crc32c)
         hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
@@ -89,13 +89,14 @@ include("setup_tests.jl")
                                                       d=(d1=1, d2=2)))))
             end
             # verifies that transform can be called recursively
+            if V <= 3
+                @testset "FnHash" begin
+                    @test test_hash(GoodTransform(2)) == test_hash(GoodTransform("-0.2"))
+                    @test test_hash(GoodTransform(3)) != test_hash(GoodTransform("-0.2"))
 
-            @testset "FnHash" begin
-                @test test_hash(GoodTransform(2)) == test_hash(GoodTransform("-0.2"))
-                @test test_hash(GoodTransform(3)) != test_hash(GoodTransform("-0.2"))
-
-                # various (in)equalities
-                @test_throws ArgumentError test_hash(BadTransform())
+                    # various (in)equalities
+                    @test_throws ArgumentError test_hash(BadTransform())
+                end
             end
 
             # dictionary like
@@ -103,7 +104,11 @@ include("setup_tests.jl")
                 @test test_hash(Dict(:a => 1, :b => 2)) == test_hash(Dict(:b => 2, :a => 1))
                 @test ((; kwargs...) -> test_hash(kwargs))(; a=1, b=2) ==
                       ((; kwargs...) -> test_hash(kwargs))(; b=2, a=1)
-                @test test_hash((; a=1, b=2)) != test_hash((; b=2, a=1))
+                if V <= 3
+                    @test test_hash((; a=1, b=2)) != test_hash((; b=2, a=1))
+                else
+                    @test test_hash((; a=1, b=2)) == test_hash((; b=2, a=1))
+                end
                 @test test_hash((; a=1, b=2)) != test_hash((; a=2, b=1))
                 # Validate that badly printed types properly error, rather than silently
                 # producing a bad typestring with an unstable type id. NOTE: One might want
@@ -111,7 +116,7 @@ include("setup_tests.jl")
                 # function (`qualified_type_`) because otherwise this runs into confusing
                 # compilation issues during CI because of the way that generated functions
                 # work.
-                if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
+                if V == 1 && VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
                     @test_throws(StableHashTraits.StableNames.ParseError,
                                  StableHashTraits.qualified_type_((; a=1,
                                                                    b=BadShowSyntax())))
@@ -136,17 +141,21 @@ include("setup_tests.jl")
 
             # test out HashAndContext
             @testset "Contexts" begin
-                @test test_hash(CustomHashObject(1:5, 1:10)) !=
-                      test_hash(BasicHashObject(1:5, 1:10))
-                @test test_hash(Set(1:20)) == test_hash(Set(reverse(1:20)))
-                @test test_hash([]) != test_hash([(), (), ()])
+                if V <= 3
+                    @test test_hash(CustomHashObject(1:5, 1:10)) !=
+                          test_hash(BasicHashObject(1:5, 1:10))
+                end
                 @test_throws ArgumentError test_hash("bob", BadRootContext())
                 @test test_hash(1, BadRootContext()) isa Union{Unsigned,Vector{UInt8}}
             end
 
             @testset "Sequences" begin
                 @test test_hash([1 2; 3 4]) != test_hash(vec([1 2; 3 4]))
-                @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4]')
+                if V <= 3
+                    @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4]')
+                else
+                    @test test_hash([1 2; 3 4]) == test_hash([1 3; 2 4]')
+                end
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4])
                 @test test_hash([1 2; 3 4], ViewsEq(ctx)) !=
                       test_hash(vec([1 2; 3 4]), ViewsEq(ctx))
@@ -155,16 +164,24 @@ include("setup_tests.jl")
                 @test test_hash([1 2; 3 4], ViewsEq(ctx)) !=
                       test_hash([1 3; 2 4], ViewsEq(ctx))
                 @test test_hash(reshape(1:10, 2, 5)) != test_hash(reshape(1:10, 5, 2))
-                @test test_hash(view(collect(1:5), 1:2)) != test_hash([1, 2])
+                if V <= 3
+                    @test test_hash(view(collect(1:5), 1:2)) != test_hash([1, 2])
+                else
+                    @test test_hash(view(collect(1:5), 1:2)) == test_hash([1, 2])
+                    @test test_hash(view(collect(1:5), 1:2), WithTypeNames(ctx)) !=
+                          test_hash([1, 2], WithTypeNames(ctx))
+                end
                 @test test_hash(view(collect(1:5), 1:2), ViewsEq(ctx)) ==
                       test_hash([1, 2], ViewsEq(ctx))
 
+                @test test_hash([]) != test_hash([(), (), ()])
                 @test test_hash([(), ()]) != test_hash([(), (), ()])
 
                 @test test_hash(1:10) != test_hash((; start=1, stop=10))
                 @test test_hash(1:10) != test_hash(collect(1:10))
                 @test test_hash([1, 2, 3]) != test_hash([3, 2, 1])
                 @test test_hash((1, 2, 3)) != test_hash([1, 2, 3])
+                @test test_hash(Set(1:20)) == test_hash(Set(reverse(1:20)))
             end
 
             @testset "Version Strings" begin
@@ -178,10 +195,21 @@ include("setup_tests.jl")
                 @test test_hash(["ab"]) != test_hash(["a", "b"])
                 @test test_hash(:foo) != test_hash("foo")
                 @test test_hash(:foo) != test_hash(:bar)
-                @test test_hash(view("bob", 1:2)) != test_hash("bo")
+                if V <= 3
+                    @test test_hash(view("bob", 1:2)) != test_hash("bo")
+                else
+                    @test test_hash(view("bob", 1:2)) == test_hash("bo")
+                    @test test_hash(view("bob", 1:2), WithTypeNames(ctx)) !=
+                          test_hash("bo", WithTypeNames(ctx))
+                end
                 @test test_hash(view("bob", 1:2), ViewsEq(ctx)) ==
                       test_hash("bo", ViewsEq(ctx))
                 @test test_hash(S3Path("s3://foo/bar")) != test_hash(S3Path("s3://foo/baz"))
+            end
+
+            @testset "Singletons and nulls" begin
+                @test test_hash(missing) != test_hash(nothing)
+                @test test_hash(Singleton1()) != test_hash(Singleton2())
             end
 
             @testset "Functions" begin
@@ -189,7 +217,6 @@ include("setup_tests.jl")
                 @test test_hash(sin) != test_hash(:sin)
                 @test test_hash(sin) != test_hash("sin")
                 @test test_hash(sin) != test_hash("Base.sin")
-                @test test_hash(Int) != test_hash("Base.Int")
                 @test test_hash(==("foo")) == test_hash(==("foo"))
                 @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 1))
                 if V > 1
@@ -203,9 +230,22 @@ include("setup_tests.jl")
             end
 
             @testset "Types" begin
-                @test test_hash(Float64) != test_hash("Base.Float64")
+                if V < 4
+                    @test test_hash(Float64) != test_hash("Base.Float64")
+                    @test test_hash(Int) != test_hash("Base.Int")
+                end
                 @test test_hash(Float64) != test_hash(Int)
-                @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
+                if V >= 4
+                    @test test_hash(missing) != test_hash("Base.Missing")
+                    @test test_hash(nothing) != test_hash("Base.Nothing")
+                    @test test_hash(Vector{Int}) != test_hash(Vector{String})
+                    @test test_hash(Array{Int}) != test_hash(Array{String})
+                    @test test_hash(Float64) != test_hash("Float64")
+                    @test test_hash(Int) != test_hash("Int")
+                    @test test_hash(WeirdTypeValue) == test_hash(Int)
+                    @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
+                    @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
+                end
             end
 
             @testset "Custom hash_method" begin
@@ -219,12 +259,16 @@ include("setup_tests.jl")
                 @test test_hash(TestType2(1, 2)) != test_hash((a=1, b=2))
                 @test test_hash(TestType4(1, 2)) == test_hash(TestType4(1, 2))
                 @test test_hash(TestType4(1, 2)) != test_hash(TestType3(1, 2))
-                @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
                 @test test_hash(TestType(1, 2)) != test_hash(TestType4(2, 1))
-                @test_throws ArgumentError test_hash(BadHashMethod())
+                @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
+                if V <= 3
+                    @test_throws ArgumentError test_hash(BadHashMethod())
+                else
+                    @test_throws TypeError test_hash(BadHashMethod())
+                end
             end
 
-            @testset "Pluto-defined strucst are stable" begin
+            @testset "Pluto-defined structs are stable" begin
                 notebook_project_dir = joinpath(@__DIR__, "..")
                 @info "Notebook project: $notebook_project_dir"
 
@@ -284,21 +328,78 @@ include("setup_tests.jl")
                 # NOTE: V refers to the hash version currently in loose
                 # its the `for` loop at the top of this file
                 if nb.cells[5].output.body isa Dict
-                    throw(Error("Failed notebook eval: $(nb.cells[5].output.body[:msg])"))
+                    throw(error("Failed notebook eval: $(nb.cells[5].output.body[:msg])"))
                 else
                     @test_reference("references/pluto01_$(V)_$(nameof(hashfn)).txt",
                                     strip(nb.cells[5].output.body, '"'))
                 end
 
                 if nb.cells[6].output.body isa Dict
-                    throw(Error("Failed notebook eval: $(nb.cells[6].output.body[:msg])"))
+                    throw(error("Failed notebook eval: $(nb.cells[6].output.body[:msg])"))
                 else
                     @test_reference("references/pluto02_$(V)_$(nameof(hashfn)).txt",
                                     strip(nb.cells[6].output.body, '"'))
                 end
             end
 
-            if V > 2 && hashfn == sha256
+            if V >= 4
+                @testset "Type-stable vs. type-unstable hashing" begin
+                    # arrays
+                    xs = [isodd(n) ? Char(n) : Int32(n) for n in 1:10]
+                    ys = [iseven(n) ? Char(n) : Int32(n) for n in 1:10]
+                    @test test_hash(xs) != test_hash(ys)
+
+                    xs = zeros(Int32, 10)
+                    ys = Char.(xs)
+                    @test test_hash(xs) != test_hash(ys)
+
+                    # dicts
+                    xs = Dict(n => isodd(n) ? Char(n) : Int32(n) for n in 1:10)
+                    ys = Dict(n => iseven(n) ? Char(n) : Int32(n) for n in 1:10)
+                    @test test_hash(xs) != test_hash(ys)
+
+                    xs = Dict(1:10 .=> Int32.(1:10))
+                    ys = Dict(1:10 .=> Char.(1:10))
+                    @test test_hash(xs) != test_hash(ys)
+
+                    # structs
+                    xs = [(; n=isodd(n) ? Char(n) : Int32(n)) for n in 1:10]
+                    ys = [(; n=iseven(n) ? Char(n) : Int32(n)) for n in 1:10]
+                    @test test_hash(xs) != test_hash(ys)
+
+                    xs = [(; n) for n in Int32.(1:10)]
+                    ys = [(; n) for n in Char.(1:10)]
+                    @test test_hash(xs) != test_hash(ys)
+
+                    # union-splitting tests
+                    xs = [fill(missing, 3); collect(1:10)]
+                    ys = [collect(1:10); fill(missing, 3)]
+                    @test test_hash(xs) != test_hash(ys)
+
+                    xs = Union{Int32,UInt32,Char}[Int32(1), Int32(1), UInt32(1), UInt32(1),
+                                                  Char(1), Char(1)]
+                    ys = Union{Int32,UInt32,Char}[Int32(1), UInt32(1), Int32(1), Char(1),
+                                                  UInt32(1), Char(1)]
+                    @test test_hash(xs) != test_hash(ys)
+
+                    # narrowing fields doesn't generate hashing bugs
+                    @test test_hash(UnstableStruct1(nothing, 1)) !=
+                          test_hash(UnstableStruct1(missing, 2))
+                    @test test_hash(UnstableStruct1(1, 1)) !=
+                          test_hash(UnstableStruct1(2, 2))
+                    @test test_hash(UnstableStruct2(nothing, 1)) !=
+                          test_hash(UnstableStruct2(missing, 2))
+                    @test test_hash(UnstableStruct2(1, 1)) !=
+                          test_hash(UnstableStruct2(2, 2))
+
+                    # but if we use NamedTuple selection with `hoist_type=true`
+                    # we do get a bug
+                    @test test_hash(UnstableStruct3(nothing, 1)) ==
+                          test_hash(UnstableStruct3(missing, 2))
+                end
+            end
+
+            if V > 1 && hashfn == sha256
                 @testset "Hash-invariance to buffer size" begin
                     data = (rand(Int8, 2), rand(Int8, 2))
                     wrapped1 = StableHashTraits.HashState(sha256, HashVersion{1}())
@@ -314,6 +415,10 @@ include("setup_tests.jl")
                     # buffer sizes while updating the hash state...
                     @test alg_small.positions != alg_large.positions
                 end
+                # NOTE: the hash is *not* invariant to the CACHE_OBJECT_THRESHOLD since this
+                # is the object size overwhich the hash becomes recursively computed rather
+                # than computed using the buffered hash (which uses list of indices to
+                # denote nesting)
             end
         end # @testset
     end # for
@@ -332,6 +437,16 @@ include("setup_tests.jl")
         @test_deprecated(UseSize(UseIterate()))
         @test_deprecated(ConstantHash("foo"))
         @test_deprecated(UseTable())
+        @test_deprecated(HashVersion{1}())
+        @test_deprecated(HashVersion{2}())
+
+        # verify that if a type only has implementations for `hash_method`
+        # and not `transformer` they'll get a warning
+        @test_logs (:warn, r"deprecated") stable_hash(TestType(1, 2); version=4)
+        # verify that if there are appropriate definitions of `transformer` and/or
+        # `hash_method` this warning doesn't show up
+        @test_logs stable_hash(TestType4(1, 2); version=4)
+        @test_logs stable_hash(TestType2(1, 2); version=4)
     end
 
     if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
@@ -391,8 +506,10 @@ include("setup_tests.jl")
 
             # verify that we can replace an element in various locations using
             # parse_walker's second argument
-            replace_bob(str) = parse_walker((fn, p) -> p == "bob" ? "BOB" : nothing,
-                                            parse_brackets(str))
+            function replace_bob(str)
+                return parse_walker((fn, p) -> p == "bob" ? "BOB" : nothing,
+                                    parse_brackets(str))
+            end
             @test replace_bob("bob") == "BOB"
             @test replace_bob("bob joe") == "BOB joe"
             @test replace_bob("bob, joe") == "BOB, joe"
@@ -422,9 +539,12 @@ end # @testset
 @testset "Aqua" begin
     # NOTE: in Julia 1.9 and older we intentionally do not load `PikaParser`
     # as it is only used when transforming type strings in 1.10
+
+    # NOTE: aqua incorrectly flags the split_union method as having unbound type arguments
     if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
-        Aqua.test_all(StableHashTraits)
+        Aqua.test_all(StableHashTraits; unbound_args=(; broken=true))
     else
-        Aqua.test_all(StableHashTraits; stale_deps=(; ignore=[:PikaParser]))
+        Aqua.test_all(StableHashTraits; stale_deps=(; ignore=[:PikaParser]),
+                      unbound_args=(; broken=true))
     end
 end
