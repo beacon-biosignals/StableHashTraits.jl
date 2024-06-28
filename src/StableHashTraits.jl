@@ -14,6 +14,10 @@ export stable_hash, HashVersion
 include("hash_algorithms.jl")
 # update_hash!, HashState, compute_hash!, start_nested_hash!, end_nested_hash!, similar_hash_state
 
+include("caching_context.jl")
+export CachedHash
+# StableHashTraits.UseCache
+
 include("hash_traits.jl")
 export HashAndContext, stable_typename_id, stable_type_id,
        WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,
