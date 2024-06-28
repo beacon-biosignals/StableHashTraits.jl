@@ -64,6 +64,39 @@ There are several useful, predefined contexts available in `StableHashTraits` th
 - [`WithTypeNames`](@ref)
 - [`TablesEq`](@ref)
 
+
+## Caching
+
+StableHashTraits caches hash results for all types and large values. This cache is initialized per call to `stable_hash`; to leverage the same cache over multiple calls you can create a [`CachedHash`](@ref),
+
+```julia
+context = CachedHash(HashVersion{3}())
+stable_hash(x, context)
+stable_hash(y, context) # previously cached values will be re-used
+```
+
+However, if you change or add any method definitions that are used to customize hashes (e.g. [`StableHashTraits.transformer`](@ref)) you will need to create a new context to avoid using stale hash values.
+
+If you know that a particular object will be hashed repeatedly, you can make sure that it is cached by wrapping it in a [`StableHashTraits.UseCache`](@ref) object during a call to [`StableHashTraits.transformer`](@ref).
+
+```julia
+using StableHashTraits
+using StableHashTraits: Transformer, UseCache
+
+struct Foo
+    x::Int
+    ref::Bar
+end
+
+struct Bar
+    data::Vector{Int}
+end
+
+foos = Foo.(rand(Int, 10_000), Ref(Bar(rand(Int, 1_000)))) # if `Bar` were larger its data would be automatically cached
+# do not repeatedly hash `Bar`:
+transformer(::Type{<:Bar}) = Transformer(UseCache)
+```
+
 ## Optimizing Custom Transformers
 
 By default, stable hash traits follows a safe, but slower code path for arbitrary functions passed to `Transformer`. However, in some cases it can use a faster code path, given that some assumptions about the types returned by the transforming function are maintained.

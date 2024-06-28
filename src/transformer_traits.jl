@@ -37,21 +37,21 @@ end
 function hash_type_and_value(x, hash_state, context)
     transform = transformer(typeof(x), context)::Transformer
     if transform.hoist_type
-        hash_state = hash_type!(hash_state, context, typeof(x))
+        hash_state = cache_hash_type!(hash_state, context, typeof(x))
     end
     tx = transform(x)
     check_hash_method(x, transform, context)
     if !transform.hoist_type
-        hash_state = hash_type!(hash_state, context, typeof(tx))
+        hash_state = cache_hash_type!(hash_state, context, typeof(tx))
     end
-    return stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
+    return cache_hash_value!(tx, hash_state, context, hash_trait(transform, tx))
 end
 
 # how we hash when the type hash can be hoisted out of a loop
 function hash_value(x, hash_state, context, transform::Transformer)
     tx = transform(x)
     check_hash_method(x, transform, context)
-    return stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
+    return cache_hash_value!(tx, hash_state, context, hash_trait(transform, tx))
 end
 
 # There are two cases where we want to hash types:
@@ -70,11 +70,11 @@ end
 #####
 
 """
-    hash_type!(hash_state, context, T)
+    hash_type(hash_state, context, T)
 
-Hash type `T` in the given context, updating `hash_state`.
+Get the hash of type `T` in the given context.
 """
-function hash_type!(hash_state, context, ::Type{T}) where {T}
+function hash_type(hash_state, context, ::Type{T}) where {T}
     # TODO: cache type hashing in the final release (no this PR)
     type_context = TypeHashContext(context)
     transform = transformer(typeof(T), type_context)
@@ -82,19 +82,15 @@ function hash_type!(hash_state, context, ::Type{T}) where {T}
     hash_type_state = similar_hash_state(hash_state)
     hash_type_state = stable_hash_helper(tT, hash_type_state, type_context,
                                          hash_trait(transform, tT))
-    bytes = reinterpret(UInt8, asarray(compute_hash!(hash_type_state)))
-
-    return update_hash!(hash_state, bytes, context)
+    return reinterpret(UInt8, asarray(compute_hash!(hash_type_state)))
 end
-asarray(x) = [x]
-asarray(x::AbstractArray) = x
 
 struct TypeHashContext{T}
     parent::T
 end
 TypeHashContext(x::TypeHashContext) = x
 parent_context(x::TypeHashContext) = x.parent
-hash_type!(hash_state, ::TypeHashContext, key::Type) = hash_state
+hash_type(hash_state, ::TypeHashContext, key::Type) = UInt8[]
 
 # pair_structure: When the internal structure of a type is `nothing`, avoid additional
 # tuple-nesting in the returned value to hash. This ensures that if we want two types to
@@ -127,15 +123,15 @@ struct TypeAsValueContext{T}
 end
 parent_context(x::TypeAsValueContext) = x.parent
 
-function hash_type!(hash_state, context, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type(hash_state, context, ::Type{<:Type})
+    return retinerpret(Vector{UInt}, "Base.Type")
 end
 # these methods are required to avoid method ambiguities
-function hash_type!(hash_state, context::TypeHashContext, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type(hash_state, context::TypeHashContext, ::Type{<:Type})
+    return retinerpret(Vector{UInt}, "Base.Type")
 end
-function hash_type!(hash_state, context::TypeAsValueContext, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type(hash_state, context::TypeAsValueContext, ::Type{<:Type})
+    return retinerpret(Vector{UInt}, "Base.Type")
 end
 
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
@@ -143,7 +139,7 @@ function transformer(::Type{<:Type}, context::TypeAsValueContext)
                                            internal_type_structure(T, StructType_(T))))
 end
 
-hash_type!(hash_state, ::TypeAsValueContext, ::Type) = hash_state
+hash_type(hash_state, ::TypeAsValueContext, ::Type) = UInt8[]
 function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where {T}
     type_context = TypeAsValueContext(context)
     transform = transformer(typeof(T), type_context)::Transformer

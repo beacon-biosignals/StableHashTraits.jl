@@ -8,6 +8,8 @@ StableHashTraits.Transformer
 pick_fields
 omit_fields
 StableHashTraits.TransformIdentity
+StableHashTraits.CachedHash
+StableHashTraits.UseCache
 StableHashTraits.hoist_type
 StableHashTraits.transform_type
 StableHashTraits.transform_type_value

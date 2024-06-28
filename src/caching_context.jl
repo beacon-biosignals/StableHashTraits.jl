@@ -88,12 +88,18 @@ unwrap(x) = x
 unwrap(x::UseCache) = x.val
 
 """
-    hash_value!(x, hash_state, context, trait)
+    cache_hash_value!(x, hash_state, context, trait)
 
 Hash the value of object x to the hash_state for the given context and hash trait.
 Caches types, larger values and those objects manually flagged to be cached.
 """
-function hash_value!(x::T, hash_state, context::CachedHash, trait) where {T}
+function cache_hash_value!(x::T, hash_state, context, trait) where {T}
+    return stable_hash_helper(x, hash_state, context, trait)
+end
+function cache_hash_value!(x::T, hash_state, context::HashVersion{4}, trait) where {T}
+    stable_hash_helper(x, hash_state, context, trait)
+end
+function cache_hash_value!(x::T, hash_state, context::CachedHash, trait) where {T}
     if x isa UseCache || (ismutable(x) && sizeof(unwrap(x)) >= CACHE_OBJECT_THRESHOLD)
         cache = ismutable(x) ? context.mutable_value_cache : context.immutable_value_cache
         bytes = get!(cache, unwrap(x)) do
@@ -106,40 +112,26 @@ function hash_value!(x::T, hash_state, context::CachedHash, trait) where {T}
         stable_hash_helper(x, hash_state, context, trait)
     end
 end
-# when types are hashed as values, we don't hash them using `hash_value!`, since the methods
-# implementing this fallback to calling `hash_type!`
-function hash_value!(x::Type, hash_state, context::CachedHash, trait)
-    return stable_hash_helper(x, hash_state, context, trait)
-end
+# # when types are hashed as values, we don't hash them using `hash_value!`, since the methods
+# # implementing this fallback to calling `hash_type`
+# function cache_hash_value!(x::Type, hash_state, context::CachedHash, trait)
+#     return stable_hash_helper(x, hash_state, context, trait)
+# end
 
 """
-    hash_type!(hash_state, context, T)
+    cache_hash_type!(hash_state, context, T)
 
 Hash type `T` in the given context to `hash_state`. The result is cached and future
-calls to `hash_type!` will hash the cached result.
+calls to `cache_hash_type!` will hash the cached result.
 """
-hash_type!(hash_state, x, key) = hash_type!(hash_state, parent_context(x), key)
-function hash_type!(hash_state, context::CachedHash, ::Type{T}) where {T}
+cache_hash_type!(hash_state, x, key) = cache_hash_type!(hash_state, parent_context(x), key)
+cache_hash_type!(hash_state, ::HashVersion{4}, key) = hash_type(hash_state, context, key)
+function cache_hash_type!(hash_state, context::CachedHash, ::Type{T}) where {T}
     bytes = get!(context.type_cache, T) do
-        type_context = TypeHashContext(context)
-        transform = transformer(typeof(T), type_context)
-        tT = transform(T)
-        hash_type_state = similar_hash_state(hash_state)
-        hash_type_state = stable_hash_helper(tT, hash_type_state, type_context,
-                                             hash_trait(transform, tT))
-        bytes = reinterpret(UInt8, asarray(compute_hash!(hash_type_state)))
-
-        return bytes
+        return hash_type(hash_state, context, T)
     end
     return update_hash!(hash_state, bytes, context)
 end
-
-struct TypeHashContext{T}
-    parent::T
-end
-TypeHashContext(x::TypeHashContext) = x
-parent_context(x::TypeHashContext) = x.parent
-hash_type!(hash_state, ::TypeHashContext, key::Type) = hash_state
 
 asarray(x) = [x]
 asarray(x::AbstractArray) = x

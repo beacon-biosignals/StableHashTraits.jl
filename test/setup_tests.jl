@@ -199,3 +199,26 @@ end
 
 struct WeirdTypeValue end
 StableHashTraits.transform_type_value(::Type{<:WeirdTypeValue}) = Int
+
+
+struct CachingType
+    data::Vector{Int}
+end
+global cache_type_hashed = 0
+
+struct ContainerType{T}
+    x::Int
+    ref::T
+end
+
+function StableHashTraits.transformer(::Type{<:CachingType})
+    return StableHashTraits.Transformer(StableHashTraits.UseCache)
+end
+
+function StableHashTraits.stable_hash_helper(x::CachingType, hash_state, context,
+                                             st::StructTypes.DataType)
+    global cache_type_hashed += 1
+    return invoke(StableHashTraits.stable_hash_helper,
+                  Tuple{Any,Any,Any,StructTypes.DataType}, x, hash_state,
+                  context, st)
+end
