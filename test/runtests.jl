@@ -410,7 +410,7 @@ include("setup_tests.jl")
                     test_hash(x)
                     @test cache_type_hashed == 1
 
-                    x = rand(Int8, StableHashTraits.CACHE_OBJECT_THRESHOLD+1)
+                    x = rand(Int8, StableHashTraits.CACHE_OBJECT_THRESHOLD + 1)
                     context = CachedHash(ctx)
                     test_hash(x, context)
                     @test !isempty(context.mutable_value_cache)

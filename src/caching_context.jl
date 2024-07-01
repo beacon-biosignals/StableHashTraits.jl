@@ -6,7 +6,6 @@
 # values, we should be fine
 const CACHE_OBJECT_THRESHOLD = 2^12
 
-
 """
     StableHashTraits.UseCache(x)
 
@@ -50,7 +49,7 @@ For an object to be cached you must either signal that it should be, using
   version, since changing it can change an object's hashed value).
 - mutable: immutable objects are not supported by WeakKeyIdDict. This means that caching
   immutable objects can lead to memory leaks if you don't clean up the cache regularly,
-  since they are stored in an IdDict. Note that in practice the large amounts of data are
+  since they are stored in an IdDict. Note that in practice large amounts of data are
   usually stored in mutable structures like `Array` and `String`; though immutable
   objects may contain these mutable values.
 

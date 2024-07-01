@@ -36,12 +36,17 @@ end
 # how we hash when we haven't hoisted the type hash out of a loop
 function hash_type_and_value(x, hash_state, context)
     transform = transformer(typeof(x), context)::Transformer
-    if transform.hoist_type && !hashing_a_type(context)
+    if hashing_a_type(context) # when we're in the context of hashing a type's value...
+        # ...only hash that value, don't hash the type of the type (this would be an
+        # infinite recursion)
+        return hash_value(x, hash_state, context, transform)
+    end
+    if transform.hoist_type
         hash_state = cache_hash_type!(hash_state, context, typeof(x))
     end
     tx = transform(x)
     check_hash_method(x, transform, context)
-    if !transform.hoist_type && !hashing_a_type(context)
+    if !transform.hoist_type
         hash_state = cache_hash_type!(hash_state, context, typeof(tx))
     end
     return cache_hash_value!(tx, hash_state, context, hash_trait(transform, tx))
@@ -75,7 +80,6 @@ end
 Get the hash of type `T` in the given context.
 """
 function hash_type(hash_state, context, ::Type{T}) where {T}
-    hashing_a_type(context) && return UInt8[]
     type_context = TypeHashContext(context)
     transform = transformer(typeof(T), type_context)
     tT = transform(T)

@@ -10,6 +10,8 @@ StableHashTraits.start_nested_hash!
 StableHashTraits.end_nested_hash!
 StableHashTraits.update_hash!
 StableHashTraits.compute_hash!
+StableHashTraits.cache_hash_type!
+StableHashTraits.cache_hash_value!
 ```
 
 Deprecated, non-public API methods; these will be deleted when the deprecated functionality is removed.

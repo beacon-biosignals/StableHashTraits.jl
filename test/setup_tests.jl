@@ -98,7 +98,6 @@ StableHashTraits.parent_context(x::CustomContext) = x.parent_context
 function StableHashTraits.hash_method(::CustomHashObject)
     return HashAndContext(StructHash(), CustomContext)
 end
-StableHashTraits.hash_method(::BasicHashObject) = StructHash()
 StableHashTraits.hash_method(::AbstractRange, ::CustomContext) = IterateHash()
 function StableHashTraits.hash_method(x::Any, c::CustomContext)
     return StableHashTraits.hash_method(x, c.parent_context)
@@ -199,7 +198,6 @@ end
 
 struct WeirdTypeValue end
 StableHashTraits.transform_type_value(::Type{<:WeirdTypeValue}) = Int
-
 
 struct CachingType
     data::Vector{Int}
