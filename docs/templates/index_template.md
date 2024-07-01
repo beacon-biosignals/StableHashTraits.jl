@@ -92,7 +92,7 @@ struct Bar
     data::Vector{Int}
 end
 
-foos = Foo.(rand(Int, 10_000), Ref(Bar(rand(Int, 1_000)))) # if `Bar` were larger its data would be automatically cached
+foos = Foo.(rand(Int, 10_000), Ref(Bar(rand(Int, 1_000)))) # NOTE: if `Bar` were larger its data would be automatically cached
 # do not repeatedly hash `Bar`:
 transformer(::Type{<:Bar}) = Transformer(UseCache)
 ```
