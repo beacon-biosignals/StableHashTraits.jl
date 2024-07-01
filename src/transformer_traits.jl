@@ -36,12 +36,12 @@ end
 # how we hash when we haven't hoisted the type hash out of a loop
 function hash_type_and_value(x, hash_state, context)
     transform = transformer(typeof(x), context)::Transformer
-    if transform.hoist_type
+    if transform.hoist_type && !hashing_a_type(context)
         hash_state = cache_hash_type!(hash_state, context, typeof(x))
     end
     tx = transform(x)
     check_hash_method(x, transform, context)
-    if !transform.hoist_type
+    if !transform.hoist_type && !hashing_a_type(context)
         hash_state = cache_hash_type!(hash_state, context, typeof(tx))
     end
     return cache_hash_value!(tx, hash_state, context, hash_trait(transform, tx))
@@ -75,7 +75,7 @@ end
 Get the hash of type `T` in the given context.
 """
 function hash_type(hash_state, context, ::Type{T}) where {T}
-    # TODO: cache type hashing in the final release (no this PR)
+    hashing_a_type(context) && return UInt8[]
     type_context = TypeHashContext(context)
     transform = transformer(typeof(T), type_context)
     tT = transform(T)
@@ -89,8 +89,10 @@ struct TypeHashContext{T}
     parent::T
 end
 TypeHashContext(x::TypeHashContext) = x
+hashing_a_type(x) = hashing_a_type(parent_context(x))
+hashing_a_type(::Nothing) = false
+hashing_a_type(x::TypeHashContext) = true
 parent_context(x::TypeHashContext) = x.parent
-hash_type(hash_state, ::TypeHashContext, key::Type) = UInt8[]
 
 # pair_structure: When the internal structure of a type is `nothing`, avoid additional
 # tuple-nesting in the returned value to hash. This ensures that if we want two types to
@@ -117,20 +119,15 @@ internal_type_structure(T, trait) = nothing
 
 struct TypeAsValue <: StructTypes.StructType end
 hash_trait(::Type) = TypeAsValue()
+StructType_(::Type{<:Type}) = TypeAsValue()
 
 struct TypeAsValueContext{T}
     parent::T
 end
 parent_context(x::TypeAsValueContext) = x.parent
+hashing_a_type(x::TypeAsValueContext) = true
 
 function hash_type(hash_state, context, ::Type{<:Type})
-    return Vector{UInt8}("Base.Type")
-end
-# these methods are required to avoid method ambiguities
-function hash_type(hash_state, ::TypeHashContext, ::Type{<:Type})
-    return Vector{UInt8}("Base.Type")
-end
-function hash_type(hash_state, ::TypeAsValueContext, ::Type{<:Type})
     return Vector{UInt8}("Base.Type")
 end
 
@@ -139,7 +136,6 @@ function transformer(::Type{<:Type}, context::TypeAsValueContext)
                                            internal_type_structure(T, StructType_(T))))
 end
 
-hash_type(hash_state, ::TypeAsValueContext, ::Type) = UInt8[]
 function stable_hash_helper(::Type{T}, hash_state, context, ::TypeAsValue) where {T}
     type_context = TypeAsValueContext(context)
     transform = transformer(typeof(T), type_context)::Transformer
@@ -155,6 +151,7 @@ end
 # serialized but here we want that to happen by default, so e.g. ==(2) will properly hash
 # both the name of `==` and `2`.
 hash_trait(::Function) = StructTypes.UnorderedStruct()
+StructType_(::Type{<:Function}) = StructTypes.UnorderedStruct()
 
 transform_type(::Type{T}) where {T<:Function} = nameof_string(T)
 

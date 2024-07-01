@@ -235,6 +235,9 @@ include("setup_tests.jl")
                     @test test_hash(Int) != test_hash("Base.Int")
                 end
                 @test test_hash(Float64) != test_hash(Int)
+                @test test_hash([Int, Char, String]) != test_hash([Int, Int, Int])
+                @test test_hash([typeof(==("foo")), typeof(==(1))]) !=
+                      test_hash([typeof(==(1)), typeof(==("foo"))])
                 if V >= 4
                     @test test_hash(missing) != test_hash("Base.Missing")
                     @test test_hash(nothing) != test_hash("Base.Nothing")

@@ -37,6 +37,10 @@ df = DataFrame(; x=1:N, y=1:N)
 missings_data = shuffle!([rand(Int, N); fill(missing, N >> 4)])
 non_missings_data = rand(Int, N + (N >> 4))
 
+# ideally we'd change the size here depending on the hash
+type_stand_in = rand(1:4, round(Int, N*(256/64)))
+types = rand((Int, String, Float64, Char), N)
+
 # Define a parent BenchmarkGroup to contain our suite
 const suite = BenchmarkGroup()
 
@@ -46,7 +50,9 @@ benchmarks = [(; name="dataframes", a=data1, b=df);
               (; name="strings", a=strings, b=strings);
               (; name="tuples", a=data1, b=data2);
               (; name="missings", a=non_missings_data, b=missings_data);
-              (; name="numbers", a=data, b=data)]
+              (; name="numbers", a=data, b=data);
+              (; name="repeated", a=data, b=(data, data, data, data));
+              (; name="types", a=type_stand_in, b=types)]
 
 for hashfn in (crc, sha256)
     hstr = nameof(hashfn)
@@ -54,14 +60,18 @@ for hashfn in (crc, sha256)
         for (; name, a, b) in benchmarks
             suite["$(name)_$(hstr)_$V"] = BenchmarkGroup([name])
             if name in ("strings", "symbols")
-                suite["$(name)_$(hstr)_$V"]["base"] = @benchmarkable $(hashfn)(str_to_data($a))
+                suite["$(name)_$(hstr)_$V"]["base"] = @benchmarkable begin
+                    $(hashfn)(str_to_data($a))
+                end
             else
-                suite["$(name)_$(hstr)_$V"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8,
-                                                                                           $a))
+                suite["$(name)_$(hstr)_$V"]["base"] = @benchmarkable begin
+                    $(hashfn)(reinterpret(UInt8, $a))
+                end
+
             end
-            suite["$(name)_$(hstr)_$V"]["trait"] = @benchmarkable $(stable_hash)($b,
-                                                                                 HashVersion{$(V)}();
-                                                                                 alg=$(hashfn))
+            suite["$(name)_$(hstr)_$V"]["trait"] = @benchmarkable begin
+                $(stable_hash)($b, HashVersion{$(V)}(); alg=$(hashfn))
+            end
         end
     end
 end

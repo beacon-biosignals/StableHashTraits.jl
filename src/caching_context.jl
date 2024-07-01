@@ -6,6 +6,31 @@
 # values, we should be fine
 const CACHE_OBJECT_THRESHOLD = 2^12
 
+
+"""
+    StableHashTraits.UseCache(x)
+
+Signal that the hash of `x` should be stored in the cache.
+
+!!! warning "Immutable objects can leak memory"
+    If `x` is immutable, caching it will cause the object `x` to be held in memory until the
+    cache is garbage collected. `WeakKeyIdDicts` do not support immutable objects. If there is
+    no user defined cache, the cache will be garbage collected inside the call to
+    [`stable_hash`](@ref). With a user defined hash you will need to make sure your cache
+    goes out of scope in a timely fashion to avoid memory leaks.
+
+## See Also
+
+[`transformer`](@ref)
+
+"""
+struct UseCache{T}
+    val::T
+end
+preserves_structure(::Type{<:UseCache}) = true
+unwrap(x) = x
+unwrap(x::UseCache) = x.val
+
 """
     CachedHash(context)
 
@@ -58,34 +83,27 @@ struct CachedHash{T}
 end
 CachedHash(x::CachedHash) = x
 parent_context(x::CachedHash) = x.parent
+type_cache(x::CachedHash) = x.type_cache
+type_cache(x) = type_cache(parent_context(x))
+type_cache(::Nothing) = nothing
+
+value_cache(x::CachedHash, ::Type) = x.immutable_value_cache
+function value_cache(x::CachedHash, ::UseCache)
+    return ismutable(x) ? x.mutable_value_cache : x.immutable_value_cache
+end
+function value_cache(c::CachedHash, x)
+    if ismutable(x) && sizeof(unwrap(x)) >= CACHE_OBJECT_THRESHOLD
+        return c.mutable_value_cache
+    else
+        return nothing
+    end
+end
+value_cache(c, x) = value_cache(parent_context(c), x)
+value_cache(::Nothing, _) = nothing
 
 function hash_value!(x, hash_state, context, trait)
     return hash_value!(x, hash_state, parent_context(context), trait)
 end
-
-"""
-    StableHashTraits.UseCache(x)
-
-Signal that the hash of `x` should be stored in the cache.
-
-!!! warning "Immutable objects can leak memory"
-    If `x` is immutable, caching it will cause the object `x` to be held in memory until the
-    cache is garbage collected. `WeakKeyIdDicts` do not support immutable objects. If there is
-    no user defined cache, the cache will be garbage collected inside the call to
-    [`stable_hash`](@ref). With a user defined hash you will need to make sure your cache
-    goes out of scope in a timely fashion to avoid memory leaks.
-
-## See Also
-
-[`transformer`](@ref)
-
-"""
-struct UseCache{T}
-    val::T
-end
-preserves_structure(::Type{<:UseCache}) = true
-unwrap(x) = x
-unwrap(x::UseCache) = x.val
 
 """
     cache_hash_value!(x, hash_state, context, trait)
@@ -93,15 +111,10 @@ unwrap(x::UseCache) = x.val
 Hash the value of object x to the hash_state for the given context and hash trait.
 Caches types, larger values and those objects manually flagged to be cached.
 """
-function cache_hash_value!(x::T, hash_state, context, trait) where {T}
-    return stable_hash_helper(x, hash_state, context, trait)
-end
-function cache_hash_value!(x::T, hash_state, context::HashVersion{4}, trait) where {T}
-    stable_hash_helper(x, hash_state, context, trait)
-end
-function cache_hash_value!(x::T, hash_state, context::CachedHash, trait) where {T}
-    if x isa UseCache || (!(x isa Type) && ismutable(x) && sizeof(unwrap(x)) >= CACHE_OBJECT_THRESHOLD)
-        cache = ismutable(x) ? context.mutable_value_cache : context.immutable_value_cache
+function cache_hash_value!(x, hash_state, context, trait)
+    # `x` can be a type when we are hashing a type as a value via `TypeAsValueContext`
+    cache = value_cache(context, x)
+    if !isnothing(cache)
         bytes = get!(cache, unwrap(x)) do
             cache_state = similar_hash_state(hash_state)
             stable_hash_helper(unwrap(x), cache_state, context, trait)
@@ -109,14 +122,9 @@ function cache_hash_value!(x::T, hash_state, context::CachedHash, trait) where {
         end
         return update_hash!(hash_state, bytes, context)
     else
-        stable_hash_helper(x, hash_state, context, trait)
+        return stable_hash_helper(x, hash_state, context, trait)
     end
 end
-# # when types are hashed as values, we don't hash them using `hash_value!`, since the methods
-# # implementing this fallback to calling `hash_type`
-# function cache_hash_value!(x::Type, hash_state, context::CachedHash, trait)
-#     return stable_hash_helper(x, hash_state, context, trait)
-# end
 
 """
     cache_hash_type!(hash_state, context, T)
@@ -124,16 +132,17 @@ end
 Hash type `T` in the given context to `hash_state`. The result is cached and future
 calls to `cache_hash_type!` will hash the cached result.
 """
-function cache_hash_type!(hash_state, context::CachedHash, ::Type{T}) where {T}
-    bytes = get!(context.type_cache, T) do
-        return hash_type(hash_state, context, T)
+function cache_hash_type!(hash_state, context, T)
+    cache = type_cache(context)
+    bytes = if isnothing(cache)
+        hash_type(hash_state, context, T)
+    else
+        get!(cache, T) do
+            return hash_type(hash_state, context, T)
+        end
     end
     return update_hash!(hash_state, bytes, context)
 end
-cache_hash_type!(hash_state, x, key) = cache_hash_type!(hash_state, parent_context(x), key)
-@inline cache_hash_type!(hash_state, c::TypeHashContext, T::Type) = hash_state
-@inline cache_hash_type!(hash_state, c::TypeAsValueContext, T::Type) = hash_state
-cache_hash_type!(hash_state, ::HashVersion{4}, key) = hash_type(hash_state, context, key)
 
 asarray(x) = [x]
 asarray(x::AbstractArray) = x
