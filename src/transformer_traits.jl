@@ -124,14 +124,14 @@ end
 parent_context(x::TypeAsValueContext) = x.parent
 
 function hash_type(hash_state, context, ::Type{<:Type})
-    return retinerpret(Vector{UInt}, "Base.Type")
+    return Vector{UInt8}("Base.Type")
 end
 # these methods are required to avoid method ambiguities
-function hash_type(hash_state, context::TypeHashContext, ::Type{<:Type})
-    return retinerpret(Vector{UInt}, "Base.Type")
+function hash_type(hash_state, ::TypeHashContext, ::Type{<:Type})
+    return Vector{UInt8}("Base.Type")
 end
-function hash_type(hash_state, context::TypeAsValueContext, ::Type{<:Type})
-    return retinerpret(Vector{UInt}, "Base.Type")
+function hash_type(hash_state, ::TypeAsValueContext, ::Type{<:Type})
+    return Vector{UInt8}("Base.Type")
 end
 
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
