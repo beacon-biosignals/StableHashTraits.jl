@@ -38,7 +38,7 @@ missings_data = shuffle!([rand(Int, N); fill(missing, N >> 4)])
 non_missings_data = rand(Int, N + (N >> 4))
 
 # ideally we'd change the size here depending on the hash
-type_stand_in = rand(1:4, round(Int, N*(256/64)))
+type_stand_in = rand(1:4, round(Int, N * (256 / 64)))
 types = rand((Int, String, Float64, Char), N)
 
 # Define a parent BenchmarkGroup to contain our suite
@@ -67,7 +67,6 @@ for hashfn in (crc, sha256)
                 suite["$(name)_$(hstr)_$V"]["base"] = @benchmarkable begin
                     $(hashfn)(reinterpret(UInt8, $a))
                 end
-
             end
             suite["$(name)_$(hstr)_$V"]["trait"] = @benchmarkable begin
                 $(stable_hash)($b, HashVersion{$(V)}(); alg=$(hashfn))
