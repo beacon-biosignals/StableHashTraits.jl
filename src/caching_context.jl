@@ -12,11 +12,12 @@ const CACHE_OBJECT_THRESHOLD = 2^12
 Signal that the hash of `x` should be stored in the cache.
 
 !!! warning "Immutable objects can leak memory"
-    If `x` is immutable, caching it will cause the object `x` to be held in memory until the
-    cache is garbage collected. `WeakKeyIdDicts` do not support immutable objects. If there is
-    no user defined cache, the cache will be garbage collected inside the call to
-    [`stable_hash`](@ref). With a user defined hash you will need to make sure your cache
-    goes out of scope in a timely fashion to avoid memory leaks.
+    If `x` is immutable, caching will cause the
+    object `x` to be held in memory until the cache is garbage collected. This is because
+    `WeakKeyIdDicts` do not support immutable objects. If there is no user defined cache,
+    the cache will be garbage collected inside the call to [`stable_hash`](@ref). With a
+    user defined hash and you apply `UseCache` to immutable objects, you will need to make
+    sure your cache goes out of scope in a timely fashion to avoid memory leaks.
 
 ## See Also
 
@@ -33,11 +34,11 @@ unwrap(x::UseCache) = x.val
 """
     CachedHash(context)
 
-Setup a hash context that includes a cache of hash results. By default, it stores the result
-of hashing types and large values. Calling the same cached hash context will re-use this
-cache, possibly improving performance. If you do not pass a `CachedHash` to `stable_hash` it
-sets up its own internal cache to improve performance for repeated hashes of the same type
-or large values seen *within* the call to `stable_hash`.
+Ensure that the given hash context includes a cache of hash results. By default, the cache
+stores the result of hashing types and large values. Calling the same cached hash context
+will re-use the cache, possibly improving performance. If you do not pass a `CachedHash` to
+`stable_hash` it sets up its own internal cache to improve performance for repeated hashes
+of the same type or large values seen *within* the call to `stable_hash`.
 
 For an object to be cached you must either signal that it should be, using
 [`UseCache`](@ref) or it must be:
@@ -50,8 +51,8 @@ For an object to be cached you must either signal that it should be, using
 - mutable: immutable objects are not supported by WeakKeyIdDict. This means that caching
   immutable objects can lead to memory leaks if you don't clean up the cache regularly,
   since they are stored in an IdDict. Note that in practice large amounts of data are
-  usually stored in mutable structures like `Array` and `String`; though immutable
-  objects may contain these mutable values.
+  usually stored in mutable structures like `Array` and `String`; though immutable objects
+  may contain these mutable values.
 
 ## See Also
 
@@ -82,6 +83,7 @@ struct CachedHash{T}
 end
 CachedHash(x::CachedHash) = x
 parent_context(x::CachedHash) = x.parent
+
 type_cache(x::CachedHash) = x.type_cache
 type_cache(x) = type_cache(parent_context(x))
 type_cache(::Nothing) = nothing

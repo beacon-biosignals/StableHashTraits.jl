@@ -165,7 +165,11 @@ Bottom line: It is not sufficient for the function to be type stable to safely s
 
 ## Customizing Type Hashes
 
-Types are hashed by hashing the return value of [`StableHashTraits.transform_type`](@ref) when hashing an object's type and the return value of [`StableHashTraits.transform_type_value`](@ref) when hashing a type as a value (e.g. `stable_hash(Int)`). The docs for these functions provide several examples of their usage.
+Types are hashed by hashing the return value of [`StableHashTraits.transform_type`](@ref)
+when hashing an object's type and the return value of
+[`StableHashTraits.transform_type_value`](@ref) when hashing a type as a value (e.g.
+`stable_hash(Int)`). The documentation for these functions provide several examples of their
+usage.
 
 In addition there is some structure of the type that is always hashed:
 
