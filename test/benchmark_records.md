@@ -91,7 +91,7 @@ function of only the type brings this down to about x10-60 times slower (dependi
 row). It appears that the calls to `get!` on the cached type hashes are a quite a bit slower
 than the cost of hashing the content of the object.
 
-The implementation used in 1.3 reduces the times in this table beyond what caching can
+The implementation used in 1.3 reduces the times in the benchmarks beyond what caching can
 accomplish alone by hoisting type hashes outside of loops (and still caching their results
 for future use). For example when hashing `Vector{Int}` the hash of the type `Int` is
 computed only when hashing the array type, not when hashing the individual elements.
@@ -100,48 +100,78 @@ This implementation makes two additional, smaller improvements:
 
 1. Objects that are large enough are hashed recursively and their results cached; this
    should help in cases where there are large repeated objects, and does not seem to have
-   noticebly affected the benchmarks below.
+   noticebly affected the benchmarks below. This use-case is tested in the `repeated`
+   benchmark.
 
 2. Type-hoisting has a special case for arrays of small unions, so that e.g.
-   Vector{Union{Missing, Int}} hashes quickly in the below benchmarks.
+   `Vector{Union{Missing, Int}}` hashes quickly in the below benchmarks.
 
 Note that, while the benchmarks here are quite good, this implementation is likely slower
 than Version 1.1 for deeply nested, type-unstable data structures
-(e.g. nested `Dict{Any, Any}`), as this use case will hit the `get!` calls that seem to be fairly slow, while the
-older implementation would hit the `@generated` function calls. However, such structures
-are presumably already quite slow to hash because of their type-instability.
+(e.g. nested `Dict{Any, Any}`), as this use case will hit the `get!` calls that seem to be fairly slow, while the older implementation would hit the `@generated` function calls.
+However, such structures are presumably already quite slow to hash because of their
+type-instability.
 
 ```
-28×6 DataFrame
+36×6 DataFrame
  Row │ benchmark   hash       version    base        trait       ratio
      │ SubStrin…   SubStrin…  SubStrin…  String      String      Float64
-─────┼─────────────────────────────────────────────────────────────────────
-   1 │ structs     crc        2          71.459 μs   895.083 μs  12.5258
-   2 │ tuples      crc        2          71.417 μs   740.875 μs  10.3739
-   3 │ missings    crc        2          38.167 μs   156.541 μs   4.10148
-   4 │ dataframes  crc        2          71.417 μs   207.459 μs   2.9049
-   5 │ numbers     crc        2          35.834 μs   102.209 μs   2.85229
-   6 │ symbols     crc        2          564.500 μs  517.333 μs   0.916445
-   7 │ strings     crc        2          572.375 μs  503.250 μs   0.879231
-   8 │ structs     sha256     2          549.041 μs  2.890 ms     5.26312
-   9 │ tuples      sha256     2          549.125 μs  2.445 ms     4.45277
-  10 │ missings    sha256     2          291.167 μs  487.333 μs   1.67372
-  11 │ symbols     sha256     2          1.422 ms    2.125 ms     1.49392
-  12 │ strings     sha256     2          1.407 ms    2.075 ms     1.47465
-  13 │ dataframes  sha256     2          549.375 μs  697.625 μs   1.26985
-  14 │ numbers     sha256     2          274.042 μs  345.625 μs   1.26121
-  15 │ structs     crc        3          71.500 μs   633.250 μs   8.85664
-  16 │ missings    crc        3          37.708 μs   204.708 μs   5.42877
-  17 │ tuples      crc        3          71.375 μs   373.875 μs   5.23818
-  18 │ dataframes  crc        3          73.417 μs   228.917 μs   3.11804
-  19 │ numbers     crc        3          35.792 μs   103.958 μs   2.9045
-  20 │ symbols     crc        3          586.625 μs  1.438 ms     2.45138
-  21 │ strings     crc        3          567.959 μs  309.417 μs   0.544788
-  22 │ structs     sha256     3          549.083 μs  1.572 ms     2.86371
-  23 │ tuples      sha256     3          549.042 μs  1.352 ms     2.46186
-  24 │ symbols     sha256     3          1.425 ms    2.791 ms     1.95831
-  25 │ missings    sha256     3          291.250 μs  486.708 μs   1.6711
-  26 │ dataframes  sha256     3          549.125 μs  723.709 μs   1.31793
-  27 │ numbers     sha256     3          274.042 μs  348.959 μs   1.27338
-  28 │ strings     sha256     3          1.410 ms    1.675 ms     1.18809
+─────┼──────────────────────────────────────────────────────────────────────
+   1 │ types       crc        3          143.375 μs  23.484 ms   163.794
+   2 │ structs     crc        3          70.791 μs   1.752 ms     24.7471
+   3 │ tuples      crc        3          70.666 μs   1.292 ms     18.2773
+   4 │ repeated    crc        3          35.291 μs   421.041 μs   11.9305
+   5 │ missings    crc        3          37.417 μs   201.209 μs    5.37748
+   6 │ dataframes  crc        3          70.208 μs   216.375 μs    3.08191
+   7 │ numbers     crc        3          35.125 μs   104.667 μs    2.97984
+   8 │ symbols     crc        3          770.500 μs  977.500 μs    1.26866
+   9 │ strings     crc        3          764.875 μs  827.459 μs    1.08182
+  10 │ types       sha256     3          1.148 ms    24.244 ms    21.1189
+  11 │ structs     sha256     3          573.959 μs  3.756 ms      6.54337
+  12 │ tuples      sha256     3          574.042 μs  3.035 ms      5.28663
+  13 │ repeated    sha256     3          286.583 μs  1.468 ms      5.12141
+  14 │ missings    sha256     3          304.584 μs  558.750 μs    1.83447
+  15 │ symbols     sha256     3          1.661 ms    2.685 ms      1.61662
+  16 │ strings     sha256     3          1.673 ms    2.553 ms      1.52644
+  17 │ dataframes  sha256     3          573.833 μs  740.334 μs    1.29016
+  18 │ numbers     sha256     3          286.667 μs  367.375 μs    1.28154
+  19 │ structs     crc        4          70.250 μs   1.080 ms     15.3742
+  20 │ tuples      crc        4          70.166 μs   661.792 μs    9.4318
+  21 │ missings    crc        4          37.458 μs   213.958 μs    5.71194
+  22 │ dataframes  crc        4          70.167 μs   264.792 μs    3.77374
+  23 │ repeated    crc        4          35.250 μs   115.000 μs    3.26241
+  24 │ numbers     crc        4          35.250 μs   111.875 μs    3.17376
+  25 │ symbols     crc        4          764.583 μs  1.990 ms      2.60322
+  26 │ types       crc        4          141.042 μs  177.875 μs    1.26115
+  27 │ strings     crc        4          764.125 μs  503.500 μs    0.658924
+  28 │ structs     sha256     4          573.834 μs  2.105 ms      3.66758
+  29 │ types       sha256     4          1.147 ms    3.875 ms      3.37752
+  30 │ tuples      sha256     4          573.708 μs  1.672 ms      2.91423
+  31 │ symbols     sha256     4          1.659 ms    3.478 ms      2.09653
+  32 │ missings    sha256     4          304.500 μs  517.750 μs    1.70033
+  33 │ dataframes  sha256     4          573.875 μs  787.125 μs    1.3716
+  34 │ repeated    sha256     4          286.667 μs  379.083 μs    1.32238
+  35 │ numbers     sha256     4          286.750 μs  375.000 μs    1.30776
+  36 │ strings     sha256     4          1.663 ms    1.988 ms      1.19518
 ```
+
+Note that neither the `type` nor `repeated` benchmarks existed in prior versions.
+
+### Without Caching
+
+If `get!` is so slow, is it worth caching types at all? What does performance look like when you disable caching? The new `types` benchmark hashes an array of random types selected from four possible options to determine what is gained by pre-computing the hash for data where the type must be hashed many times.
+
+With caching disabled, the `types` benchmark, degrades as follows:
+
+```
+36×6 DataFrame
+ Row │ benchmark   hash       version    base        trait       ratio
+     │ SubStrin…   SubStrin…  SubStrin…  String      String      Float64
+─────┼──────────────────────────────────────────────────────────────────────
+   1 │ types       crc        3          143.083 μs  23.857 ms   166.736
+  10 │ types       sha256     3          1.169 ms    24.367 ms    20.836
+  19 │ types       crc        4          143.041 μs  9.123 ms     63.7772
+  28 │ types       sha256     4          1.170 ms    8.773 ms      7.49915
+```
+
+Indicating that while `get!` is slow enough to be worth eliding when possible, it remains faster than hashing type values directly.

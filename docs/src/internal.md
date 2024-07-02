@@ -3,13 +3,15 @@
 Documented methods that are not part of the public API.
 
 ```@docs
-StableHashTraits.hash_type!
+StableHashTraits.hash_type
 StableHashTraits.HashState
 StableHashTraits.similar_hash_state
 StableHashTraits.start_nested_hash!
 StableHashTraits.end_nested_hash!
 StableHashTraits.update_hash!
 StableHashTraits.compute_hash!
+StableHashTraits.cache_hash_type!
+StableHashTraits.cache_hash_value!
 ```
 
 Deprecated, non-public API methods; these will be deleted when the deprecated functionality is removed.
