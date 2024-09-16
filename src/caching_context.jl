@@ -70,15 +70,10 @@ struct CachedHash{T}
     # `UseCache`. Such objects cannot be released until the `CacheHash` goes out of
     # scope
     immutable_value_cache::IdDict{Any,Vector{UInt8}}
-    # we have a private flag to signal that the cached hash was internally created, or
-    # defined by the user
-    user_defined::Bool
     function CachedHash(parent, types=IdDict{Type,Vector{UInt8}}(),
                         mutable_values=WeakKeyIdDict{Any,Vector{UInt8}}(),
-                        immutable_values=IdDict{Any,Vector{UInt8}}(),
-                        user_defined=false)
-        return new{typeof(parent)}(parent, types, mutable_values, immutable_values,
-                                   user_defined)
+                        immutable_values=IdDict{Any,Vector{UInt8}}())
+        return new{typeof(parent)}(parent, types, mutable_values, immutable_values)
     end
 end
 CachedHash(x::CachedHash) = x
