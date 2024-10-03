@@ -132,7 +132,6 @@ mutable struct BufferedHashState{T} <: HashState
     content_hash_state::T
     delimiter_hash_state::T
     total_bytes_hashed::Int
-    bytes::Vector{UInt8} # the bytes that back `io`
     delimiters::Vector{Int} # delimits the start of nested structures (for `start_nested_hash!`), positive is start, negative is stop
     limit::Int # the preferred limit on the size of `io`'s buffer
     io::IOBuffer
@@ -142,16 +141,14 @@ function BufferedHashState(state, size=HASH_BUFFER_SIZE)
     bytes = Vector{UInt8}(undef, size)
     delimiters = sizehint!(Vector{Int}(), 2size)
     io = IOBuffer(bytes; write=true, read=false)
-    return BufferedHashState(state, similar_hash_state(state), 0, bytes, delimiters, size,
-                             io)
+    return BufferedHashState(state, similar_hash_state(state), 0, delimiters, size, io)
 end
 
 # flush bytes that are stored internally to the underlying hasher
 function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
     # the default `limit` tries to flush before the allocated buffer increases in size
     if position(x.io) ≥ limit
-        x.content_hash_state = update_hash!(x.content_hash_state,
-                                            @view x.bytes[1:position(x.io)])
+        x.content_hash_state = update_hash!(x.content_hash_state, take!(x.io))
         # we copy reinterpreted because, e.g. `crc32c` will not accept a reinterpreted array
         # (and copying here does not noticeably worsen the benchmarks)
         x.delimiter_hash_state = update_hash!(x.delimiter_hash_state,
