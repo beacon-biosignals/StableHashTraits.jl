@@ -182,6 +182,12 @@ function update_hash!(hasher::BufferedHashState, obj, context)
     return hasher
 end
 
+function update_hash!(hasher::BufferedHashState, obj)
+    write(hasher.io, obj)
+    flush_bytes!(hasher)
+    return hasher
+end
+
 function compute_hash!(x::BufferedHashState)
     flush_bytes!(x, 0)
     # recursively hash the delimiter hash state into the content hash

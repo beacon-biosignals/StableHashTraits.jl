@@ -443,6 +443,7 @@ include("setup_tests.jl")
         @test_deprecated(UseTable())
         @test_deprecated(HashVersion{1}())
         @test_deprecated(HashVersion{2}())
+        @test_deprecated(HashVersion{3}())
 
         # verify that if a type only has implementations for `hash_method`
         # and not `transformer` they'll get a warning
