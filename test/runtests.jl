@@ -6,26 +6,29 @@ include("setup_tests.jl")
     crc(x, s=0x000000) = crc32c(collect(x), s)
     crc(x::Union{SubArray{UInt8},Vector{UInt8}}, s=0x000000) = crc32c(x, s)
 
-    @testset "Older Reference Tests" begin
-        @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=crc)
-        @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=crc)
-        @test_reference "references/ref22.txt" stable_hash(sin; alg=crc)
-        @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=crc)
-        @test_reference "references/ref24.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
-                                                           TablesEq(); alg=crc)
-        @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=crc)
+    if VERSION <= v"1.10"
+        @testset "Older Reference Tests" begin
+            @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=crc)
+            @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=crc)
+            @test_reference "references/ref22.txt" stable_hash(sin; alg=crc)
+            @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=crc)
+            @test_reference "references/ref24.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
+                                                            TablesEq(); alg=crc)
+            @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=crc)
 
-        # get some code coverage (and reference tests) for sha1
-        @test_reference "references/ref26.txt" bytes2hex(stable_hash([1, 2, 3]; alg=sha1))
-        @test_reference "references/ref27.txt" bytes2hex(stable_hash(v"0.1.0"; alg=sha1))
-        @test_reference "references/ref28.txt" bytes2hex(stable_hash(sin; alg=sha1))
-        @test_reference "references/ref29.txt" bytes2hex(stable_hash(Set(1:3); alg=sha1))
-        @test_reference "references/ref30.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
-                                                                               y=1:10),
-                                                                     TablesEq(); alg=sha1))
-        @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
+            # get some code coverage (and reference tests) for sha1
+            @test_reference "references/ref26.txt" bytes2hex(stable_hash([1, 2, 3]; alg=sha1))
+            @test_reference "references/ref27.txt" bytes2hex(stable_hash(v"0.1.0"; alg=sha1))
+            @test_reference "references/ref28.txt" bytes2hex(stable_hash(sin; alg=sha1))
+            @test_reference "references/ref29.txt" bytes2hex(stable_hash(Set(1:3); alg=sha1))
+            @test_reference "references/ref30.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
+                                                                                y=1:10),
+                                                                        TablesEq(); alg=sha1))
+            @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
+        end
     end
 
+    versions = VERSION > v"1.10" ? (4,) : (1, 2, 3, 4)
     for V in (1, 2, 3, 4), hashfn in (sha256, sha1, crc32c)
         hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
