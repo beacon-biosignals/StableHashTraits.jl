@@ -34,7 +34,7 @@ include("setup_tests.jl")
     end
 
     versions = VERSION.minor > 10 ? (4,) : (1, 2, 3, 4)
-    for V in (1, 2, 3, 4), hashfn in (sha256, sha1, crc32c)
+    for V in versions, hashfn in (sha256, sha1, crc32c)
         hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
