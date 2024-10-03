@@ -453,7 +453,9 @@ include("setup_tests.jl")
         @test_logs stable_hash(TestType2(1, 2); version=4)
     end
 
-    if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION && !(VERSION < v"1.11-")
+    if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION &&
+       !(VERSION < v"1.11-")
+
         @testset "PikaParser" begin
             using StableHashTraits.StableNames: parse_brackets, parse_walker, Parsed,
                                                 ParseError, cleanup_named_tuple_type
