@@ -33,7 +33,7 @@ include("setup_tests.jl")
         end
     end
 
-    versions = VERSION.minor > 10 ? (4,) : (1, 2, 3, 4)
+    versions = VERSION >= v"1.11-" ? (4,) : (1, 2, 3, 4)
     for V in versions, hashfn in (sha256, sha1, crc32c)
         hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
@@ -410,10 +410,10 @@ include("setup_tests.jl")
             if V > 1 && hashfn == sha256
                 @testset "Hash-invariance to buffer size" begin
                     data = (rand(Int8, 2), rand(Int8, 2))
-                    wrapped1 = StableHashTraits.HashState(sha256, HashVersion{1}())
+                    wrapped1 = StableHashTraits.HashState(sha256, HashVersion{4}())
                     alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1,
                                                                                       sizeof(qualified_name(Int8[]))))
-                    wrapped2 = StableHashTraits.HashState(sha256, HashVersion{1}())
+                    wrapped2 = StableHashTraits.HashState(sha256, HashVersion{4}())
                     alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2,
                                                                                       2sizeof(qualified_name(Int8[]))))
                     # verify that the hashes are the same...
@@ -423,10 +423,6 @@ include("setup_tests.jl")
                     # buffer sizes while updating the hash state...
                     @test alg_small.positions != alg_large.positions
                 end
-                # NOTE: the hash is *not* invariant to the CACHE_OBJECT_THRESHOLD since this
-                # is the object size overwhich the hash becomes recursively computed rather
-                # than computed using the buffered hash (which uses list of indices to
-                # denote nesting)
             end
         end # @testset
     end # for
@@ -457,7 +453,7 @@ include("setup_tests.jl")
         @test_logs stable_hash(TestType2(1, 2); version=4)
     end
 
-    if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION && VERSION.minor <= 10
+    if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION && !(VERSION < v"1.11-")
         @testset "PikaParser" begin
             using StableHashTraits.StableNames: parse_brackets, parse_walker, Parsed,
                                                 ParseError, cleanup_named_tuple_type
