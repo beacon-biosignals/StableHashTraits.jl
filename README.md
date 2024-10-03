@@ -50,8 +50,7 @@ StableHashTraits is designed to be used in cases where there is an object you wi
 
 This covers the behavior when using the latest hash version (4). You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2-3 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
 
-When you call `stable_hash(x; version=4)`, StableHashTraits hashes both the value `x` and its type `T`. Rather than hashing the type `T` itself directly, in most cases instead `SructTypes.StructType(T)` is hashed, using
-[SructTypes.jl](https://github.com/JuliaData/StructTypes.jl). For example, since the "StructType" of Float64 and Float32 are both `NumberType`, when hashing Float64 and Float32 values, value and `NumberType` are hashed. This provides a simple trait-based system that doesn't need to rely on internal details. See below for more details.
+When you call `stable_hash(x; version=4)`, StableHashTraits hashes both the value `x` and its type `T`. Rather than hashing the type `T` itself directly, in most cases instead `StructTypes.StructType(T)` is hashed, using [StructTypes.jl](https://github.com/JuliaData/StructTypes.jl). For example, since the "StructType" of Float64 and Float32 are both `NumberType`, when hashing Float64 and Float32 values, value and `NumberType` are hashed. This provides a simple trait-based system that doesn't need to rely on internal details. See below for more details.
 
 You can customize how the value is hashed using [`StableHashTraits.transformer`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transformer),
 and how its type is hashed using [`StableHashTraits.transform_type`](https://beacon-biosignals.github.io/StableHashTraits.jl/stable/api/#StableHashTraits.transform_type).
