@@ -51,11 +51,12 @@ that both `hash_method` and `StableHashTraits.write` are deprecated.
 stable_hash(x; alg=sha256, version=1) = stable_hash(x, HashVersion{version}(); alg)
 function stable_hash(x, context; alg=sha256)
     if root_version(context) < 4
-        if VERSION >= v"1.11"
+        if VERSION.minor > 10
             @warn "`stable_hash(x; version < 4)` is not supported in Julia 1.11 or " *
-                  "higher. Please move to using `stable_hash(x; version=4)` to prevent " *
-                  "unstable hashing. Ignoring this message will likely lead to missed " *
-                  "cache hits, as that is `stable_hash`'s intended use case." maxlog = 1
+                  "higher. Calls should not error, but *may* silently produce different " *
+                  "hashes. `stable_hash` is intended to be used for caching, so this " *
+                  "likely will simply reduce the number of cache hits. Upgrade to " *
+                  "using `stable_hash(x; version=4) to avoid this warning." maxlog = 1
         end
         return compute_hash!(deprecated_hash_helper(x, HashState(alg, context), context,
                                                     hash_method(x, context)))

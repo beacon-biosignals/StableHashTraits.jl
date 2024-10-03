@@ -33,7 +33,7 @@ include("setup_tests.jl")
         end
     end
 
-    versions = VERSION > v"1.10" ? (4,) : (1, 2, 3, 4)
+    versions = VERSION.minor > 10 ? (4,) : (1, 2, 3, 4)
     for V in (1, 2, 3, 4), hashfn in (sha256, sha1, crc32c)
         hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
@@ -457,7 +457,7 @@ include("setup_tests.jl")
         @test_logs stable_hash(TestType2(1, 2); version=4)
     end
 
-    if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
+    if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION && VERSION.minor <= 10
         @testset "PikaParser" begin
             using StableHashTraits.StableNames: parse_brackets, parse_walker, Parsed,
                                                 ParseError, cleanup_named_tuple_type
