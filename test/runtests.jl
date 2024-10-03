@@ -13,18 +13,23 @@ include("setup_tests.jl")
             @test_reference "references/ref22.txt" stable_hash(sin; alg=crc)
             @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=crc)
             @test_reference "references/ref24.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
-                                                            TablesEq(); alg=crc)
+                                                               TablesEq(); alg=crc)
             @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=crc)
 
             # get some code coverage (and reference tests) for sha1
-            @test_reference "references/ref26.txt" bytes2hex(stable_hash([1, 2, 3]; alg=sha1))
-            @test_reference "references/ref27.txt" bytes2hex(stable_hash(v"0.1.0"; alg=sha1))
+            @test_reference "references/ref26.txt" bytes2hex(stable_hash([1, 2, 3];
+                                                                         alg=sha1))
+            @test_reference "references/ref27.txt" bytes2hex(stable_hash(v"0.1.0";
+                                                                         alg=sha1))
             @test_reference "references/ref28.txt" bytes2hex(stable_hash(sin; alg=sha1))
-            @test_reference "references/ref29.txt" bytes2hex(stable_hash(Set(1:3); alg=sha1))
+            @test_reference "references/ref29.txt" bytes2hex(stable_hash(Set(1:3);
+                                                                         alg=sha1))
             @test_reference "references/ref30.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
-                                                                                y=1:10),
-                                                                        TablesEq(); alg=sha1))
-            @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
+                                                                                   y=1:10),
+                                                                         TablesEq();
+                                                                         alg=sha1))
+            @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4];
+                                                                         alg=sha1))
         end
     end
 
