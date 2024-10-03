@@ -150,7 +150,6 @@ end
 function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
     # the default `limit` tries to flush before the allocated buffer increases in size
     if position(x.io) ≥ limit
-        Main.@infiltrate
         x.content_hash_state = update_hash!(x.content_hash_state,
                                             @view x.bytes[1:position(x.io)])
         # we copy reinterpreted because, e.g. `crc32c` will not accept a reinterpreted array
