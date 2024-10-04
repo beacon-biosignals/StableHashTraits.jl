@@ -282,7 +282,7 @@ throw an error, as no stable name is possible in this case.
 @inline module_nameof_string(m::Module) = module_nameof_(m)
 @inline module_nameof_string(::Type{T}) where {T} = handle_unions_(T, module_nameof_)
 @inline function module_nameof_(::Type{T}) where {T}
-    return module_nameof_(T)
+    return validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
 end
 
 # TODO: use `Pluto.is_inside_pluto` when/if it is implemented
@@ -291,8 +291,14 @@ function is_inside_pluto(mod::Module)
         isdefined(mod, Symbol("@bind"))
 end
 
-@inline function module_nameof_(T)
-    mod = parentmodule(T)
+function validate_name(str)
+    if occursin("#", str)
+        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value: found type $str"))
+    end
+    return str
+end
+
+function clean_module(mod)
     module_str = string(mod)
     # keep modules stable acros Pluto runs
     if is_inside_pluto(mod)
@@ -301,9 +307,13 @@ end
         module_str = replace(module_str, r"workspace#[0-9]+" => "PlutoWorkspace") # julia < 1.8
     end
     # Core vs. Base is a known implementation detail
-    module_str = replace(str, "Core" => "Base")
+    module_str = replace(module_str, "Core" => "Base")
 
-    return validate_name(module_str * "." * String(nameof(T)))
+    return module_str
+end
+
+@inline function module_nameof_(T)
+    return validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
 end
 
 @static if VERSION < v"1.9"

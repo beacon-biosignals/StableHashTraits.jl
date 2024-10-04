@@ -6,6 +6,12 @@ include("setup_tests.jl")
     crc(x, s=0x000000) = crc32c(collect(x), s)
     crc(x::Union{SubArray{UInt8},Vector{UInt8}}, s=0x000000) = crc32c(x, s)
 
+    @testset "Old hash versions generate an error" begin
+        for version in (1, 3, 3)
+            @test_throws ArgumentError stable_hash(1; version)
+        end
+    end
+
     for V in (4,), hashfn in (sha256, sha1, crc32c)
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
@@ -95,26 +101,17 @@ include("setup_tests.jl")
 
             # test out HashAndContext
             @testset "Contexts" begin
-                @test_throws ArgumentError test_hash("bob", BadRootContext())
-                @test test_hash(1, BadRootContext()) isa Union{Unsigned,Vector{UInt8}}
+                @test_throws MethodError test_hash("bob", BadRootContext())
             end
 
             @testset "Sequences" begin
                 @test test_hash([1 2; 3 4]) != test_hash(vec([1 2; 3 4]))
                 @test test_hash([1 2; 3 4]) == test_hash([1 3; 2 4]')
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4])
-                @test test_hash([1 2; 3 4], ViewsEq(ctx)) !=
-                      test_hash(vec([1 2; 3 4]), ViewsEq(ctx))
-                @test test_hash([1 2; 3 4], ViewsEq(ctx)) ==
-                      test_hash([1 3; 2 4]', ViewsEq(ctx))
-                @test test_hash([1 2; 3 4], ViewsEq(ctx)) !=
-                      test_hash([1 3; 2 4], ViewsEq(ctx))
                 @test test_hash(reshape(1:10, 2, 5)) != test_hash(reshape(1:10, 5, 2))
                 @test test_hash(view(collect(1:5), 1:2)) == test_hash([1, 2])
                 @test test_hash(view(collect(1:5), 1:2), WithTypeNames(ctx)) !=
                         test_hash([1, 2], WithTypeNames(ctx))
-                @test test_hash(view(collect(1:5), 1:2), ViewsEq(ctx)) ==
-                      test_hash([1, 2], ViewsEq(ctx))
 
                 @test test_hash([]) != test_hash([(), (), ()])
                 @test test_hash([(), ()]) != test_hash([(), (), ()])
@@ -140,8 +137,6 @@ include("setup_tests.jl")
                 @test test_hash(view("bob", 1:2)) == test_hash("bo")
                 @test test_hash(view("bob", 1:2), WithTypeNames(ctx)) !=
                         test_hash("bo", WithTypeNames(ctx))
-                @test test_hash(view("bob", 1:2), ViewsEq(ctx)) ==
-                      test_hash("bo", ViewsEq(ctx))
                 @test test_hash(S3Path("s3://foo/bar")) != test_hash(S3Path("s3://foo/baz"))
             end
 
@@ -176,9 +171,6 @@ include("setup_tests.jl")
             end
 
             @testset "Custom transformer method" begin
-                @test @ConstantHash(5).constant isa UInt64
-                @test @ConstantHash("foo").constant isa UInt64
-                @test_throws ArgumentError @ConstantHash(1 + 2)
                 @test test_hash(ExtraTypeParams{:A,Int}(2)) !=
                       test_hash(ExtraTypeParams{:B,Int}(2))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType(1, 2))
@@ -221,10 +213,10 @@ include("setup_tests.jl")
                 struct MyStruct end
 
                 # ╔═╡ 1e683f1d-f5f6-4064-970c-1facabcf61cc
-                stable_hash(MyStruct()) |> bytes2hex_
+                stable_hash(MyStruct(); version=4) |> bytes2hex_
 
                 # ╔═╡ f8f3a7a4-544f-456f-ac63-5b5ce91a071a
-                stable_hash((a=MyStruct, b=(c=MyStruct(), d=2))) |> bytes2hex_
+                stable_hash((a=MyStruct, b=(c=MyStruct(), d=2)); version=4) |> bytes2hex_
 
                 # ╔═╡ Cell order:
                 # ╠═3592b099-9c96-4939-94b8-7ef2614b0955
@@ -323,11 +315,10 @@ include("setup_tests.jl")
             @testset "Hash-invariance to buffer size" begin
                 data = (rand(Int8, 2), rand(Int8, 2))
                 wrapped1 = StableHashTraits.HashState(sha256, HashVersion{V}())
-                alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1,
-                                                                                    sizeof(qualified_name(Int8[]))))
+                alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1, 3))
+
                 wrapped2 = StableHashTraits.HashState(sha256, HashVersion{V}())
-                alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2,
-                                                                                    2sizeof(qualified_name(Int8[]))))
+                alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2, 20))
                 # verify that the hashes are the same...
                 @test stable_hash(data, ctx; alg=alg_small) ==
                         stable_hash(data, ctx; alg=alg_large)

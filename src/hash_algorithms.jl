@@ -11,20 +11,8 @@
 
 Returns the updated hash state given a set of bytes (either a tuple or array of UInt8
 values).
-
-    update_hash!(state::HashState, obj, context)
-
-Returns the updated hash, given an object and some context. The object will
-be written to some bytes using `StableHashTraits.write(io, obj, context)`.
 """
 function update_hash! end
-
-# when a hasher has no internal buffer, we allocate one for each call to `update_hash!`
-function update_hash!(hasher, x, context)
-    io = IOBuffer()
-    write(io, x, context)
-    return update_hash!(hasher, take!(io))
-end
 
 """
     HashState(alg, context)
@@ -169,16 +157,8 @@ function end_nested_hash!(root::BufferedHashState, x::BufferedHashState)
     return x
 end
 
-function update_hash!(hasher::BufferedHashState, obj, context)
-    # TODO: when we remove `deprecated.jl`, change this to `Base.write` and remove the
-    # `context` parameters
-    write(hasher.io, obj, context)
-    flush_bytes!(hasher)
-    return hasher
-end
-
 function update_hash!(hasher::BufferedHashState, obj)
-    write(hasher.io, obj)
+    Base.write(hasher.io, obj)
     flush_bytes!(hasher)
     return hasher
 end

@@ -55,7 +55,7 @@ function hash_type!(hash_state, context, ::Type{T}) where {T}
                                          hash_trait(transform, tT))
     bytes = reinterpret(UInt8, asarray(compute_hash!(hash_type_state)))
 
-    return update_hash!(hash_state, bytes, context)
+    return update_hash!(hash_state, bytes)
 end
 asarray(x) = [x]
 asarray(x::AbstractArray) = x
@@ -98,15 +98,15 @@ struct TypeAsValueContext{T}
 end
 parent_context(x::TypeAsValueContext) = x.parent
 
-function hash_type!(hash_state, context, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type!(hash_state, ::Any, ::Type{<:Type})
+    return update_hash!(hash_state, "Base.Type")
 end
 # these methods are required to avoid method ambiguities
-function hash_type!(hash_state, context::TypeHashContext, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type!(hash_state, ::TypeHashContext, ::Type{<:Type})
+    return update_hash!(hash_state, "Base.Type")
 end
-function hash_type!(hash_state, context::TypeAsValueContext, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type!(hash_state, ::TypeAsValueContext, ::Type{<:Type})
+    return update_hash!(hash_state, "Base.Type")
 end
 
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
@@ -367,18 +367,18 @@ end
 
 function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
     nested_hash_state = start_nested_hash!(hash_state)
-    update_hash!(nested_hash_state, str isa AbstractString ? str : string(str), context)
+    update_hash!(nested_hash_state, str isa AbstractString ? str : string(str))
     return end_nested_hash!(hash_state, nested_hash_state)
 end
 
 function stable_hash_helper(number::T, hash_state, context,
                             ::StructTypes.NumberType) where {T}
     U = StructTypes.numbertype(T)
-    return update_hash!(hash_state, U(number), context)
+    return update_hash!(hash_state, U(number))
 end
 
 function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
-    return update_hash!(hash_state, Bool(bool), context)
+    return update_hash!(hash_state, Bool(bool))
 end
 
 # null types are encoded purely by their type hash

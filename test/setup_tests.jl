@@ -50,8 +50,6 @@ function StableHashTraits.transformer(::Type{<:TestType3})
     return StableHashTraits.Transformer(pick_fields(:a, :b))
 end
 
-StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
-
 StableHashTraits.transform_type(::Type{<:TestType2}) = "TestType2"
 StructTypes.StructType(::Type{<:TestType4}) = StructTypes.OrderedStruct()
 
@@ -100,7 +98,6 @@ struct Singleton1 end
 struct Singleton2 end
 
 struct BadRootContext end
-StableHashTraits.parent_context(::BadRootContext) = nothing
 StableHashTraits.transformer(::Type{Int}, ::BadRootContext) = StableHashTraits.Transformer()
 
 mutable struct CountedBufferState
