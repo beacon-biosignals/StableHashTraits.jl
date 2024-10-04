@@ -410,10 +410,10 @@ include("setup_tests.jl")
             if V > 1 && hashfn == sha256
                 @testset "Hash-invariance to buffer size" begin
                     data = (rand(Int8, 2), rand(Int8, 2))
-                    wrapped1 = StableHashTraits.HashState(sha256, HashVersion{4}())
+                    wrapped1 = StableHashTraits.HashState(sha256, HashVersion{V}())
                     alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1,
                                                                                       sizeof(qualified_name(Int8[]))))
-                    wrapped2 = StableHashTraits.HashState(sha256, HashVersion{4}())
+                    wrapped2 = StableHashTraits.HashState(sha256, HashVersion{V}())
                     alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2,
                                                                                       2sizeof(qualified_name(Int8[]))))
                     # verify that the hashes are the same...

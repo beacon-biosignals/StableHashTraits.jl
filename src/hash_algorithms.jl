@@ -146,8 +146,10 @@ end
 
 # flush bytes that are stored internally to the underlying hasher
 function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
-    # the default `limit` tries to flush before the allocated buffer increases in size
+    # the default `limit` tries to flush before the allocated buffer has to be increased in
+    # size
     if position(x.io) ≥ limit
+        x.total_bytes_hashed += position(x.io) # tack total number of bytes that have been hashed
         x.content_hash_state = update_hash!(x.content_hash_state, take!(x.io))
         # we copy reinterpreted because, e.g. `crc32c` will not accept a reinterpreted array
         # (and copying here does not noticeably worsen the benchmarks)
@@ -155,8 +157,6 @@ function flush_bytes!(x::BufferedHashState, limit=x.limit - (x.limit >> 2))
                                               copy(reinterpret(UInt8, x.delimiters)))
 
         empty!(x.delimiters)
-        x.total_bytes_hashed += position(x.io) # tack total number of bytes that have been hashed
-        seek(x.io, 0)
     end
     return x
 end
