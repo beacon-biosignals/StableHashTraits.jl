@@ -76,7 +76,6 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
         # we cheat a little here, technically `SHA_CTX` and friends are not `HashState`
         # but we make them satisfy the same interface below
         @eval function HashState(::typeof(SHA.$(fn)), context)
-            root_version(context) < 2 && return SHA.$(CTX)()
             return BufferedHashState(SHA.$(CTX)())
         end
     end
@@ -101,7 +100,6 @@ similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
 #####
 
 function HashState(fn::Function, context)
-    root_version(context) < 2 && return RecursiveHashState(fn)
     return BufferedHashState(RecursiveHashState(fn))
 end
 

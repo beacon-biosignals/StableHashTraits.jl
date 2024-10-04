@@ -49,15 +49,12 @@ end
     StableHashTraits.parent_context(context)
 
 Return the parent context of the given context object. (See [`hash_method`](@ref) and
-[`StableHashTraits.@context`](@ref) for details of using context). The default method falls back to returning
-`HashVersion{1}`, but this is flagged as a deprecation warning; in the future it is expected
-that all contexts define this method.
+[`StableHashTraits.@context`](@ref) for details of using context).
 
 This is normally all that you need to know to implement a new context. However, if your
 context is expected to be the root context—one that does not fallback to any parent (akin to
 `HashVersion`)—then there may be a bit more work involved. In this case, `parent_context`
-should return `nothing`. You will also need to define
-[`StableHashTraits.root_version`](@ref).
+should return `nothing`.
 """
 function parent_context end
 
@@ -285,7 +282,7 @@ throw an error, as no stable name is possible in this case.
 @inline module_nameof_string(m::Module) = module_nameof_(m)
 @inline module_nameof_string(::Type{T}) where {T} = handle_unions_(T, module_nameof_)
 @inline function module_nameof_(::Type{T}) where {T}
-    return validate_name(cleanup_name(string(parentmodule(T)) * "." * String(nameof(T))))
+    return module_nameof_(T)
 end
 
 # TODO: use `Pluto.is_inside_pluto` when/if it is implemented
@@ -304,9 +301,9 @@ end
         module_str = replace(module_str, r"workspace#[0-9]+" => "PlutoWorkspace") # julia < 1.8
     end
     # Core vs. Base is a known implementation detail
-    module_str = replace(str, r"^Core\." => "Base.")
+    module_str = replace(str, "Core" => "Base")
 
-    return validate_name(cleanup_name(module_str * "." * String(nameof(T))))
+    return validate_name(module_str * "." * String(nameof(T)))
 end
 
 @static if VERSION < v"1.9"
@@ -375,10 +372,10 @@ possible in this case.
 @inline nameof_string(::Type{T}) where {T} = handle_unions_(T, nameof_)
 hoist_type(::typeof(nameof_string)) = true
 @inline function nameof_(::Type{T}) where {T}
-    return validate_name(cleanup_name(String(nameof(T))))
+    return validate_name(String(nameof(T)))
 end
 @inline function nameof_(T)
-    return validate_name(cleanup_name(String(nameof(T))))
+    return validate_name(String(nameof(T)))
 end
 
 """

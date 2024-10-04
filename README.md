@@ -240,6 +240,10 @@ julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
 
 ## Breaking changes
 
+### In 2.0
+
+All deprecated behavior has been removed; the only hash version available is 4.
+
 ### In 1.3
 
 This release includes a new hash version 4 that has breaking API changes relative to earlier versions, documented above. The prior API is deprecated, however remains the default to avoid breaking users's code. In version 2 of StableHashTraits, which will be released in relatively short order, only hash version 4 will be available.
