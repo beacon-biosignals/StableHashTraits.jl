@@ -6,27 +6,35 @@ include("setup_tests.jl")
     crc(x, s=0x000000) = crc32c(collect(x), s)
     crc(x::Union{SubArray{UInt8},Vector{UInt8}}, s=0x000000) = crc32c(x, s)
 
-    @testset "Older Reference Tests" begin
-        @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=crc)
-        @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=crc)
-        @test_reference "references/ref22.txt" stable_hash(sin; alg=crc)
-        @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=crc)
-        @test_reference "references/ref24.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
-                                                           TablesEq(); alg=crc)
-        @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=crc)
+    if VERSION <= v"1.10"
+        @testset "Older Reference Tests" begin
+            @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=crc)
+            @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=crc)
+            @test_reference "references/ref22.txt" stable_hash(sin; alg=crc)
+            @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=crc)
+            @test_reference "references/ref24.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
+                                                               TablesEq(); alg=crc)
+            @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=crc)
 
-        # get some code coverage (and reference tests) for sha1
-        @test_reference "references/ref26.txt" bytes2hex(stable_hash([1, 2, 3]; alg=sha1))
-        @test_reference "references/ref27.txt" bytes2hex(stable_hash(v"0.1.0"; alg=sha1))
-        @test_reference "references/ref28.txt" bytes2hex(stable_hash(sin; alg=sha1))
-        @test_reference "references/ref29.txt" bytes2hex(stable_hash(Set(1:3); alg=sha1))
-        @test_reference "references/ref30.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
-                                                                               y=1:10),
-                                                                     TablesEq(); alg=sha1))
-        @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4]; alg=sha1))
+            # get some code coverage (and reference tests) for sha1
+            @test_reference "references/ref26.txt" bytes2hex(stable_hash([1, 2, 3];
+                                                                         alg=sha1))
+            @test_reference "references/ref27.txt" bytes2hex(stable_hash(v"0.1.0";
+                                                                         alg=sha1))
+            @test_reference "references/ref28.txt" bytes2hex(stable_hash(sin; alg=sha1))
+            @test_reference "references/ref29.txt" bytes2hex(stable_hash(Set(1:3);
+                                                                         alg=sha1))
+            @test_reference "references/ref30.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
+                                                                                   y=1:10),
+                                                                         TablesEq();
+                                                                         alg=sha1))
+            @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4];
+                                                                         alg=sha1))
+        end
     end
 
-    for V in (1, 2, 3, 4), hashfn in (sha256, sha1, crc32c)
+    versions = VERSION >= v"1.11-" ? (4,) : (1, 2, 3, 4)
+    for V in versions, hashfn in (sha256, sha1, crc32c)
         hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
@@ -402,10 +410,10 @@ include("setup_tests.jl")
             if V > 1 && hashfn == sha256
                 @testset "Hash-invariance to buffer size" begin
                     data = (rand(Int8, 2), rand(Int8, 2))
-                    wrapped1 = StableHashTraits.HashState(sha256, HashVersion{1}())
+                    wrapped1 = StableHashTraits.HashState(sha256, HashVersion{V}())
                     alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1,
                                                                                       sizeof(qualified_name(Int8[]))))
-                    wrapped2 = StableHashTraits.HashState(sha256, HashVersion{1}())
+                    wrapped2 = StableHashTraits.HashState(sha256, HashVersion{V}())
                     alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2,
                                                                                       2sizeof(qualified_name(Int8[]))))
                     # verify that the hashes are the same...
@@ -415,10 +423,6 @@ include("setup_tests.jl")
                     # buffer sizes while updating the hash state...
                     @test alg_small.positions != alg_large.positions
                 end
-                # NOTE: the hash is *not* invariant to the CACHE_OBJECT_THRESHOLD since this
-                # is the object size overwhich the hash becomes recursively computed rather
-                # than computed using the buffered hash (which uses list of indices to
-                # denote nesting)
             end
         end # @testset
     end # for
@@ -439,6 +443,7 @@ include("setup_tests.jl")
         @test_deprecated(UseTable())
         @test_deprecated(HashVersion{1}())
         @test_deprecated(HashVersion{2}())
+        @test_deprecated(HashVersion{3}())
 
         # verify that if a type only has implementations for `hash_method`
         # and not `transformer` they'll get a warning
@@ -449,7 +454,7 @@ include("setup_tests.jl")
         @test_logs stable_hash(TestType2(1, 2); version=4)
     end
 
-    if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
+    if StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION <= VERSION < v"1.11-"
         @testset "PikaParser" begin
             using StableHashTraits.StableNames: parse_brackets, parse_walker, Parsed,
                                                 ParseError, cleanup_named_tuple_type
