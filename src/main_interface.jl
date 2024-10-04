@@ -282,7 +282,7 @@ throw an error, as no stable name is possible in this case.
 @inline module_nameof_string(m::Module) = module_nameof_(m)
 @inline module_nameof_string(::Type{T}) where {T} = handle_unions_(T, module_nameof_)
 @inline function module_nameof_(::Type{T}) where {T}
-    return validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
+    return @show validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
 end
 
 # TODO: use `Pluto.is_inside_pluto` when/if it is implemented
@@ -313,7 +313,7 @@ function clean_module(mod)
 end
 
 @inline function module_nameof_(T)
-    return validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
+    return @show validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
 end
 
 @static if VERSION < v"1.9"
