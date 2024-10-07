@@ -109,6 +109,7 @@ function transformer(::Type{T}, context::TypeHashContext) where {T<:Type}
 end
 @inline StructType_(T) = StructType(T)
 StructType_(::Type{Union{}}) = StructTypes.NoStructType()
+internal_type_structure(::DataType, ::StructTypes.UnorderedStruct) = nothing
 
 # NOTE: `internal_type_structure` implements mandatory elements of a type's structure that
 # are always included in the hash; this ensures that the invariants required by type
