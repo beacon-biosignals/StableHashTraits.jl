@@ -105,11 +105,19 @@ pair_structure(x, ::Nothing) = x
 pair_structure(x, y) = (x, y)
 function transformer(::Type{T}, context::TypeHashContext) where {T<:Type}
     return Transformer(T -> pair_structure(transform_type(T, parent_context(context)),
-                                           internal_type_structure(T, StructType_(T))))
+                                           internal_type_structure_(T, StructType_(T))))
 end
 @inline StructType_(T) = StructType(T)
 StructType_(::Type{Union{}}) = StructTypes.NoStructType()
-internal_type_structure(::DataType, ::StructTypes.UnorderedStruct) = nothing
+internal_type_structure_(T, trait) = internal_type_structure(T, trait)
+
+function internal_type_structure_(T, c::StructTypes.UnorderedStruct)
+    if T === DataType
+        return nothing
+    else
+        internal_type_structure(T, c)
+    end
+end
 
 # NOTE: `internal_type_structure` implements mandatory elements of a type's structure that
 # are always included in the hash; this ensures that the invariants required by type
