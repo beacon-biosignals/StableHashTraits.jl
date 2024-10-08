@@ -18,6 +18,6 @@ include("hash_algorithms.jl")
 # end_nested_hash!, similar_hash_state
 
 include("special_contexts.jl")
-export TablesEq, ViewsEq, WithTypeNames
+export TablesEq, WithTypeNames
 
 end
