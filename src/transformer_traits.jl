@@ -354,6 +354,9 @@ is_ordered(x::AbstractDict) = false
 function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
     return keytype(T), valtype(T)
 end
+function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) where {K,V}
+    return K, V
+end
 
 function transformer(::Type{<:Pair}, ::HashVersion{4})
     return Transformer(((a, b),) -> (a, b); hoist_type=true)
