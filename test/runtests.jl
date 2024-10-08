@@ -168,6 +168,7 @@ include("setup_tests.jl")
                 @test test_hash(WeirdTypeValue) == test_hash(Int)
                 @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
                 @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
+                @test test_hash((;a=Int))
             end
 
             @testset "Custom transformer method" begin
@@ -183,7 +184,7 @@ include("setup_tests.jl")
                 @test_throws TypeError test_hash(BadHashMethod())
             end
 
-            @testset "Pluto-defined structs are stable" begin
+            @testset "Pluto-defined structs are stable, even for `module_nameof_string`" begin
                 notebook_project_dir = joinpath(@__DIR__, "..")
                 @info "Notebook project: $notebook_project_dir"
 
@@ -210,7 +211,10 @@ include("setup_tests.jl")
                 end
 
                 # ╔═╡ b449d8e9-7ede-4171-a5ab-044c338ebae2
-                struct MyStruct end
+                begin
+                    struct MyStruct end
+                    StableHashTraits.transform_type(::Type{T}) where {T<:MyStruct} = StableHashTraits.module_nameof_string(T)
+                end
 
                 # ╔═╡ 1e683f1d-f5f6-4064-970c-1facabcf61cc
                 stable_hash(MyStruct(); version=4) |> bytes2hex_
@@ -240,17 +244,17 @@ include("setup_tests.jl")
                 # pluto changes pwd
                 cd(olddir)
 
-                # NOTE: V refers to the hash version currently in loose
-                # its the `for` loop at the top of this file
+                # NOTE: V refers to the hash version currently in the `for` loop at the top
+                # of this file
                 if nb.cells[5].output.body isa Dict
-                    throw(error("Failed notebook eval: $(nb.cells[5].output.body[:msg])"))
+                    error("Failed notebook eval: $(nb.cells[5].output.body[:msg])")
                 else
                     @test_reference("references/pluto01_$(V)_$(nameof(hashfn)).txt",
                                     strip(nb.cells[5].output.body, '"'))
                 end
 
                 if nb.cells[6].output.body isa Dict
-                    throw(error("Failed notebook eval: $(nb.cells[6].output.body[:msg])"))
+                    error("Failed notebook eval: $(nb.cells[6].output.body[:msg])")
                 else
                     @test_reference("references/pluto02_$(V)_$(nameof(hashfn)).txt",
                                     strip(nb.cells[6].output.body, '"'))
