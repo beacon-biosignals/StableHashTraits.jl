@@ -354,6 +354,8 @@ is_ordered(x::AbstractDict) = false
 function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
     return keytype(T), valtype(T)
 end
+
+# `Pair` does not implement `keytype` or `valtype`
 function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) where {K,V}
     return K, V
 end
