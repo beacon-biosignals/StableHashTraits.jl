@@ -111,7 +111,7 @@ include("setup_tests.jl")
                 @test test_hash(reshape(1:10, 2, 5)) != test_hash(reshape(1:10, 5, 2))
                 @test test_hash(view(collect(1:5), 1:2)) == test_hash([1, 2])
                 @test test_hash(view(collect(1:5), 1:2), WithTypeNames(ctx)) !=
-                        test_hash([1, 2], WithTypeNames(ctx))
+                      test_hash([1, 2], WithTypeNames(ctx))
 
                 @test test_hash([]) != test_hash([(), (), ()])
                 @test test_hash([(), ()]) != test_hash([(), (), ()])
@@ -136,7 +136,7 @@ include("setup_tests.jl")
                 @test test_hash(:foo) != test_hash(:bar)
                 @test test_hash(view("bob", 1:2)) == test_hash("bo")
                 @test test_hash(view("bob", 1:2), WithTypeNames(ctx)) !=
-                        test_hash("bo", WithTypeNames(ctx))
+                      test_hash("bo", WithTypeNames(ctx))
                 @test test_hash(S3Path("s3://foo/bar")) != test_hash(S3Path("s3://foo/baz"))
             end
 
@@ -173,7 +173,7 @@ include("setup_tests.jl")
                 # did overflow)
                 @test test_hash((; a=Vector{Int})) != test_hash((; a=Vector{String}))
                 @test test_hash((; a=Array{T,1} where {T})) !=
-                        test_hash((; a=Array{T,2} where {T}))
+                      test_hash((; a=Array{T,2} where {T}))
             end
 
             @testset "Custom transformer method" begin
@@ -300,37 +300,39 @@ include("setup_tests.jl")
                 @test test_hash(xs) != test_hash(ys)
 
                 xs = Union{Int32,UInt32,Char}[Int32(1), Int32(1), UInt32(1), UInt32(1),
-                                                Char(1), Char(1)]
+                                              Char(1), Char(1)]
                 ys = Union{Int32,UInt32,Char}[Int32(1), UInt32(1), Int32(1), Char(1),
-                                                UInt32(1), Char(1)]
+                                              UInt32(1), Char(1)]
                 @test test_hash(xs) != test_hash(ys)
 
                 # narrowing fields doesn't generate hashing bugs
                 @test test_hash(UnstableStruct1(nothing, 1)) !=
-                        test_hash(UnstableStruct1(missing, 2))
+                      test_hash(UnstableStruct1(missing, 2))
                 @test test_hash(UnstableStruct1(1, 1)) !=
-                        test_hash(UnstableStruct1(2, 2))
+                      test_hash(UnstableStruct1(2, 2))
                 @test test_hash(UnstableStruct2(nothing, 1)) !=
-                        test_hash(UnstableStruct2(missing, 2))
+                      test_hash(UnstableStruct2(missing, 2))
                 @test test_hash(UnstableStruct2(1, 1)) !=
-                        test_hash(UnstableStruct2(2, 2))
+                      test_hash(UnstableStruct2(2, 2))
 
                 # but if we use NamedTuple selection with `hoist_type=true`
                 # we do get a bug
                 @test test_hash(UnstableStruct3(nothing, 1)) ==
-                        test_hash(UnstableStruct3(missing, 2))
+                      test_hash(UnstableStruct3(missing, 2))
             end
 
             @testset "Hash-invariance to buffer size" begin
                 data = (rand(Int8, 2), rand(Int8, 2))
                 wrapped1 = StableHashTraits.HashState(sha256, HashVersion{V}())
-                alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1, 3))
+                alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1,
+                                                                                  3))
 
                 wrapped2 = StableHashTraits.HashState(sha256, HashVersion{V}())
-                alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2, 20))
+                alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2,
+                                                                                  20))
                 # verify that the hashes are the same...
                 @test stable_hash(data, ctx; alg=alg_small) ==
-                        stable_hash(data, ctx; alg=alg_large)
+                      stable_hash(data, ctx; alg=alg_large)
                 # ...and that the distinct buffer sizes actually lead to a distinct set of
                 # buffer sizes while updating the hash state...
                 @test alg_small.positions != alg_large.positions
