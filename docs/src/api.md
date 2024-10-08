@@ -17,7 +17,6 @@ StableHashTraits.is_ordered
 StableHashTraits.hash_sort_by
 StableHashTraits.parent_context
 StableHashTraits.@context
-StableHashTraits.root_version
 WithTypeNames
 TablesEq
 ViewsEq

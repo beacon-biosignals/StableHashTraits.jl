@@ -6,33 +6,6 @@ hash_trait(x::Transformer, y) = x.result_method
 hash_trait(::Transformer{<:Any,Nothing}, y) = hash_trait(y)
 hash_trait(x) = StructType(x)
 
-function check_hash_method(x, transform, context)
-    # because of how `hash_method` uses `NotImplemented` we can leverage
-    # this to check for deprecated API usage
-    if is_implemented(hash_method(x, context)) && transform.fn === identity &&
-       isnothing(transform.result_method)
-        @warn """`hash_method` is implemented for type
-
-           $(typeof(x))
-
-           when in context of type
-
-           $(typeof(context))
-
-           No specialized `transformer` method is defined for this type. This object's
-           StableHashTraits customization may be deprecated, and may not work properly for
-           HashVersion{4}. If the default method for `transformer` is appropriate, you can
-           prevent this warning from appearing by implementing a method similar to the
-           following:
-
-           function hash_method(::MyType, context::SomeContextType)
-               StableHashTraits.root_version(context) > 3 && return StableHashTraits.NotImplemented()
-               # implement `hash_method` for `MyType`
-           end
-           """ _id = Symbol(module_nameof_string(typeof(x))) maxlog = 1
-    end
-end
-
 # how we hash when we haven't hoisted the type hash out of a loop
 function hash_type_and_value(x, hash_state, context)
     transform = transformer(typeof(x), context)::Transformer
@@ -40,7 +13,6 @@ function hash_type_and_value(x, hash_state, context)
         hash_state = hash_type!(hash_state, context, typeof(x))
     end
     tx = transform(x)
-    check_hash_method(x, transform, context)
     if !transform.hoist_type
         hash_state = hash_type!(hash_state, context, typeof(tx))
     end
@@ -50,7 +22,6 @@ end
 # how we hash when the type hash can be hoisted out of a loop
 function hash_value(x, hash_state, context, transform::Transformer)
     tx = transform(x)
-    check_hash_method(x, transform, context)
     return stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
 end
 
@@ -84,7 +55,7 @@ function hash_type!(hash_state, context, ::Type{T}) where {T}
                                          hash_trait(transform, tT))
     bytes = reinterpret(UInt8, asarray(compute_hash!(hash_type_state)))
 
-    return update_hash!(hash_state, bytes, context)
+    return update_hash!(hash_state, bytes)
 end
 asarray(x) = [x]
 asarray(x::AbstractArray) = x
@@ -105,10 +76,19 @@ pair_structure(x, ::Nothing) = x
 pair_structure(x, y) = (x, y)
 function transformer(::Type{T}, context::TypeHashContext) where {T<:Type}
     return Transformer(T -> pair_structure(transform_type(T, parent_context(context)),
-                                           internal_type_structure(T, StructType_(T))))
+                                           internal_type_structure_(T, StructType_(T))))
 end
 @inline StructType_(T) = StructType(T)
 StructType_(::Type{Union{}}) = StructTypes.NoStructType()
+internal_type_structure_(T, trait) = internal_type_structure(T, trait)
+
+function internal_type_structure_(T, c::StructTypes.UnorderedStruct)
+    if T === DataType
+        return nothing
+    else
+        internal_type_structure(T, c)
+    end
+end
 
 # NOTE: `internal_type_structure` implements mandatory elements of a type's structure that
 # are always included in the hash; this ensures that the invariants required by type
@@ -127,15 +107,15 @@ struct TypeAsValueContext{T}
 end
 parent_context(x::TypeAsValueContext) = x.parent
 
-function hash_type!(hash_state, context, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type!(hash_state, ::Any, ::Type{<:Type})
+    return update_hash!(hash_state, "Base.Type")
 end
 # these methods are required to avoid method ambiguities
-function hash_type!(hash_state, context::TypeHashContext, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type!(hash_state, ::TypeHashContext, ::Type{<:Type})
+    return update_hash!(hash_state, "Base.Type")
 end
-function hash_type!(hash_state, context::TypeAsValueContext, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type!(hash_state, ::TypeAsValueContext, ::Type{<:Type})
+    return update_hash!(hash_state, "Base.Type")
 end
 
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
@@ -401,18 +381,18 @@ end
 
 function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
     nested_hash_state = start_nested_hash!(hash_state)
-    update_hash!(nested_hash_state, str isa AbstractString ? str : string(str), context)
+    update_hash!(nested_hash_state, str isa AbstractString ? str : string(str))
     return end_nested_hash!(hash_state, nested_hash_state)
 end
 
 function stable_hash_helper(number::T, hash_state, context,
                             ::StructTypes.NumberType) where {T}
     U = StructTypes.numbertype(T)
-    return update_hash!(hash_state, U(number), context)
+    return update_hash!(hash_state, U(number))
 end
 
 function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
-    return update_hash!(hash_state, Bool(bool), context)
+    return update_hash!(hash_state, Bool(bool))
 end
 
 # null types are encoded purely by their type hash
