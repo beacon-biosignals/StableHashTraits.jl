@@ -245,6 +245,9 @@ include("setup_tests.jl")
                     @test test_hash(Int) != test_hash("Base.Int")
                 end
                 @test test_hash(Float64) != test_hash(Int)
+                @test test_hash([Int, Char, String]) != test_hash([Int, Int, Int])
+                @test test_hash([typeof(==("foo")), typeof(==(1))]) !=
+                      test_hash([typeof(==(1)), typeof(==("foo"))])
                 if V >= 4
                     @test test_hash(missing) != test_hash("Base.Missing")
                     @test test_hash(nothing) != test_hash("Base.Nothing")
@@ -406,6 +409,21 @@ include("setup_tests.jl")
                     # we do get a bug
                     @test test_hash(UnstableStruct3(nothing, 1)) ==
                           test_hash(UnstableStruct3(missing, 2))
+                end
+            end
+
+            if V >= 4
+                @testset "Caching occurs when expected" begin
+                    global cache_type_hashed = 0
+                    x = ContainerType.(rand(Int, 10), Ref(CachingType(rand(Int, 3))))
+                    @test x[1].ref === x[2].ref
+                    test_hash(x)
+                    @test cache_type_hashed == 1
+
+                    x = rand(Int8, StableHashTraits.CACHE_OBJECT_THRESHOLD + 1)
+                    context = CachedHash(ctx)
+                    test_hash(x, context)
+                    @test !isempty(context.mutable_value_cache)
                 end
             end
 

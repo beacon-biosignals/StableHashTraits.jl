@@ -61,7 +61,7 @@ function stable_hash(x, context; alg=sha256)
         return compute_hash!(deprecated_hash_helper(x, HashState(alg, context), context,
                                                     hash_method(x, context)))
     else
-        hash_state = hash_type_and_value(x, HashState(alg, context), context)
+        hash_state = hash_type_and_value(x, HashState(alg, context), CachedHash(context))
         return compute_hash!(hash_state)
     end
 end

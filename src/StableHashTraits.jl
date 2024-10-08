@@ -27,6 +27,10 @@ include("transformer_traits.jl")
 # transformer_traits defines: stable_hash_helper, type_identifier, type_value_identifier,
 # type_structure
 
+include("caching_context.jl")
+export CachedHash
+# StableHashTraits.UseCache
+
 include("hash_traits.jl")
 export WriteHash, IterateHash, StructHash, FnHash, ConstantHash, @ConstantHash,
        HashAndContext, HashVersion, qualified_name, qualified_type, TablesEq, ViewsEq,
