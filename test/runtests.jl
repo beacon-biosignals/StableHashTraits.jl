@@ -168,7 +168,12 @@ include("setup_tests.jl")
                 @test test_hash(WeirdTypeValue) == test_hash(Int)
                 @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
                 @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
-                @test test_hash((;a=Int))
+
+                # NOTE: these should run without an `StackOverflowError` (previously it
+                # did overflow)
+                @test test_hash((; a=Vector{Int})) != test_hash((; a=Vector{String}))
+                @test test_hash((; a=Array{T,1} where {T})) !=
+                        test_hash((; a=Array{T,2} where {T}))
             end
 
             @testset "Custom transformer method" begin
