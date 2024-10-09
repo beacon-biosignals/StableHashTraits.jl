@@ -123,7 +123,9 @@ internal_type_structure(T, trait) = nothing
 
 is_fully_concrete(::Any) = true
 @inline is_fully_concrete(::Type{T}) where {T} = is_fully_concrete(T, StructType(T))
-@inline is_fully_concrete(::Type{T}) where {T<:Function} = is_fully_concrete(T, StructTypes.UnorderedStruct())
+@inline function is_fully_concrete(::Type{T}) where {T<:Function}
+    is_fully_concrete(T, StructTypes.UnorderedStruct())
+end
 is_fully_concrete(::Type{T}, ::Any) where {T} = isconcretetype(T)
 
 #####
@@ -185,7 +187,7 @@ sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
 end
 
 function is_fully_concrete(::Type{T}, ::StructTypes.DataType) where {T}
-    isconcretetype(T) && all(is_fully_concrete, fieldtypes(T))
+    return isconcretetype(T) && all(is_fully_concrete, fieldtypes(T))
 end
 
 function internal_type_structure(::Type{T}, trait::StructTypes.DataType) where {T}
@@ -254,8 +256,7 @@ function internal_type_structure(::Type{T}, ::StructTypes.ArrayType) where {T}
 end
 
 function is_fully_concrete(::Type{T}, ::StructTypes.ArrayType) where {T}
-    # @show T
-    isconcretetype(T) && is_fully_concrete(eltype(T))
+    return isconcretetype(T) && is_fully_concrete(eltype(T))
 end
 
 # include ndims in type hash when we can
@@ -376,8 +377,8 @@ function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
 end
 
 function is_fully_concrete(::Type{T}, ::StructTypes.DictType) where {T}
-    isconcretetype(T) && is_fully_concrete(keytype(T)) &&
-        is_fully_concrete(valtype(T))
+    return isconcretetype(T) && is_fully_concrete(keytype(T)) &&
+            is_fully_concrete(valtype(T))
 end
 
 # `Pair` does not implement `keytype` or `valtype`
@@ -385,7 +386,7 @@ function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) wh
     return K, V
 end
 
-function is_fully_concrete(::Type{<:Pair{K, V}}, ::StructTypes.DictType) where {K, V}
+function is_fully_concrete(::Type{<:Pair{K,V}}, ::StructTypes.DictType) where {K,V}
     return is_fully_concrete(K) && is_fully_concrete(V)
 end
 
