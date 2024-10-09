@@ -177,9 +177,6 @@ end
 function is_fully_concrete(::Type{T}, ::StructTypes.DataType) where {T}
     isconcretetype(T) && all(is_fully_concrete, fieldtypes(T))
 end
-function is_fully_concrete(::Type{T}, ::StructTypes.DataType) where {T}
-    isconcretetype(T) && all(is_fully_concrete, eltype(T))
-end
 is_fully_concrete(::Type{T}, ::Any) = isconcretetype(T)
 
 function internal_type_structure(::Type{T}, trait::StructTypes.DataType) where {T}
@@ -245,6 +242,10 @@ hash_sort_by(x) = x
 
 function internal_type_structure(::Type{T}, ::StructTypes.ArrayType) where {T}
     return eltype(T)
+end
+
+function is_fully_concrete(::Type{T}, ::StructTypes.ArrayType) where {T}
+    isconcretetype(T) && is_fully_concrete(eltype(T))
 end
 
 # include ndims in type hash when we can
@@ -364,7 +365,16 @@ function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
     return keytype(T), valtype(T)
 end
 
-function transformer(::Type{<:Pair}, ::HashVersion{4})
+function is_fully_concrete(::Type{T}, ::StructTypes.DictType) where {T}
+    isconcretetype(T) && is_fully_concrete(keytype(T)) &&
+        is_fully_concrete(valtype(T))
+end
+
+function is_fully_concrete(::Pair{K, V}, ::StructTypes.DictType) where {K, V}
+    isconcretetype(T) && is_fully_concrete(K) && is_fully_concrete(V)
+end
+
+function transformer(::Type{<:Pair{K, V}}, ::HashVersion{4}) where {K, V}
     return Transformer(((a, b),) -> (a, b); hoist_type=true)
 end
 
