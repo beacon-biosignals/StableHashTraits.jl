@@ -124,7 +124,7 @@ internal_type_structure(T, trait) = nothing
 is_fully_concrete(::Any) = true
 @inline is_fully_concrete(::Type{T}) where {T} = is_fully_concrete(T, StructType(T))
 @inline function is_fully_concrete(::Type{T}) where {T<:Function}
-    is_fully_concrete(T, StructTypes.UnorderedStruct())
+    return is_fully_concrete(T, StructTypes.UnorderedStruct())
 end
 is_fully_concrete(::Type{T}, ::Any) where {T} = isconcretetype(T)
 
@@ -392,7 +392,7 @@ function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) wh
     return K, V
 end
 
-function is_fully_concrete(::Type{<:Pair{K, V}}, ::StructTypes.DictType) where {K, V}
+function is_fully_concrete(::Type{<:Pair{K,V}}, ::StructTypes.DictType) where {K,V}
     return get!(FULLY_CONCRETE_CACHE, T) do
         return is_fully_concrete(K) && is_fully_concrete(V)
     end

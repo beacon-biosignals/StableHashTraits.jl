@@ -27,12 +27,12 @@ function str_to_data(strs)
 end
 
 function build_nested_dict(width, depth)
-    key_blob = rand('a':'z', width*5)
+    key_blob = rand('a':'z', width * 5)
     keys = [Symbol(String(chars)) for chars in Iterators.partition(key_blob, 5)]
     if depth > 1
-        return Dict{Any, Any}(k => build_nested_dict(width, depth-1) for k in keys)
+        return Dict{Any,Any}(k => build_nested_dict(width, depth - 1) for k in keys)
     else
-        return Dict{Any, Any}(keys .=> rand(width))
+        return Dict{Any,Any}(keys .=> rand(width))
     end
 end
 
