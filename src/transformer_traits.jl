@@ -392,7 +392,7 @@ function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) wh
     return K, V
 end
 
-function is_fully_concrete(::Type{<:Pair{K,V}}, ::StructTypes.DictType) where {K,V}
+function is_fully_concrete(::Type{T}, ::StructTypes.DictType) where {K,V,T<:Pair{K,V}}
     return get!(FULLY_CONCRETE_CACHE, T) do
         return is_fully_concrete(K) && is_fully_concrete(V)
     end
