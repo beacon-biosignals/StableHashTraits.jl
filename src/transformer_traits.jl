@@ -162,6 +162,10 @@ hash_trait(::Function) = StructTypes.UnorderedStruct()
 
 transform_type(::Type{T}) where {T<:Function} = nameof_string(T)
 
+is_fully_concrete(::Any) = true
+@inline is_fully_concrete(::Type{T}) where {T} = is_fully_concrete(T, hash_trait(T))
+is_fully_concrete(::Type{T}, ::Any) where {T} = isconcretetype(T)
+
 #####
 ##### DataType
 #####
@@ -173,11 +177,9 @@ sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
     return TupleTools.sort(fieldnames(T); by=string)
 end
 
-@inline is_fully_concrete(T) = is_fully_concrete(T, hash_trait(T))
 function is_fully_concrete(::Type{T}, ::StructTypes.DataType) where {T}
     isconcretetype(T) && all(is_fully_concrete, fieldtypes(T))
 end
-is_fully_concrete(::Type{T}, ::Any) = isconcretetype(T)
 
 function internal_type_structure(::Type{T}, trait::StructTypes.DataType) where {T}
     if is_fully_concrete(T, trait)
