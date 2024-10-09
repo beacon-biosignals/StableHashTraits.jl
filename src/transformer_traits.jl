@@ -173,8 +173,17 @@ sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
     return TupleTools.sort(fieldnames(T); by=string)
 end
 
+@inline is_fully_concrete(T) = is_fully_concrete(T, hash_trait(T))
+function is_fully_concrete(::Type{T}, ::StructTypes.DataType) where {T}
+    isconcretetype(T) && all(is_fully_concrete, fieldtypes(T))
+end
+function is_fully_concrete(::Type{T}, ::StructTypes.DataType) where {T}
+    isconcretetype(T) && all(is_fully_concrete, eltype(T))
+end
+is_fully_concrete(::Type{T}, ::Any) = isconcretetype(T)
+
 function internal_type_structure(::Type{T}, trait::StructTypes.DataType) where {T}
-    if isconcretetype(T)
+    if is_fully_concrete(T, trait)
         fields = trait isa StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
         return fields, map(field -> fieldtype(T, field), fields)
     else
@@ -298,7 +307,7 @@ end
 
 function hash_elements(items, hash_state, context, transform)
     # can we optimize away the element type hash?
-    if isconcretetype(eltype(items)) && transform.hoist_type
+    if is_fully_concrete(eltype(items)) && transform.hoist_type
         # the eltype has already been hashed as part of the type structure of
         # the container
         for x in items
@@ -326,7 +335,7 @@ end
 #####
 
 function internal_type_structure(::Type{T}, ::StructTypes.ArrayType) where {T<:Tuple}
-    if isconcretetype(T)
+    if is_fully_concrete(T)
         fields = T <: StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
         return fields, map(field -> fieldtype(T, field), fields)
     else
