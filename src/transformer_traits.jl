@@ -187,7 +187,9 @@ sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
 end
 
 function is_fully_concrete(::Type{T}, ::StructTypes.DataType) where {T}
-    return isconcretetype(T) && all(is_fully_concrete, fieldtypes(T))
+    return get!(FULLY_CONCRETE_CACHE, T) do
+        return isconcretetype(T) && all(is_fully_concrete, fieldtypes(T))
+    end
 end
 
 function internal_type_structure(::Type{T}, trait::StructTypes.DataType) where {T}
@@ -256,7 +258,9 @@ function internal_type_structure(::Type{T}, ::StructTypes.ArrayType) where {T}
 end
 
 function is_fully_concrete(::Type{T}, ::StructTypes.ArrayType) where {T}
-    return isconcretetype(T) && is_fully_concrete(eltype(T))
+    return get!(FULLY_CONCRETE_CACHE, T) do
+        return isconcretetype(T) && is_fully_concrete(eltype(T))
+    end
 end
 
 # include ndims in type hash when we can
@@ -377,8 +381,10 @@ function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
 end
 
 function is_fully_concrete(::Type{T}, ::StructTypes.DictType) where {T}
-    return isconcretetype(T) && is_fully_concrete(keytype(T)) &&
-            is_fully_concrete(valtype(T))
+    return get!(FULLY_CONCRETE_CACHE, T) do
+        return isconcretetype(T) && is_fully_concrete(keytype(T)) &&
+               is_fully_concrete(valtype(T))
+    end
 end
 
 # `Pair` does not implement `keytype` or `valtype`
@@ -386,8 +392,10 @@ function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) wh
     return K, V
 end
 
-function is_fully_concrete(::Type{<:Pair{K,V}}, ::StructTypes.DictType) where {K,V}
-    return is_fully_concrete(K) && is_fully_concrete(V)
+function is_fully_concrete(::Type{<:Pair{K, V}}, ::StructTypes.DictType) where {K, V}
+    return get!(FULLY_CONCRETE_CACHE, T) do
+        return is_fully_concrete(K) && is_fully_concrete(V)
+    end
 end
 
 hash_trait(::Pair) = StructTypes.OrderedStruct()

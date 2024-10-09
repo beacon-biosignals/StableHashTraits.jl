@@ -8,6 +8,11 @@ using TupleTools, Tables, Compat, StructTypes
 using SHA: SHA, sha256
 using StructTypes: StructType
 
+global FULLY_CONCRETE_CACHE::IdDict{Type, Bool}
+function __init__()
+    global FULLY_CONCRETE_CACHE = IdDict{Type, Bool}()
+end
+
 include("main_interface.jl")
 export stable_hash, HashVersion, nameof_string, pick_fields, omit_fields
 # main_interface defines: Transformer, transformer, transform_type, transform_type_value,
