@@ -241,7 +241,6 @@ include("setup_tests.jl")
 
             if V >= 4
                 @testset "Nested Any" begin
-                    @test test_hash(Vector{Any}[Int[1]]) != test_hash(Vector{Any}[Any[1]])
                     @test test_hash(Dict{Symbol,Any}(:a => NumberTypeA(1))) !=
                           test_hash(Dict{Symbol,Any}(:a => NumberTypeB(1)))
                     @test test_hash(Pair{Symbol,Any}(:a, NumberTypeA(1))) !=

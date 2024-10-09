@@ -35,11 +35,14 @@ end
 
 # how we hash when we haven't hoisted the type hash out of a loop
 function hash_type_and_value(x, hash_state, context)
+    # @info "hash_type_and_value ----------------" length(stacktrace())
+    # @show x
     transform = transformer(typeof(x), context)::Transformer
     if transform.hoist_type
         hash_state = hash_type!(hash_state, context, typeof(x))
     end
     tx = transform(x)
+    # @show tx
     check_hash_method(x, transform, context)
     if !transform.hoist_type
         hash_state = hash_type!(hash_state, context, typeof(tx))
@@ -49,7 +52,10 @@ end
 
 # how we hash when the type hash can be hoisted out of a loop
 function hash_value(x, hash_state, context, transform::Transformer)
+    # @info "hash_value ----------------" length(stacktrace())
+    # @show x
     tx = transform(x)
+    # @show tx
     check_hash_method(x, transform, context)
     return stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
 end
@@ -115,6 +121,11 @@ StructType_(::Type{Union{}}) = StructTypes.NoStructType()
 # hoisting hold
 internal_type_structure(T, trait) = nothing
 
+is_fully_concrete(::Any) = true
+@inline is_fully_concrete(::Type{T}) where {T} = is_fully_concrete(T, StructType(T))
+@inline is_fully_concrete(::Type{T}) where {T<:Function} = is_fully_concrete(T, StructTypes.UnorderedStruct())
+is_fully_concrete(::Type{T}, ::Any) where {T} = isconcretetype(T)
+
 #####
 ##### Hashing Types as Values
 #####
@@ -162,10 +173,6 @@ hash_trait(::Function) = StructTypes.UnorderedStruct()
 
 transform_type(::Type{T}) where {T<:Function} = nameof_string(T)
 
-is_fully_concrete(::Any) = true
-@inline is_fully_concrete(::Type{T}) where {T} = is_fully_concrete(T, hash_trait(T))
-is_fully_concrete(::Type{T}, ::Any) where {T} = isconcretetype(T)
-
 #####
 ##### DataType
 #####
@@ -182,7 +189,7 @@ function is_fully_concrete(::Type{T}, ::StructTypes.DataType) where {T}
 end
 
 function internal_type_structure(::Type{T}, trait::StructTypes.DataType) where {T}
-    if is_fully_concrete(T, trait)
+    if isconcretetype(T)
         fields = trait isa StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
         return fields, map(field -> fieldtype(T, field), fields)
     else
@@ -247,6 +254,7 @@ function internal_type_structure(::Type{T}, ::StructTypes.ArrayType) where {T}
 end
 
 function is_fully_concrete(::Type{T}, ::StructTypes.ArrayType) where {T}
+    # @show T
     isconcretetype(T) && is_fully_concrete(eltype(T))
 end
 
@@ -338,7 +346,7 @@ end
 #####
 
 function internal_type_structure(::Type{T}, ::StructTypes.ArrayType) where {T<:Tuple}
-    if is_fully_concrete(T)
+    if isconcretetype(T)
         fields = T <: StructTypes.OrderedStruct ? fieldnames(T) : sorted_field_names(T)
         return fields, map(field -> fieldtype(T, field), fields)
     else
@@ -372,20 +380,16 @@ function is_fully_concrete(::Type{T}, ::StructTypes.DictType) where {T}
         is_fully_concrete(valtype(T))
 end
 
-function transformer(::Type{<:Pair{K, V}}, ::HashVersion{4}) where {K, V}
-
 # `Pair` does not implement `keytype` or `valtype`
 function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) where {K,V}
     return K, V
 end
 
-function is_fully_concrete(::Pair{K, V}, ::StructTypes.DictType) where {K, V}
-    return isconcretetype(T) && is_fully_concrete(K) && is_fully_concrete(V)
+function is_fully_concrete(::Type{<:Pair{K, V}}, ::StructTypes.DictType) where {K, V}
+    return is_fully_concrete(K) && is_fully_concrete(V)
 end
 
-function transformer(::Type{<:Pair}, ::HashVersion{4})
-    return Transformer(((a, b),) -> (a, b); hoist_type=true)
-end
+hash_trait(::Pair) = StructTypes.OrderedStruct()
 
 function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = StructTypes.keyvaluepairs(x)
