@@ -372,11 +372,18 @@ function is_fully_concrete(::Type{T}, ::StructTypes.DictType) where {T}
         is_fully_concrete(valtype(T))
 end
 
-function is_fully_concrete(::Pair{K, V}, ::StructTypes.DictType) where {K, V}
-    isconcretetype(T) && is_fully_concrete(K) && is_fully_concrete(V)
+function transformer(::Type{<:Pair{K, V}}, ::HashVersion{4}) where {K, V}
+
+# `Pair` does not implement `keytype` or `valtype`
+function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) where {K,V}
+    return K, V
 end
 
-function transformer(::Type{<:Pair{K, V}}, ::HashVersion{4}) where {K, V}
+function is_fully_concrete(::Pair{K, V}, ::StructTypes.DictType) where {K, V}
+    return isconcretetype(T) && is_fully_concrete(K) && is_fully_concrete(V)
+end
+
+function transformer(::Type{<:Pair}, ::HashVersion{4})
     return Transformer(((a, b),) -> (a, b); hoist_type=true)
 end
 
