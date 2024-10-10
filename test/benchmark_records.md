@@ -145,3 +145,49 @@ are presumably already quite slow to hash because of their type-instability.
   27 │ numbers     sha256     3          274.042 μs  348.959 μs   1.27338
   28 │ strings     sha256     3          1.410 ms    1.675 ms     1.18809
 ```
+
+# Version 1.3.1
+
+This version addresses a bug raised in #75 that required an expensive check of the type structure of an object. A new benchmark using deeply nested, type unstable dictionaries was added to keep a record of performance in this use case, where this change is likely to be the most expensive.
+
+This version also updates all benchmarks to use a uniform baseline that employes `Serialization`, so the benchmarks are not precisely comparable with past results (though overall the ratios are quite similar, and appeaer to fall within the visible error margins
+across runs).
+
+```
+32×6 DataFrame
+ Row │ benchmark   hash       version    base        trait       ratio
+     │ SubStrin…   SubStrin…  SubStrin…  String      String      Float64
+─────┼─────────────────────────────────────────────────────────────────────
+   1 │ structs     crc        3          59.000 μs   1.250 ms    21.1893
+   2 │ tuples      crc        3          58.833 μs   889.417 μs  15.1177
+   3 │ numbers     crc        3          29.541 μs   138.042 μs   4.6729
+   4 │ dicts       crc        3          1.729 ms    7.287 ms     4.21521
+   5 │ dataframes  crc        3          70.250 μs   285.084 μs   4.05814
+   6 │ missings    crc        3          318.375 μs  199.750 μs   0.627405
+   7 │ strings     crc        3          1.066 ms    623.541 μs   0.584867
+   8 │ symbols     crc        3          1.332 ms    720.958 μs   0.541345
+   9 │ structs     sha256     3          505.583 μs  3.091 ms     6.11316
+  10 │ tuples      sha256     3          505.458 μs  2.602 ms     5.14706
+  11 │ dicts       sha256     3          2.241 ms    9.899 ms     4.41684
+  12 │ numbers     sha256     3          252.791 μs  363.792 μs   1.4391
+  13 │ dataframes  sha256     3          518.875 μs  740.042 μs   1.42624
+  14 │ strings     sha256     3          1.993 ms    2.193 ms     1.10028
+  15 │ symbols     sha256     3          2.247 ms    2.229 ms     0.99212
+  16 │ missings    sha256     3          578.041 μs  518.667 μs   0.897284
+  17 │ dicts       crc        4          1.716 ms    122.940 ms  71.6628
+  18 │ structs     crc        4          58.916 μs   677.958 μs  11.5072
+  19 │ tuples      crc        4          59.041 μs   451.750 μs   7.65146
+  20 │ numbers     crc        4          29.541 μs   142.250 μs   4.81534
+  21 │ dataframes  crc        4          72.000 μs   324.917 μs   4.51274
+  22 │ symbols     crc        4          1.338 ms    1.468 ms     1.09697
+  23 │ missings    crc        4          319.209 μs  251.375 μs   0.787493
+  24 │ strings     crc        4          1.072 ms    390.125 μs   0.363965
+  25 │ dicts       sha256     4          2.254 ms    150.392 ms  66.7162
+  26 │ structs     sha256     4          505.292 μs  1.587 ms     3.14002
+  27 │ tuples      sha256     4          505.917 μs  1.446 ms     2.85826
+  28 │ dataframes  sha256     4          518.667 μs  782.208 μs   1.50811
+  29 │ numbers     sha256     4          252.750 μs  367.667 μs   1.45467
+  30 │ symbols     sha256     4          2.269 ms    2.745 ms     1.20972
+  31 │ missings    sha256     4          578.792 μs  500.875 μs   0.86538
+  32 │ strings     sha256     4          2.022 ms    1.699 ms     0.840206
+```
