@@ -181,7 +181,7 @@ sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
 end
 
 function is_fully_concrete(::Type{T}, ::StructTypes.DataType) where {T}
-    return get!(FULLY_CONCRETE_CACHE, T) do
+    return get!(FULLY_CONCRETE_CACHE[], T) do
         return isconcretetype(T) && all(is_fully_concrete, fieldtypes(T))
     end
 end
@@ -252,7 +252,7 @@ function internal_type_structure(::Type{T}, ::StructTypes.ArrayType) where {T}
 end
 
 function is_fully_concrete(::Type{T}, ::StructTypes.ArrayType) where {T}
-    return get!(FULLY_CONCRETE_CACHE, T) do
+    return get!(FULLY_CONCRETE_CACHE[], T) do
         return isconcretetype(T) && is_fully_concrete(eltype(T))
     end
 end
@@ -375,7 +375,7 @@ function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
 end
 
 function is_fully_concrete(::Type{T}, ::StructTypes.DictType) where {T}
-    return get!(FULLY_CONCRETE_CACHE, T) do
+    return get!(FULLY_CONCRETE_CACHE[], T) do
         return isconcretetype(T) && is_fully_concrete(keytype(T)) &&
                is_fully_concrete(valtype(T))
     end
@@ -387,7 +387,7 @@ function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) wh
 end
 
 function is_fully_concrete(::Type{T}, ::StructTypes.DictType) where {K,V,T<:Pair{K,V}}
-    return get!(FULLY_CONCRETE_CACHE, T) do
+    return get!(FULLY_CONCRETE_CACHE[], T) do
         return is_fully_concrete(K) && is_fully_concrete(V)
     end
 end

@@ -8,9 +8,9 @@ using TupleTools, Tables, Compat, StructTypes
 using SHA: SHA, sha256
 using StructTypes: StructType
 
-global FULLY_CONCRETE_CACHE::IdDict{Type,Bool}
+const FULLY_CONCRETE_CACHE = Ref{IdDict{Type,Bool}}()
 function __init__()
-    return global FULLY_CONCRETE_CACHE = IdDict{Type,Bool}()
+    return global FULLY_CONCRETE_CACHE[] = IdDict{Type,Bool}()
 end
 
 include("main_interface.jl")
