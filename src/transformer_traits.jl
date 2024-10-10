@@ -115,13 +115,6 @@ StructType_(::Type{Union{}}) = StructTypes.NoStructType()
 # hoisting hold
 internal_type_structure(T, trait) = nothing
 
-is_fully_concrete(::Any) = true
-@inline is_fully_concrete(::Type{T}) where {T} = is_fully_concrete(T, StructType(T))
-@inline function is_fully_concrete(::Type{T}) where {T<:Function}
-    return is_fully_concrete(T, StructTypes.UnorderedStruct())
-end
-is_fully_concrete(::Type{T}, ::Any) where {T} = isconcretetype(T)
-
 #####
 ##### Hashing Types as Values
 #####
@@ -178,12 +171,6 @@ transform_type_by_trait(::Type{T}, ::StructTypes.DataType) where {T} = nameof_st
 sorted_field_names(T::Type) = TupleTools.sort(fieldnames(T); by=string)
 @generated function sorted_field_names(T)
     return TupleTools.sort(fieldnames(T); by=string)
-end
-
-function is_fully_concrete(::Type{T}, ::StructTypes.DataType) where {T}
-    return get!(FULLY_CONCRETE_CACHE[], T) do
-        return isconcretetype(T) && all(is_fully_concrete, fieldtypes(T))
-    end
 end
 
 function internal_type_structure(::Type{T}, trait::StructTypes.DataType) where {T}
@@ -251,12 +238,6 @@ function internal_type_structure(::Type{T}, ::StructTypes.ArrayType) where {T}
     return eltype(T)
 end
 
-function is_fully_concrete(::Type{T}, ::StructTypes.ArrayType) where {T}
-    return get!(FULLY_CONCRETE_CACHE[], T) do
-        return isconcretetype(T) && is_fully_concrete(eltype(T))
-    end
-end
-
 # include ndims in type hash when we can
 function transform_type(::Type{T}) where {T<:AbstractArray}
     return transform_type_by_trait(T, StructType(T)), ndims_(T)
@@ -317,7 +298,7 @@ end
 
 function hash_elements(items, hash_state, context, transform)
     # can we optimize away the element type hash?
-    if is_fully_concrete(eltype(items)) && transform.hoist_type
+    if isconcretetype(eltype(items)) && transform.hoist_type
         # the eltype has already been hashed as part of the type structure of
         # the container
         for x in items
@@ -374,22 +355,9 @@ function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
     return keytype(T), valtype(T)
 end
 
-function is_fully_concrete(::Type{T}, ::StructTypes.DictType) where {T}
-    return get!(FULLY_CONCRETE_CACHE[], T) do
-        return isconcretetype(T) && is_fully_concrete(keytype(T)) &&
-               is_fully_concrete(valtype(T))
-    end
-end
-
 # `Pair` does not implement `keytype` or `valtype`
 function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) where {K,V}
     return K, V
-end
-
-function is_fully_concrete(::Type{T}, ::StructTypes.DictType) where {K,V,T<:Pair{K,V}}
-    return get!(FULLY_CONCRETE_CACHE[], T) do
-        return is_fully_concrete(K) && is_fully_concrete(V)
-    end
 end
 
 hash_trait(::Pair) = StructTypes.OrderedStruct()
