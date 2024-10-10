@@ -35,14 +35,11 @@ end
 
 # how we hash when we haven't hoisted the type hash out of a loop
 function hash_type_and_value(x, hash_state, context)
-    # @info "hash_type_and_value ----------------" length(stacktrace())
-    # @show x
     transform = transformer(typeof(x), context)::Transformer
     if transform.hoist_type
         hash_state = hash_type!(hash_state, context, typeof(x))
     end
     tx = transform(x)
-    # @show tx
     check_hash_method(x, transform, context)
     if !transform.hoist_type
         hash_state = hash_type!(hash_state, context, typeof(tx))
@@ -52,10 +49,7 @@ end
 
 # how we hash when the type hash can be hoisted out of a loop
 function hash_value(x, hash_state, context, transform::Transformer)
-    # @info "hash_value ----------------" length(stacktrace())
-    # @show x
     tx = transform(x)
-    # @show tx
     check_hash_method(x, transform, context)
     return stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
 end
