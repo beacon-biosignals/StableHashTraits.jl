@@ -7,6 +7,7 @@ using DataFrames
 using SHA
 using CRC32c
 using Random
+using Serialization
 
 # only `collect` when we have to
 crc(x, s=0x000000) = crc32c(collect(x), s)
@@ -25,43 +26,55 @@ function str_to_data(strs)
     return take!(io)
 end
 
+function build_nested_dict(width, depth)
+    key_blob = rand('a':'z', width * 5)
+    keys = [Symbol(String(chars)) for chars in Iterators.partition(key_blob, 5)]
+    if depth > 1
+        return Dict{Any,Any}(k => build_nested_dict(width, depth - 1) for k in keys)
+    else
+        return Dict{Any,Any}(keys .=> rand(width))
+    end
+end
+
 const N = 10_000
 data = rand(Int, N)
-data1 = vec(rand(Int, 2, N))
-data2 = tuple.(rand(Int, N), rand(Int, N))
+tuples = tuple.(rand(Int, N), rand(Int, N))
 strings = [String(rand('a':'z', 30)) for _ in 1:N]
 symbols = [Symbol(String(rand('a':'z', 30))) for _ in 1:N]
 structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:N]
-struct_data = [x for st in structs for x in (st.a, st.b)]
 df = DataFrame(; x=1:N, y=1:N)
-missings_data = shuffle!([rand(Int, N); fill(missing, N >> 4)])
-non_missings_data = rand(Int, N + (N >> 4))
+missings_values = shuffle!([rand(Int, N); fill(missing, N >> 4)])
+dicts = build_nested_dict(10, 4);
+
+function serialized_bytes(x)
+    io = IOBuffer()
+    serialize(io, x)
+    return take!(io)
+end
 
 # Define a parent BenchmarkGroup to contain our suite
 const suite = BenchmarkGroup()
 
-benchmarks = [(; name="dataframes", a=data1, b=df);
-              (; name="structs", a=struct_data, b=structs);
-              (; name="symbols", a=symbols, b=symbols);
-              (; name="strings", a=strings, b=strings);
-              (; name="tuples", a=data1, b=data2);
-              (; name="missings", a=non_missings_data, b=missings_data);
-              (; name="numbers", a=data, b=data)]
+benchmarks = [(; name="dataframes", data=df);
+              (; name="structs", data=structs);
+              (; name="symbols", data=symbols);
+              (; name="strings", data=strings);
+              (; name="tuples", data=tuples);
+              (; name="missings", data=missings_values);
+              (; name="numbers", data=data);
+              (; name="dicts", data=dicts)]
 
 for hashfn in (crc, sha256)
     hstr = nameof(hashfn)
     for V in (3, 4)
-        for (; name, a, b) in benchmarks
+        for (; name, data) in benchmarks
             suite["$(name)_$(hstr)_$V"] = BenchmarkGroup([name])
-            if name in ("strings", "symbols")
-                suite["$(name)_$(hstr)_$V"]["base"] = @benchmarkable $(hashfn)(str_to_data($a))
-            else
-                suite["$(name)_$(hstr)_$V"]["base"] = @benchmarkable $(hashfn)(reinterpret(UInt8,
-                                                                                           $a))
+            suite["$(name)_$(hstr)_$V"]["base"] = begin
+                @benchmarkable $(hashfn)($(serialized_bytes)($data))
             end
-            suite["$(name)_$(hstr)_$V"]["trait"] = @benchmarkable $(stable_hash)($b,
-                                                                                 HashVersion{$(V)}();
-                                                                                 alg=$(hashfn))
+            suite["$(name)_$(hstr)_$V"]["trait"] = begin
+                @benchmarkable $(stable_hash)($data, HashVersion{$(V)}(); alg=$(hashfn))
+            end
         end
     end
 end
