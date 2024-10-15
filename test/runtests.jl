@@ -222,10 +222,10 @@ include("setup_tests.jl")
                 end
 
                 # ╔═╡ 1e683f1d-f5f6-4064-970c-1facabcf61cc
-                stable_hash(MyStruct(); version=4) |> bytes2hex_
+                stable_hash(MyStruct(); version=$(V)) |> bytes2hex_
 
                 # ╔═╡ f8f3a7a4-544f-456f-ac63-5b5ce91a071a
-                stable_hash((a=MyStruct, b=(c=MyStruct(), d=2)); version=4) |> bytes2hex_
+                stable_hash((a=MyStruct, b=(c=MyStruct(), d=2)); version=$(V)) |> bytes2hex_
 
                 # ╔═╡ Cell order:
                 # ╠═3592b099-9c96-4939-94b8-7ef2614b0955
