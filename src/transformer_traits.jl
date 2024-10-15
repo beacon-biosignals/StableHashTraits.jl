@@ -335,6 +335,11 @@ function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
     return keytype(T), valtype(T)
 end
 
+# `Pair` does not implement `keytype` or `valtype`
+function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) where {K,V}
+    return K, V
+end
+
 function transformer(::Type{<:Pair}, ::HashVersion{4})
     return Transformer(((a, b),) -> (a, b); hoist_type=true)
 end
