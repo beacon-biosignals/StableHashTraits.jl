@@ -11,20 +11,8 @@
 
 Returns the updated hash state given a set of bytes (either a tuple or array of UInt8
 values).
-
-    update_hash!(state::HashState, obj, context)
-
-Returns the updated hash, given an object and some context. The object will
-be written to some bytes using `StableHashTraits.write(io, obj, context)`.
 """
 function update_hash! end
-
-# when a hasher has no internal buffer, we allocate one for each call to `update_hash!`
-function update_hash!(hasher, x, context)
-    io = IOBuffer()
-    write(io, x, context)
-    return update_hash!(hasher, take!(io))
-end
 
 """
     HashState(alg, context)
@@ -76,7 +64,6 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
         # we cheat a little here, technically `SHA_CTX` and friends are not `HashState`
         # but we make them satisfy the same interface below
         @eval function HashState(::typeof(SHA.$(fn)), context)
-            root_version(context) < 2 && return SHA.$(CTX)()
             return BufferedHashState(SHA.$(CTX)())
         end
     end
@@ -101,7 +88,6 @@ similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
 #####
 
 function HashState(fn::Function, context)
-    root_version(context) < 2 && return RecursiveHashState(fn)
     return BufferedHashState(RecursiveHashState(fn))
 end
 
@@ -171,16 +157,8 @@ function end_nested_hash!(root::BufferedHashState, x::BufferedHashState)
     return x
 end
 
-function update_hash!(hasher::BufferedHashState, obj, context)
-    # TODO: when we remove `deprecated.jl`, change this to `Base.write` and remove the
-    # `context` parameters
-    write(hasher.io, obj, context)
-    flush_bytes!(hasher)
-    return hasher
-end
-
 function update_hash!(hasher::BufferedHashState, obj)
-    write(hasher.io, obj)
+    Base.write(hasher.io, obj)
     flush_bytes!(hasher)
     return hasher
 end
