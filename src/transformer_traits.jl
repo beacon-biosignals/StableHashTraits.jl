@@ -340,9 +340,7 @@ function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) wh
     return K, V
 end
 
-function transformer(::Type{<:Pair}, ::HashVersion{4})
-    return Transformer(((a, b),) -> (a, b); hoist_type=true)
-end
+hash_trait(::Pair) = StructTypes.OrderedStruct()
 
 function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = StructTypes.keyvaluepairs(x)
