@@ -199,3 +199,10 @@ end
 
 struct WeirdTypeValue end
 StableHashTraits.transform_type_value(::Type{<:WeirdTypeValue}) = Int
+
+struct NumberTypeA
+    x::Int
+end
+struct NumberTypeB
+    x::Int
+end

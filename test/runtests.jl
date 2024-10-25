@@ -239,6 +239,17 @@ include("setup_tests.jl")
                 @test_throws ArgumentError test_hash(x -> x + 1)
             end
 
+            if V >= 4
+                @testset "Nested Any" begin
+                    @test test_hash(Dict{Symbol,Any}(:a => NumberTypeA(1))) !=
+                          test_hash(Dict{Symbol,Any}(:a => NumberTypeB(1)))
+                    @test test_hash(Pair{Symbol,Any}(:a, NumberTypeA(1))) !=
+                          test_hash(Pair{Symbol,Any}(:a, NumberTypeB(1)))
+                    @test test_hash(Pair{Symbol,Any}[:a => NumberTypeA(1)]) !=
+                          test_hash(Pair{Symbol,Any}[:a => NumberTypeB(1)])
+                end
+            end
+
             @testset "Types" begin
                 if V < 4
                     @test test_hash(Float64) != test_hash("Base.Float64")
