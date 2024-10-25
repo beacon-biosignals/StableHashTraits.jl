@@ -222,6 +222,18 @@ include("setup_tests.jl")
                 @test test_hash(Singleton1()) != test_hash(Singleton2())
             end
 
+            if V >= 4
+                @testset "Regex" begin
+                    @test test_hash(r"regex") == test_hash(r"regex")
+                    @test test_hash(r"regex") != test_hash(r"abcde")
+
+                    @test_reference("references/regex01_$(V)_$(nameof(hashfn)).txt",
+                                    bytes2hex_(test_hash(r"regex")))
+                    @test_reference("references/regex02_$(V)_$(nameof(hashfn)).txt",
+                                    bytes2hex_(test_hash(r"^\d+_(.+)$")))
+                end
+            end
+
             @testset "Functions" begin
                 @test test_hash(sin) != test_hash(cos)
                 @test test_hash(sin) != test_hash(:sin)
