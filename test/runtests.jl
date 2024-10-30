@@ -222,10 +222,22 @@ include("setup_tests.jl")
                 @test test_hash(Singleton1()) != test_hash(Singleton2())
             end
 
-            if V >= 4
-                @testset "Regex" begin
-                    @test test_hash(r"regex") == test_hash(r"regex")
-                    @test test_hash(r"regex") != test_hash(r"abcde")
+            @testset "Regex" begin
+                r1 = r"regex"
+                r2 = r"regex"
+                # Check that they got different Ptrs for the compiled regex.
+                # Because that's what causes problems for V <= 3.
+                @test r1.regex != r2.regex
+                if V <= 3
+                    @test_broken test_hash(r1) == test_hash(r2)
+                else
+                    # Hash shouldn't care about pointer to compiled regex
+                    @test test_hash(r1) == test_hash(r2)
+
+                    @test test_hash(r1) != test_hash(r"abcde")
+                    @test test_hash(r1) != test_hash(r"regex"i) # i changes compile_options
+                    r3 = Regex("regex", Base.DEFAULT_COMPILER_OPTS, 0)
+                    @test test_hash(r1) != test_hash(r3) # different match options
 
                     @test_reference("references/regex01_$(V)_$(nameof(hashfn)).txt",
                                     bytes2hex_(test_hash(r"regex")))
