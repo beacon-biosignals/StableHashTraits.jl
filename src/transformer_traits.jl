@@ -364,9 +364,12 @@ function internal_type_structure(::Type{T}, ::StructTypes.DictType) where {T}
     return keytype(T), valtype(T)
 end
 
-function transformer(::Type{<:Pair}, ::HashVersion{4})
-    return Transformer(((a, b),) -> (a, b); hoist_type=true)
+# `Pair` does not implement `keytype` or `valtype`
+function internal_type_structure(::Type{<:Pair{K,V}}, ::StructTypes.DictType) where {K,V}
+    return K, V
 end
+
+hash_trait(::Pair) = StructTypes.OrderedStruct()
 
 function stable_hash_helper(x, hash_state, context, ::StructTypes.DictType)
     pairs = StructTypes.keyvaluepairs(x)

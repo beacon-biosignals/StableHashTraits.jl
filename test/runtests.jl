@@ -95,6 +95,8 @@ include("setup_tests.jl")
                 @test_reference("references/ref25_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash((a=1, b=(;), c=(; c1=1),
                                                       d=(d1=1, d2=2)))))
+                @test_reference("references/ref26_$(V)_$(nameof(hashfn)).txt",
+                                bytes2hex_(test_hash(2 => 3)))
             end
             # verifies that transform can be called recursively
             if V <= 3
@@ -235,6 +237,17 @@ include("setup_tests.jl")
                     @test test_hash(==("foo")) == test_hash(==("bar"))
                 end
                 @test_throws ArgumentError test_hash(x -> x + 1)
+            end
+
+            if V >= 4
+                @testset "Nested Any" begin
+                    @test test_hash(Dict{Symbol,Any}(:a => NumberTypeA(1))) !=
+                          test_hash(Dict{Symbol,Any}(:a => NumberTypeB(1)))
+                    @test test_hash(Pair{Symbol,Any}(:a, NumberTypeA(1))) !=
+                          test_hash(Pair{Symbol,Any}(:a, NumberTypeB(1)))
+                    @test test_hash(Pair{Symbol,Any}[:a => NumberTypeA(1)]) !=
+                          test_hash(Pair{Symbol,Any}[:a => NumberTypeB(1)])
+                end
             end
 
             @testset "Types" begin
