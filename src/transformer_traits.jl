@@ -431,3 +431,14 @@ stable_hash_helper(_, hash_state, context, ::StructTypes.NullType) = hash_state
 # singleton types are encoded purely by their type hash
 transform_type_by_trait(::Type{T}, ::StructTypes.SingletonType) where {T} = nameof_string(T)
 stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType) = hash_state
+
+
+#####
+##### Regex
+#####
+
+transform_type(::Type{Regex}) = "Base.Regex"
+function transformer(::Type{Regex}, ::HashVersion{4})
+    # This skips the compiled regex which is stored as a Ptr{Nothing}
+    return Transformer(pick_fields(:pattern, :compile_options, :match_options))
+end
