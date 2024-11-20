@@ -235,9 +235,11 @@ include("setup_tests.jl")
                     @test test_hash(r1) == test_hash(r2)
 
                     @test test_hash(r1) != test_hash(r"abcde")
-                    @test test_hash(r1) != test_hash(r"regex"i) # i changes compile_options
-                    r3 = Regex("regex", Base.DEFAULT_COMPILER_OPTS, 0)
-                    @test test_hash(r1) != test_hash(r3) # different match options
+                    @test test_hash(r1) != test_hash(r"regex"i)
+                    @test test_hash(r1) != test_hash(r"regex"m)
+                    @test test_hash(r1) != test_hash(r"regex"s)
+                    @test test_hash(r1) != test_hash(r"regex"x)
+                    @test test_hash(r1) != test_hash(r"regex"a)
 
                     @test_reference("references/regex01_$(V)_$(nameof(hashfn)).txt",
                                     bytes2hex_(test_hash(r"regex")))
