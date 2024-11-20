@@ -242,7 +242,7 @@ include("setup_tests.jl")
                               test_hash(r"regex"s),
                               test_hash(r"regex"x),
                               test_hash(r"regex"a)]
-                    @test unique(hashes) == length(hashes)
+                    @test unique(hashes) == hashes
 
                     @test_reference("references/regex01_$(V)_$(nameof(hashfn)).txt",
                                     bytes2hex_(test_hash(r"regex")))
