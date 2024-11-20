@@ -155,10 +155,6 @@ function StableHashTraits.transformer(::Type{<:UnstableStruct3})
     return StableHashTraits.Transformer(x -> (; x.a); hoist_type=true)
 end
 
-# TODO: we need to rewrite the docs on when `hoist_type` is safe
-# TODO: we need to probably write some helper functions for
-# `omit` and `keep` that maintain feildtypes
-
 struct WeirdTypeValue end
 StableHashTraits.transform_type_value(::Type{<:WeirdTypeValue}) = Int
 

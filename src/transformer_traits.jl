@@ -46,7 +46,6 @@ end
 Hash type `T` in the given context, updating `hash_state`.
 """
 function hash_type!(hash_state, context, ::Type{T}) where {T}
-    # TODO: cache type hashing in the final release (no this PR)
     type_context = TypeHashContext(context)
     transform = transformer(typeof(T), type_context)
     tT = transform(T)
@@ -407,33 +406,7 @@ stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType) = hash_s
 ##### Regex
 #####
 
-# NOTE: we don't have great options for keeping the next few functions from depending on
-# internals of Base julia
-#
-# We can:
-#
-# 1. Use the string representation of regex: non-breaking Julia releases change this
-# 2. Directly read both private properties and flag defaults to compute what relevant regex
-#    flags have been marked (e.g. `r"a"i` has the `i` flag marked).
-#        a. an added complication is that the default flags change across Julia versions,
-#        so we can't just use all bytes of `compile_options` and `match_options`; this
-#        will break compatibility with older julia version
-#
-# For now, the below seems like the most robust option
-
-pattern_(x::Regex)::String = x.pattern
-
-function compile_options_(x::Regex)::UInt32
-    # NOTE: using this mask keeps the code from breaking on Julia 1.6 😢
-    # TODO: when 2.0 comes out, we should drop support for 1.6 and remove the mask
-    mask = ~Base.DEFAULT_COMPILER_OPTS | Base.PCRE.UCP
-    return x.compile_options & mask
-end
-
-# NOTE: we can safely hoist here because
-# 1. the input type is concrete
-# 2. all output types are primitive, concrete types
 function transformer(::Type{Regex}, ::HashVersion{4})
     # This skips the compiled regex which is stored as a Ptr{Nothing}
-    return Transformer(x -> (pattern_(x), compile_options_(x)); hoist_type=true)
+    return Transformer(pick_fields(:pattern, :compile_options))
 end
