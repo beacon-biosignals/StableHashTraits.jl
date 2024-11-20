@@ -406,7 +406,19 @@ stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType) = hash_s
 ##### Regex
 #####
 
+pattern_(x::Regex)::String = x.pattern
+
+function compile_options_(x::Regex)::UInt32
+    # NOTE: using this mask kept the code from breaking on Julia 1.6
+    # we can't change it now, since we don't want the hash to change
+    mask = ~Base.DEFAULT_COMPILER_OPTS | Base.PCRE.UCP
+    return x.compile_options & mask
+end
+
+# NOTE: we can safely hoist here because
+# 1. the input type is concrete
+# 2. all output types are primitive, concrete types
 function transformer(::Type{Regex}, ::HashVersion{4})
     # This skips the compiled regex which is stored as a Ptr{Nothing}
-    return Transformer(pick_fields(:pattern, :compile_options))
+    return Transformer(x -> (pattern_(x), compile_options_(x)); hoist_type=true)
 end
