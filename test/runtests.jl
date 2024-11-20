@@ -234,12 +234,15 @@ include("setup_tests.jl")
                     # Hash shouldn't care about pointer to compiled regex
                     @test test_hash(r1) == test_hash(r2)
 
-                    @test test_hash(r1) != test_hash(r"abcde")
-                    @test test_hash(r1) != test_hash(r"regex"i)
-                    @test test_hash(r1) != test_hash(r"regex"m)
-                    @test test_hash(r1) != test_hash(r"regex"s)
-                    @test test_hash(r1) != test_hash(r"regex"x)
-                    @test test_hash(r1) != test_hash(r"regex"a)
+                    # test inequalities (including flags)
+                    hashes = [test_hash(r1),
+                              test_hash(r"abcde"),
+                              test_hash(r"regex"i),
+                              test_hash(r"regex"m),
+                              test_hash(r"regex"s),
+                              test_hash(r"regex"x),
+                              test_hash(r"regex"a)]
+                    @test unique(hashes) == length(hashes)
 
                     @test_reference("references/regex01_$(V)_$(nameof(hashfn)).txt",
                                     bytes2hex_(test_hash(r"regex")))
