@@ -301,7 +301,7 @@ end
 
 function clean_module(mod)
     module_str = string(mod)
-    # keep modules stable acros Pluto runs
+    # keep modules stable across Pluto runs
     if is_inside_pluto(mod)
         # the exact pattern to replace depends on the julia version
         module_str = replace(module_str, r"var\"workspace#[0-9]+\"" => "PlutoWorkspace") # julia >= 1.8
