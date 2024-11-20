@@ -222,6 +222,37 @@ include("setup_tests.jl")
                 @test test_hash(Singleton1()) != test_hash(Singleton2())
             end
 
+            @testset "Regex" begin
+                r1 = r"regex"
+                r2 = r"regex"
+                # Check that they got different Ptrs for the compiled regex.
+                # Because that's what causes problems for V <= 3.
+                @test r1.regex != r2.regex
+                if V <= 3
+                    @test_broken test_hash(r1) == test_hash(r2)
+                else
+                    # Hash shouldn't care about pointer to compiled regex
+                    @test test_hash(r1) == test_hash(r2)
+
+                    # test inequalities (including flags)
+                    hashes = [test_hash(r1),
+                              test_hash(r"abcde"),
+                              test_hash(r"regex"i),
+                              test_hash(r"regex"m),
+                              test_hash(r"regex"s),
+                              test_hash(r"regex"x),
+                              test_hash(r"regex"a)]
+                    @test unique(hashes) == hashes
+
+                    @test_reference("references/regex01_$(V)_$(nameof(hashfn)).txt",
+                                    bytes2hex_(test_hash(r"regex")))
+                    @test_reference("references/regex02_$(V)_$(nameof(hashfn)).txt",
+                                    bytes2hex_(test_hash(r"^\d+_(.+)$")))
+                    @test_reference("references/regex03_$(V)_$(nameof(hashfn)).txt",
+                                    bytes2hex_(test_hash(r"regex"a)))
+                end
+            end
+
             @testset "Functions" begin
                 @test test_hash(sin) != test_hash(cos)
                 @test test_hash(sin) != test_hash(:sin)
