@@ -20,11 +20,12 @@ jobs:
         # we test on all versions back to LTS because we want to test for stability across
         # julia versions
         version:
-          - '1.6' # LTS
+          - '1.6' # old LTS (TODO: remove support for 1.6-1.1.9 when we move to 2.0)
           - '1.7'
           - '1.8'
           - '1.9'
           - '1.10'
+          - '1.11'
           - 'pre'
         os:
           - ubuntu-latest
