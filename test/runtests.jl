@@ -262,6 +262,10 @@ include("setup_tests.jl")
                 # ╔═╡ b449d8e9-7ede-4171-a5ab-044c338ebae2
                 begin
                     struct MyStruct end
+                    # In hash version 4 types do not have their module hashed
+                    # but here we're trying to test that a Pluto module name is properly
+                    # regularized, so we need to require that the module name be part of the
+                    # hash
                     StableHashTraits.transform_type(::Type{T}) where {T<:MyStruct} = StableHashTraits.module_nameof_string(T)
                 end
 
