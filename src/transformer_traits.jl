@@ -432,7 +432,6 @@ stable_hash_helper(_, hash_state, context, ::StructTypes.NullType) = hash_state
 transform_type_by_trait(::Type{T}, ::StructTypes.SingletonType) where {T} = nameof_string(T)
 stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType) = hash_state
 
-
 #####
 ##### Regex
 #####
@@ -465,5 +464,5 @@ end
 # 2. all output types are primitive, concrete types
 function transformer(::Type{Regex}, ::HashVersion{4})
     # This skips the compiled regex which is stored as a Ptr{Nothing}
-    return Transformer(x -> (pattern_(x), compile_options_(x)), hoist_type=true)
+    return Transformer(x -> (pattern_(x), compile_options_(x)); hoist_type=true)
 end
