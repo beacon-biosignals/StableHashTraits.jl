@@ -455,13 +455,9 @@ pattern_(x::Regex)::String = x.pattern
 
 function compile_options_(x::Regex)::UInt32
     # NOTE: using this mask keeps the code from breaking on Julia 1.6 😢
-    mask = (~Base.DEFAULT_COMPILER_OPTS | Base.PCRE.UTF)
+    # TODO: when 2.0 comes out, we should drop support for 1.6 and remove the mask
+    mask = ~Base.DEFAULT_COMPILER_OPTS | Base.PCRE.UCP
     return x.compile_options & mask
-end
-
-function match_options_(x::Regex)::UInt32
-    # NOTE: using this mask keeps the code from breaking on Julia 1.6 😢
-    return x.match_options & ~Base.DEFAULT_MATCH_OPTS
 end
 
 # NOTE: we can safely hoist here because
@@ -469,6 +465,5 @@ end
 # 2. all output types are primitive, concrete types
 function transformer(::Type{Regex}, ::HashVersion{4})
     # This skips the compiled regex which is stored as a Ptr{Nothing}
-    return Transformer(x -> (pattern_(x), compile_options_(x), match_options_(x));
-                       hoist_type=true)
+    return Transformer(x -> (pattern_(x), compile_options_(x)), hoist_type=true)
 end

@@ -245,6 +245,8 @@ include("setup_tests.jl")
                                     bytes2hex_(test_hash(r"regex")))
                     @test_reference("references/regex02_$(V)_$(nameof(hashfn)).txt",
                                     bytes2hex_(test_hash(r"^\d+_(.+)$")))
+                    @test_reference("references/regex03_$(V)_$(nameof(hashfn)).txt",
+                                    bytes2hex_(test_hash(r"regex"a)))
                 end
             end
 

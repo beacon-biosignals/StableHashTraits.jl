@@ -1,3 +1,4 @@
 Manifest.toml
+Manifest*.toml
 *.cov
 lcov.info
