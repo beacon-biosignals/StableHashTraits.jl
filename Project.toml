@@ -26,7 +26,8 @@ Tables = "1.7"
 Test = "1"
 TupleTools = "1"
 UUIDs = "1"
-julia = "1.6"
+WeakKeyIdDicts = "0.1"
+julia = "1.6" # TODO: in 2.0 bump this to 1.10
 
 [extras]
 AWSS3 = "1c724243-ef5b-51ab-93f4-b0a88ac62a95"
