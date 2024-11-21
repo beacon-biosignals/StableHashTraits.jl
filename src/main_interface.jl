@@ -317,46 +317,20 @@ end
     return validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
 end
 
-@static if VERSION < v"1.9"
-    # in julia v 1.8 and lower dispatching over Unions will not work, we need to
-    # dynamically check the type of `T`
-    function handle_unions_(T, namer)
-        if T isa Union
-            handle_unions_helper_(T, namer)
-        else
-            handle_function_types_(T, namer)
-        end
-    end
-    function handle_unions_helper_(T, namer)
-        # NOTE we are relying on julia intenrals here; thankfully we are doing so for a just
-        # a few julia versions (1.6-1.8) and can test the latest patch release of each to
-        # ensure they keep workiing (once the next LTS is settled, we can remove support for
-        # these older version and remove reliance on internals)
-        A = T.a
-        B = T.b
-        !@isdefined(A) && !@isdefined(B) && return ""
-        !@isdefined(B) && return handle_function_types_(A, namer)
-        # NOTE: The following line never gets run, because of the way julia's type dispatch
-        # is currently implemented, but it is here to avoid regressions in future julia
-        # version
-        !@isdefined(A) && return handle_function_types_(B, namer)
-        return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
-    end
-else
-    # in later version of julia, handling unions can be accomplished via dispatch (and does
-    # not require the use of julia internals)
-    function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
-        !@isdefined(A) && !@isdefined(B) && return ""
-        !@isdefined(B) && return handle_function_types_(A, namer)
-        # NOTE: The following line never gets run, because of the way julia's type dispatch
-        # is currently implemented, but it is here to avoid regressions in future julia
-        # version
-        !@isdefined(A) && return handle_function_types_(B, namer)
-        return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
-    end
-    # not all types are concrete, so they must be passed through a generic "handle_unions_"
-    handle_unions_(T, namer) = handle_function_types_(T, namer)
+# in later version of julia, handling unions can be accomplished via dispatch (and does
+# not require the use of julia internals)
+function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
+    !@isdefined(A) && !@isdefined(B) && return ""
+    !@isdefined(B) && return handle_function_types_(A, namer)
+    # NOTE: The following line never gets run, because of the way julia's type dispatch
+    # is currently implemented, but it is here to avoid regressions in future julia
+    # version
+    !@isdefined(A) && return handle_function_types_(B, namer)
+    return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
 end
+# not all types are concrete, so they must be passed through a generic "handle_unions_"
+handle_unions_(T, namer) = handle_function_types_(T, namer)
+
 hoist_type(::typeof(module_nameof_string)) = true
 @inline function handle_function_types_(::Type{T}, namer) where {T}
     # special case for function types
