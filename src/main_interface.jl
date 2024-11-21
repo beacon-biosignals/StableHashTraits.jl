@@ -372,7 +372,7 @@ method is implemented, the fallback `transform_type` value uses `StructType(T)` 
 how to hash `T`; this is documented under [What gets hashed?](@ref).
 
 Any types returned by `transform_type` has `transform_type` applied to it, so make sure that
-you only return types when they are are some nested component of your type (do not return
+you only return types when they are some nested component of your type (do not return
 `T`!!)
 
 This method is used to add additional data to the hash of a type. Internally, the data
@@ -386,38 +386,6 @@ them from being included in a type's hash, since otherwise the assumptions neces
 efficient hash computation would be violated.
 
 ## Examples
-
-### Singleton Types
-
-You can opt in to hashing novel singleton types by overwriting `transform_type`:
-
-```julia
-struct MySingleton end
-StructTypes.StructType(::MySingleton) = StructTypes.SingletonType()
-function StableHashTraits.transform_type(::Type{<:MySingleton})
-    return "MySingleton"
-end
-```
-If you do not own the type you wish to customize, you can use a context:
-
-```julia
-using AnotherPackage: PackageSingleton
-StableHashTriats.@context HashAnotherSingleton
-function StableHashTraits.transform_type(::Type{<:PackageSingleton}, ::HashAnotherSingleton)
-    return "AnotherPackage.PackageSingleton"
-end
-context = HashAnotherSingleton(HashVersion{4}())
-stable_hash([PackageSingleton(), 1, 2], context) # will not error
-```
-
-### Functions
-
-Overwriting `transform_type` can be used to opt-in to hashing functions.
-
-```julia
-f(x) = x+1
-StableHashTraits.transform_type(::typeof(fn)) = "Main.fn"
-```
 
 ### Type Parameters
 
@@ -472,35 +440,12 @@ end
     transform_type_value(::Type{T}, [trait], [context]) where {T}
 
 The value that is hashed for type `T` when hashing a type as a value (e.g.
-`stable_hash(Int)`). Hashing types as values is an error by default, but you can use this
-method to opt-in to hashing a type as a value. You can return types (e.g. type parameters of
-`T`), but do not return `T` or you will get a stack overflow.
-
-## Example
-
-You can define a method of this function to opt in to hashing your type as a value.
-
-```julia
-struct MyType end
-StableHashTraits.transform_type_value(::Type{T}) where {T<:MyType} = module_nameof_string(T)
-stable_hash(MyType) # does not error
-```
-
-Likewise, you can opt in to this behavior for a type you don't own by defining a context.
-
-```julia
-StableHashTraits.@context HashNumberTypes
-function StableHashTraits.type_value_identifier(::Type{T},
-                                                ::HashNumberTypes) where {T <: Number}
-    return module_nameof_string(T)
-end
-stable_hash(Int, HashNumberTypes(HashVersion{4}())) # does not error
-```
+`stable_hash(Int)`). You can return types (e.g. type parameters of `T`), but do not return
+`T` or you will get a stack overflow.
 
 ## See Also
 
-[`transformer`](@ref)
-[`StableHashTraits.transform_type`](@ref)
+[`transformer`](@ref) [`StableHashTraits.transform_type`](@ref)
 
 """
 function transform_type_value(::Type{T}, context) where {T}
