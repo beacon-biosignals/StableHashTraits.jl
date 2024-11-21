@@ -49,7 +49,7 @@ end
 """
     StableHashTraits.parent_context(context)
 
-Return the parent context of the given context object. (See [`hash_method`](@ref) and
+Return the parent context of the given context object. (See [`transformer`](@ref) and
 [`StableHashTraits.@context`](@ref) for details of using context).
 
 This is normally all that you need to know to implement a new context. However, if your
@@ -369,7 +369,7 @@ end
 The value to hash for type `T` when hashing an object's type. Users of `StableHashTraits`
 can implement a method that accepts one (`T`) or two arguments (`T` and `context`). If no
 method is implemented, the fallback `transform_type` value uses `StructType(T)` to decide
-how to hash `T`; this is documented under [What gets hashed? (hash version 4)](@ref).
+how to hash `T`; this is documented under [What gets hashed?](@ref).
 
 Any types returned by `transform_type` has `transform_type` applied to it, so make sure that
 you only return types when they are are some nested component of your type (do not return

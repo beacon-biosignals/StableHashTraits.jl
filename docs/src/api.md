@@ -19,5 +19,4 @@ StableHashTraits.parent_context
 StableHashTraits.@context
 WithTypeNames
 TablesEq
-ViewsEq
 ```
