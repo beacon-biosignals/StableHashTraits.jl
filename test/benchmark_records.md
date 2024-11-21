@@ -189,3 +189,31 @@ the dict benchmark will probably be a good one to pay attention to.
   31 │ missings    sha256     4          582.250 μs  504.375 μs   0.866252
   32 │ strings     sha256     4          2.058 ms    1.696 ms     0.824243
 ```
+
+# Version 2.0
+
+This version deprecates all but hash version 4. As expected this has little impact
+on the performance of benchmarks for hash version 4.
+
+```
+16×6 DataFrame
+ Row │ benchmark   hash       version    base        trait       ratio
+     │ SubStrin…   SubStrin…  SubStrin…  String      String      Float64
+─────┼─────────────────────────────────────────────────────────────────────
+   1 │ dicts       crc        4          1.533 ms    88.197 ms   57.5258
+   2 │ structs     crc        4          57.417 μs   500.375 μs   8.71475
+   3 │ tuples      crc        4          57.542 μs   344.500 μs   5.98693
+   4 │ numbers     crc        4          28.875 μs   122.042 μs   4.22656
+   5 │ dataframes  crc        4          73.042 μs   277.958 μs   3.80545
+   6 │ symbols     crc        4          1.155 ms    1.371 ms     1.18639
+   7 │ missings    crc        4          240.917 μs  207.083 μs   0.859562
+   8 │ strings     crc        4          879.208 μs  289.083 μs   0.328799
+   9 │ dicts       sha256     4          1.948 ms    81.803 ms   41.9871
+  10 │ tuples      sha256     4          484.250 μs  1.599 ms     3.30201
+  11 │ structs     sha256     4          475.292 μs  1.348 ms     2.83615
+  12 │ symbols     sha256     4          2.009 ms    3.023 ms     1.50492
+  13 │ dataframes  sha256     4          497.667 μs  702.000 μs   1.41058
+  14 │ numbers     sha256     4          246.000 μs  336.750 μs   1.3689
+  15 │ strings     sha256     4          1.753 ms    1.707 ms     0.973521
+  16 │ missings    sha256     4          477.875 μs  443.042 μs   0.927109
+```

@@ -66,7 +66,7 @@ benchmarks = [(; name="dataframes", data=df);
 
 for hashfn in (crc, sha256)
     hstr = nameof(hashfn)
-    for V in (3, 4)
+    for V in (4,)
         for (; name, data) in benchmarks
             suite["$(name)_$(hstr)_$V"] = BenchmarkGroup([name])
             suite["$(name)_$(hstr)_$V"]["base"] = begin

@@ -406,11 +406,32 @@ stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType) = hash_s
 ##### Regex
 #####
 
+# NOTE: we don't have great options for keeping the next few functions from depending on
+# some internals of Base julia
+#
+# The underlying problem is that there is no public API for inspecting regex flags or the
+# regex pattern of a regex.
+#
+# We can:
+#
+# 1. Use the string representation of regex: non-breaking Julia releases change this
+# 2. Directly read private fields of Regex and use flag defaults to compute what relevant
+#    regex flags have been marked (e.g. `r"a"i` has the `i` flag marked).
+#
+# An added complication is that the default options for PCRE change across Julia versions,
+# so we can't just use all the bytes of `compile_options`; this will break compatibility
+# across julia versions.
+#
+# It seems more likely that the string representation will change than that the fields and
+# private bit masks will change; so for now, the second approach is taken.
+
 pattern_(x::Regex)::String = x.pattern
 
 function compile_options_(x::Regex)::UInt32
-    # NOTE: using this mask kept the code from breaking on Julia 1.6
-    # we can't change it now, since we don't want the hash to change
+    # NOTE: using this mask kept the code from breaking on Julia 1.6 we can't change it now,
+    # since we don't want the hash to change furthermore, the default flags could
+    # conceivably change in a future julia version. In our tests, we verify that this mask
+    # properly captures the state all documented regex flags.
     mask = ~Base.DEFAULT_COMPILER_OPTS | Base.PCRE.UCP
     return x.compile_options & mask
 end
