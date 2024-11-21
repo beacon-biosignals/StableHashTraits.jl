@@ -38,7 +38,7 @@ In many cases, users can simply call `stable_hash(x; version=4)` on the type the
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
 > [!NOTE]
-> Once upon a time (in version 1) StableHashTraits included hash versions 1-3. These have been removed in version 2.0 of StableHashTraits, and the existing version 4 has been left unchanged, to avoid confusion: that is calling `stable_hash(x; version=4)` will yield the same result, regardless of whether you are using StableHashTraits 1.3 or 2.0. Calls to the earlier hash versions will error in 2.0.
+> In versions prior to 2.0, StableHashTraits included hash versions 1-3. These have been removed in version 2.0 of StableHashTraits, and the existing version 4 has been left unchanged, to avoid confusion: calling `stable_hash(x; version=4)` will yield the same result, regardless of whether you are using StableHashTraits 1.3 or 2.0. Calls to the earlier hash versions will error in 2.0.
 
 <!--The START_ and STOP_ comments are used to extract content that is also repeated in the documentation-->
 <!--START_OVERVIEW-->
