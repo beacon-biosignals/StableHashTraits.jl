@@ -213,8 +213,8 @@ end
 
 function stable_hash_helper(x, hash_state, context, trait)
     throw(ArgumentError("Unrecognized trait of type `$(typeof(trait))` when " *
-                        "hashing object $x. The implementation of `transformer` for this " *
-                        "object provides an invalid second argument."))
+                        "hashing object $x. Review the implementation of " *
+                        "`StableHashTraits.transformer` for this object."))
     return
 end
 

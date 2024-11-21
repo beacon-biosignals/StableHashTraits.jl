@@ -94,6 +94,11 @@ end
 struct BadHashMethod end
 StableHashTraits.transformer(::Type{<:BadHashMethod}) = "garbage"
 
+struct BadHashMethod2 end
+function StableHashTraits.transformer(::Type{<:BadHashMethod2})
+    return StableHashTraits.Transformer(identity, "garbage")
+end
+
 struct Singleton1 end
 struct Singleton2 end
 

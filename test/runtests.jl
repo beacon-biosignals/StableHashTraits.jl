@@ -210,6 +210,7 @@ include("setup_tests.jl")
                 @test test_hash(Float64) != test_hash("Float64")
                 @test test_hash(Int) != test_hash("Int")
                 @test test_hash(WeirdTypeValue) == test_hash(Int)
+                @test test_hash(typeof(identity)) != test_hash(identity)
                 @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
                 @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
 
@@ -231,6 +232,7 @@ include("setup_tests.jl")
                 @test test_hash(TestType(1, 2)) != test_hash(TestType4(2, 1))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
                 @test_throws TypeError test_hash(BadHashMethod())
+                @test_throws r"Unrecognized trait" test_hash(BadHashMethod2())
             end
 
             @testset "Pluto-defined structs are stable, even for `module_nameof_string`" begin
