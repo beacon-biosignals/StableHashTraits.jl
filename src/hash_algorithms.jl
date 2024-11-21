@@ -69,16 +69,10 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
     end
 end
 
-# NOTE: while BufferedHashState is a faster implementation of `start/end_nested_hash!`
-# we still need a recursive hash implementation to implement `HashVersion{1}()`
-start_nested_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
+# NOTE: we rely on BufferedHashState's implementation of `start/end_nested_hash!`
 function update_hash!(sha::SHA.SHA_CTX, bytes::AbstractVector{UInt8})
     SHA.update!(sha, bytes)
     return sha
-end
-function end_nested_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
-    SHA.update!(hash_state, SHA.digest!(nested_hash_state))
-    return hash_state
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
@@ -100,12 +94,8 @@ function RecursiveHashState(fn)
     hash = fn(UInt8[])
     return RecursiveHashState(fn, hash, hash)
 end
-start_nested_hash!(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
 function update_hash!(hasher::RecursiveHashState, bytes::AbstractVector{UInt8})
     return RecursiveHashState(hasher.fn, hasher.fn(bytes, hasher.val), hasher.init)
-end
-function end_nested_hash!(fn::RecursiveHashState, nested::RecursiveHashState)
-    return update_hash!(fn, reinterpret(UInt8, [nested.val;]))
 end
 compute_hash!(x::RecursiveHashState) = x.val
 similar_hash_state(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
