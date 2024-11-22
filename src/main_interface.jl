@@ -11,7 +11,7 @@ these fallback methods will not change even if new hash versions are developed.
 struct HashVersion{V}
     function HashVersion{V}() where {V}
         V < 4 &&
-            throw(ArgumentError("Version < 4 are not supported in StalbeHashTraits 2.0"))
+            throw(ArgumentError("Versions < 4 are not supported in StableHashTraits 2.0"))
         return new{V}()
     end
 end
