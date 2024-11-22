@@ -6,36 +6,13 @@ include("setup_tests.jl")
     crc(x, s=0x000000) = crc32c(collect(x), s)
     crc(x::Union{SubArray{UInt8},Vector{UInt8}}, s=0x000000) = crc32c(x, s)
 
-    if VERSION <= v"1.10"
-        @testset "Older Reference Tests" begin
-            @test_reference "references/ref20.txt" stable_hash([1, 2, 3]; alg=crc)
-            @test_reference "references/ref21.txt" stable_hash(v"0.1.0"; alg=crc)
-            @test_reference "references/ref22.txt" stable_hash(sin; alg=crc)
-            @test_reference "references/ref23.txt" stable_hash(Set(1:3); alg=crc)
-            @test_reference "references/ref24.txt" stable_hash(DataFrame(; x=1:10, y=1:10),
-                                                               TablesEq(); alg=crc)
-            @test_reference "references/ref25.txt" stable_hash([1 2; 3 4]; alg=crc)
-
-            # get some code coverage (and reference tests) for sha1
-            @test_reference "references/ref26.txt" bytes2hex(stable_hash([1, 2, 3];
-                                                                         alg=sha1))
-            @test_reference "references/ref27.txt" bytes2hex(stable_hash(v"0.1.0";
-                                                                         alg=sha1))
-            @test_reference "references/ref28.txt" bytes2hex(stable_hash(sin; alg=sha1))
-            @test_reference "references/ref29.txt" bytes2hex(stable_hash(Set(1:3);
-                                                                         alg=sha1))
-            @test_reference "references/ref30.txt" bytes2hex(stable_hash(DataFrame(; x=1:10,
-                                                                                   y=1:10),
-                                                                         TablesEq();
-                                                                         alg=sha1))
-            @test_reference "references/ref31.txt" bytes2hex(stable_hash([1 2; 3 4];
-                                                                         alg=sha1))
+    @testset "Old hash versions generate an error" begin
+        for version in (1, 3, 3)
+            @test_throws ArgumentError stable_hash(1; version)
         end
     end
 
-    versions = VERSION >= v"1.11-" ? (4,) : (1, 2, 3, 4)
-    for V in versions, hashfn in (sha256, sha1, crc32c)
-        hashfn = hashfn == crc32c && V == 1 ? crc : hashfn
+    for V in (4,), hashfn in (sha256, sha1, crc32c)
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
             test_hash(x, c=ctx) = stable_hash(x, c; alg=hashfn)
@@ -98,39 +75,14 @@ include("setup_tests.jl")
                 @test_reference("references/ref26_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(2 => 3)))
             end
-            # verifies that transform can be called recursively
-            if V <= 3
-                @testset "FnHash" begin
-                    @test test_hash(GoodTransform(2)) == test_hash(GoodTransform("-0.2"))
-                    @test test_hash(GoodTransform(3)) != test_hash(GoodTransform("-0.2"))
-
-                    # various (in)equalities
-                    @test_throws ArgumentError test_hash(BadTransform())
-                end
-            end
 
             # dictionary like
             @testset "Associative Data" begin
                 @test test_hash(Dict(:a => 1, :b => 2)) == test_hash(Dict(:b => 2, :a => 1))
                 @test ((; kwargs...) -> test_hash(kwargs))(; a=1, b=2) ==
                       ((; kwargs...) -> test_hash(kwargs))(; b=2, a=1)
-                if V <= 3
-                    @test test_hash((; a=1, b=2)) != test_hash((; b=2, a=1))
-                else
-                    @test test_hash((; a=1, b=2)) == test_hash((; b=2, a=1))
-                end
+                @test test_hash((; a=1, b=2)) == test_hash((; b=2, a=1))
                 @test test_hash((; a=1, b=2)) != test_hash((; a=2, b=1))
-                # Validate that badly printed types properly error, rather than silently
-                # producing a bad typestring with an unstable type id. NOTE: One might want
-                # to test this using `stable_type_id`, however this uses an internal
-                # function (`qualified_type_`) because otherwise this runs into confusing
-                # compilation issues during CI because of the way that generated functions
-                # work.
-                if V == 1 && VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
-                    @test_throws(StableHashTraits.StableNames.ParseError,
-                                 StableHashTraits.qualified_type_((; a=1,
-                                                                   b=BadShowSyntax())))
-                end
             end
 
             # table like
@@ -151,38 +103,17 @@ include("setup_tests.jl")
 
             # test out HashAndContext
             @testset "Contexts" begin
-                if V <= 3
-                    @test test_hash(CustomHashObject(1:5, 1:10)) !=
-                          test_hash(BasicHashObject(1:5, 1:10))
-                end
-                @test_throws ArgumentError test_hash("bob", BadRootContext())
-                @test test_hash(1, BadRootContext()) isa Union{Unsigned,Vector{UInt8}}
+                @test_throws MethodError test_hash("bob", BadRootContext())
             end
 
             @testset "Sequences" begin
                 @test test_hash([1 2; 3 4]) != test_hash(vec([1 2; 3 4]))
-                if V <= 3
-                    @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4]')
-                else
-                    @test test_hash([1 2; 3 4]) == test_hash([1 3; 2 4]')
-                end
+                @test test_hash([1 2; 3 4]) == test_hash([1 3; 2 4]')
                 @test test_hash([1 2; 3 4]) != test_hash([1 3; 2 4])
-                @test test_hash([1 2; 3 4], ViewsEq(ctx)) !=
-                      test_hash(vec([1 2; 3 4]), ViewsEq(ctx))
-                @test test_hash([1 2; 3 4], ViewsEq(ctx)) ==
-                      test_hash([1 3; 2 4]', ViewsEq(ctx))
-                @test test_hash([1 2; 3 4], ViewsEq(ctx)) !=
-                      test_hash([1 3; 2 4], ViewsEq(ctx))
                 @test test_hash(reshape(1:10, 2, 5)) != test_hash(reshape(1:10, 5, 2))
-                if V <= 3
-                    @test test_hash(view(collect(1:5), 1:2)) != test_hash([1, 2])
-                else
-                    @test test_hash(view(collect(1:5), 1:2)) == test_hash([1, 2])
-                    @test test_hash(view(collect(1:5), 1:2), WithTypeNames(ctx)) !=
-                          test_hash([1, 2], WithTypeNames(ctx))
-                end
-                @test test_hash(view(collect(1:5), 1:2), ViewsEq(ctx)) ==
-                      test_hash([1, 2], ViewsEq(ctx))
+                @test test_hash(view(collect(1:5), 1:2)) == test_hash([1, 2])
+                @test test_hash(view(collect(1:5), 1:2), WithTypeNames(ctx)) !=
+                      test_hash([1, 2], WithTypeNames(ctx))
 
                 @test test_hash([]) != test_hash([(), (), ()])
                 @test test_hash([(), ()]) != test_hash([(), (), ()])
@@ -205,15 +136,9 @@ include("setup_tests.jl")
                 @test test_hash(["ab"]) != test_hash(["a", "b"])
                 @test test_hash(:foo) != test_hash("foo")
                 @test test_hash(:foo) != test_hash(:bar)
-                if V <= 3
-                    @test test_hash(view("bob", 1:2)) != test_hash("bo")
-                else
-                    @test test_hash(view("bob", 1:2)) == test_hash("bo")
-                    @test test_hash(view("bob", 1:2), WithTypeNames(ctx)) !=
-                          test_hash("bo", WithTypeNames(ctx))
-                end
-                @test test_hash(view("bob", 1:2), ViewsEq(ctx)) ==
-                      test_hash("bo", ViewsEq(ctx))
+                @test test_hash(view("bob", 1:2)) == test_hash("bo")
+                @test test_hash(view("bob", 1:2), WithTypeNames(ctx)) !=
+                      test_hash("bo", WithTypeNames(ctx))
                 @test test_hash(S3Path("s3://foo/bar")) != test_hash(S3Path("s3://foo/baz"))
             end
 
@@ -260,13 +185,8 @@ include("setup_tests.jl")
                 @test test_hash(sin) != test_hash("Base.sin")
                 @test test_hash(==("foo")) == test_hash(==("foo"))
                 @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 1))
-                if V > 1
-                    @test test_hash(Base.Fix1(-, 1)) != test_hash(Base.Fix1(-, 2))
-                    @test test_hash(==("foo")) != test_hash(==("bar"))
-                else
-                    @test test_hash(Base.Fix1(-, 1)) == test_hash(Base.Fix1(-, 2))
-                    @test test_hash(==("foo")) == test_hash(==("bar"))
-                end
+                @test test_hash(Base.Fix1(-, 1)) != test_hash(Base.Fix1(-, 2))
+                @test test_hash(==("foo")) != test_hash(==("bar"))
                 @test_throws ArgumentError test_hash(x -> x + 1)
             end
 
@@ -282,34 +202,26 @@ include("setup_tests.jl")
             end
 
             @testset "Types" begin
-                if V < 4
-                    @test test_hash(Float64) != test_hash("Base.Float64")
-                    @test test_hash(Int) != test_hash("Base.Int")
-                end
                 @test test_hash(Float64) != test_hash(Int)
-                if V >= 4
-                    @test test_hash(missing) != test_hash("Base.Missing")
-                    @test test_hash(nothing) != test_hash("Base.Nothing")
-                    @test test_hash(Vector{Int}) != test_hash(Vector{String})
-                    @test test_hash(Array{Int}) != test_hash(Array{String})
-                    @test test_hash(Float64) != test_hash("Float64")
-                    @test test_hash(Int) != test_hash("Int")
-                    @test test_hash(WeirdTypeValue) == test_hash(Int)
-                    @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
-                    @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
+                @test test_hash(missing) != test_hash("Base.Missing")
+                @test test_hash(nothing) != test_hash("Base.Nothing")
+                @test test_hash(Vector{Int}) != test_hash(Vector{String})
+                @test test_hash(Array{Int}) != test_hash(Array{String})
+                @test test_hash(Float64) != test_hash("Float64")
+                @test test_hash(Int) != test_hash("Int")
+                @test test_hash(WeirdTypeValue) == test_hash(Int)
+                @test test_hash(typeof(identity)) != test_hash(identity)
+                @test test_hash(Array{Int,3}) != test_hash(Array{Int,4})
+                @test test_hash(Array{<:Any,3}) != test_hash(Array{<:Any,4})
 
-                    # NOTE: these should run without an `StackOverflowError` (previously it
-                    # did overflow)
-                    @test test_hash((; a=Vector{Int})) != test_hash((; a=Vector{String}))
-                    @test test_hash((; a=Array{T,1} where {T})) !=
-                          test_hash((; a=Array{T,2} where {T}))
-                end
+                # NOTE: these should run without an `StackOverflowError` (previously it
+                # did overflow)
+                @test test_hash((; a=Vector{Int})) != test_hash((; a=Vector{String}))
+                @test test_hash((; a=Array{T,1} where {T})) !=
+                      test_hash((; a=Array{T,2} where {T}))
             end
 
-            @testset "Custom hash_method" begin
-                @test @ConstantHash(5).constant isa UInt64
-                @test @ConstantHash("foo").constant isa UInt64
-                @test_throws ArgumentError @ConstantHash(1 + 2)
+            @testset "Custom transformer method" begin
                 @test test_hash(ExtraTypeParams{:A,Int}(2)) !=
                       test_hash(ExtraTypeParams{:B,Int}(2))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType(1, 2))
@@ -319,11 +231,8 @@ include("setup_tests.jl")
                 @test test_hash(TestType4(1, 2)) != test_hash(TestType3(1, 2))
                 @test test_hash(TestType(1, 2)) != test_hash(TestType4(2, 1))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
-                if V <= 3
-                    @test_throws ArgumentError test_hash(BadHashMethod())
-                else
-                    @test_throws TypeError test_hash(BadHashMethod())
-                end
+                @test_throws TypeError test_hash(BadHashMethod())
+                @test_throws r"Unrecognized trait" test_hash(BadHashMethod2())
             end
 
             @testset "Pluto-defined structs are stable, even for `module_nameof_string`" begin
@@ -407,206 +316,82 @@ include("setup_tests.jl")
                 end
             end
 
-            if V >= 4
-                @testset "Type-stable vs. type-unstable hashing" begin
-                    # arrays
-                    xs = [isodd(n) ? Char(n) : Int32(n) for n in 1:10]
-                    ys = [iseven(n) ? Char(n) : Int32(n) for n in 1:10]
-                    @test test_hash(xs) != test_hash(ys)
+            @testset "Type-stable vs. type-unstable hashing" begin
+                # arrays
+                xs = [isodd(n) ? Char(n) : Int32(n) for n in 1:10]
+                ys = [iseven(n) ? Char(n) : Int32(n) for n in 1:10]
+                @test test_hash(xs) != test_hash(ys)
 
-                    xs = zeros(Int32, 10)
-                    ys = Char.(xs)
-                    @test test_hash(xs) != test_hash(ys)
+                xs = zeros(Int32, 10)
+                ys = Char.(xs)
+                @test test_hash(xs) != test_hash(ys)
 
-                    # dicts
-                    xs = Dict(n => isodd(n) ? Char(n) : Int32(n) for n in 1:10)
-                    ys = Dict(n => iseven(n) ? Char(n) : Int32(n) for n in 1:10)
-                    @test test_hash(xs) != test_hash(ys)
+                # dicts
+                xs = Dict(n => isodd(n) ? Char(n) : Int32(n) for n in 1:10)
+                ys = Dict(n => iseven(n) ? Char(n) : Int32(n) for n in 1:10)
+                @test test_hash(xs) != test_hash(ys)
 
-                    xs = Dict(1:10 .=> Int32.(1:10))
-                    ys = Dict(1:10 .=> Char.(1:10))
-                    @test test_hash(xs) != test_hash(ys)
+                xs = Dict(1:10 .=> Int32.(1:10))
+                ys = Dict(1:10 .=> Char.(1:10))
+                @test test_hash(xs) != test_hash(ys)
 
-                    # structs
-                    xs = [(; n=isodd(n) ? Char(n) : Int32(n)) for n in 1:10]
-                    ys = [(; n=iseven(n) ? Char(n) : Int32(n)) for n in 1:10]
-                    @test test_hash(xs) != test_hash(ys)
+                # structs
+                xs = [(; n=isodd(n) ? Char(n) : Int32(n)) for n in 1:10]
+                ys = [(; n=iseven(n) ? Char(n) : Int32(n)) for n in 1:10]
+                @test test_hash(xs) != test_hash(ys)
 
-                    xs = [(; n) for n in Int32.(1:10)]
-                    ys = [(; n) for n in Char.(1:10)]
-                    @test test_hash(xs) != test_hash(ys)
+                xs = [(; n) for n in Int32.(1:10)]
+                ys = [(; n) for n in Char.(1:10)]
+                @test test_hash(xs) != test_hash(ys)
 
-                    # union-splitting tests
-                    xs = [fill(missing, 3); collect(1:10)]
-                    ys = [collect(1:10); fill(missing, 3)]
-                    @test test_hash(xs) != test_hash(ys)
+                # union-splitting tests
+                xs = [fill(missing, 3); collect(1:10)]
+                ys = [collect(1:10); fill(missing, 3)]
+                @test test_hash(xs) != test_hash(ys)
 
-                    xs = Union{Int32,UInt32,Char}[Int32(1), Int32(1), UInt32(1), UInt32(1),
-                                                  Char(1), Char(1)]
-                    ys = Union{Int32,UInt32,Char}[Int32(1), UInt32(1), Int32(1), Char(1),
-                                                  UInt32(1), Char(1)]
-                    @test test_hash(xs) != test_hash(ys)
+                xs = Union{Int32,UInt32,Char}[Int32(1), Int32(1), UInt32(1), UInt32(1),
+                                              Char(1), Char(1)]
+                ys = Union{Int32,UInt32,Char}[Int32(1), UInt32(1), Int32(1), Char(1),
+                                              UInt32(1), Char(1)]
+                @test test_hash(xs) != test_hash(ys)
 
-                    # narrowing fields doesn't generate hashing bugs
-                    @test test_hash(UnstableStruct1(nothing, 1)) !=
-                          test_hash(UnstableStruct1(missing, 2))
-                    @test test_hash(UnstableStruct1(1, 1)) !=
-                          test_hash(UnstableStruct1(2, 2))
-                    @test test_hash(UnstableStruct2(nothing, 1)) !=
-                          test_hash(UnstableStruct2(missing, 2))
-                    @test test_hash(UnstableStruct2(1, 1)) !=
-                          test_hash(UnstableStruct2(2, 2))
+                # narrowing fields doesn't generate hashing bugs
+                @test test_hash(UnstableStruct1(nothing, 1)) !=
+                      test_hash(UnstableStruct1(missing, 2))
+                @test test_hash(UnstableStruct1(1, 1)) !=
+                      test_hash(UnstableStruct1(2, 2))
+                @test test_hash(UnstableStruct2(nothing, 1)) !=
+                      test_hash(UnstableStruct2(missing, 2))
+                @test test_hash(UnstableStruct2(1, 1)) !=
+                      test_hash(UnstableStruct2(2, 2))
 
-                    # but if we use NamedTuple selection with `hoist_type=true`
-                    # we do get a bug
-                    @test test_hash(UnstableStruct3(nothing, 1)) ==
-                          test_hash(UnstableStruct3(missing, 2))
-                end
+                # but if we use NamedTuple selection with `hoist_type=true`
+                # we do get a bug
+                @test test_hash(UnstableStruct3(nothing, 1)) ==
+                      test_hash(UnstableStruct3(missing, 2))
             end
 
-            if V > 1 && hashfn == sha256
-                @testset "Hash-invariance to buffer size" begin
-                    data = (rand(Int8, 2), rand(Int8, 2))
-                    wrapped1 = StableHashTraits.HashState(sha256, HashVersion{V}())
-                    alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1,
-                                                                                      sizeof(qualified_name(Int8[]))))
-                    wrapped2 = StableHashTraits.HashState(sha256, HashVersion{V}())
-                    alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2,
-                                                                                      2sizeof(qualified_name(Int8[]))))
-                    # verify that the hashes are the same...
-                    @test stable_hash(data, ctx; alg=alg_small) ==
-                          stable_hash(data, ctx; alg=alg_large)
-                    # ...and that the distinct buffer sizes actually lead to a distinct set of
-                    # buffer sizes while updating the hash state...
-                    @test alg_small.positions != alg_large.positions
-                end
+            @testset "Hash-invariance to buffer size" begin
+                data = (rand(Int8, 2), rand(Int8, 2))
+                wrapped1 = StableHashTraits.HashState(sha256, HashVersion{V}())
+                alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1,
+                                                                                  3))
+
+                wrapped2 = StableHashTraits.HashState(sha256, HashVersion{V}())
+                alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2,
+                                                                                  20))
+                # verify that the hashes are the same...
+                @test stable_hash(data, ctx; alg=alg_small) ==
+                      stable_hash(data, ctx; alg=alg_large)
+                # ...and that the distinct buffer sizes actually lead to a distinct set of
+                # buffer sizes while updating the hash state...
+                @test alg_small.positions != alg_large.positions
             end
         end # @testset
     end # for
-
-    @testset "Deprecations" begin
-        @test (@test_deprecated(r"`parent_context`",
-                                stable_hash([1, 2], MyOldContext()))) !=
-              stable_hash([1, 2])
-        @test (@test_deprecated(r"`parent_context`",
-                                stable_hash("12", MyOldContext()))) ==
-              stable_hash("12", HashVersion{1}())
-        @test_deprecated(UseProperties(:ByName))
-        @test_deprecated(qualified_name("bob"))
-        @test_deprecated(qualified_type("bob"))
-        @test_deprecated(UseQualifiedName())
-        @test_deprecated(UseSize(UseIterate()))
-        @test_deprecated(ConstantHash("foo"))
-        @test_deprecated(UseTable())
-        @test_deprecated(HashVersion{1}())
-        @test_deprecated(HashVersion{2}())
-        @test_deprecated(HashVersion{3}())
-
-        # verify that if a type only has implementations for `hash_method`
-        # and not `transformer` they'll get a warning
-        @test_logs (:warn, r"deprecated") stable_hash(TestType(1, 2); version=4)
-        # verify that if there are appropriate definitions of `transformer` and/or
-        # `hash_method` this warning doesn't show up
-        @test_logs stable_hash(TestType4(1, 2); version=4)
-        @test_logs stable_hash(TestType2(1, 2); version=4)
-    end
-
-    if StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION <= VERSION < v"1.11-"
-        @testset "PikaParser" begin
-            using StableHashTraits.StableNames: parse_brackets, parse_walker, Parsed,
-                                                ParseError, cleanup_named_tuple_type
-
-            # verify parser output
-            @test parse_brackets("bob") == ["bob"]
-            # all we care about are spaces {, }, and ","
-            @test parse_brackets("fjkdls;fejiel;e;afjkdls;klfj-----@") ==
-                  ["fjkdls;fejiel;e;afjkdls;klfj-----@"]
-            @test parse_brackets("bob joe") == ["bob", Parsed(:SepClause, " ", "joe")]
-            @test parse_brackets("bob, joe") == ["bob", Parsed(:SepClause, ", ", "joe")]
-            @test parse_brackets("bob, joe, ") ==
-                  ["bob", Parsed(:SepClause, ", ", "joe"), ", "]
-            @test parse_brackets("bob,joe") == ["bob", Parsed(:SepClause, ",", "joe")]
-            @test parse_brackets("{}") == Any[Parsed(:Brackets, "")]
-            @test parse_brackets("{,,}") == Any[Parsed(:Brackets, ",", ",")]
-            @test parse_brackets("{ }") == Any[Parsed(:Brackets, " ")]
-            @test parse_brackets("{, joe}") == Any[Parsed(:Brackets, ", ", "joe")]
-            @test parse_brackets("{bob, joe}") ==
-                  Any[Parsed(:Brackets, "bob", Parsed(:SepClause, ", ", "joe"))]
-            @test parse_brackets("foo{bob, joe}") ==
-                  Any[Parsed(:Head, "foo",
-                             Parsed(:Brackets, "bob", Parsed(:SepClause, ", ", "joe")))]
-            @test parse_brackets("foo {bob, joe}") ==
-                  Any["foo",
-                      Parsed(:SepClause, " ",
-                             Parsed(:Brackets, "bob", Parsed(:SepClause, ", ", "joe")))]
-            @test parse_brackets("foo{bar{baz, biz}, boz}") ==
-                  Any[Parsed(:Head, "foo",
-                             Parsed(:Brackets,
-                                    Parsed(:Head, "bar",
-                                           Parsed(:Brackets, "baz",
-                                                  Parsed(:SepClause, ", ", "biz"))),
-                                    Parsed(:SepClause, ", ", "boz")))]
-            @test parse_brackets("{, joe}") == Any[Parsed(:Brackets, ", ", "joe")]
-
-            # various invalid strings
-            @test_throws ParseError parse_brackets("{ joe{bob, bill} }}")
-            @test_throws ParseError parse_brackets("{{ joe{bob, bill} }")
-            @test_throws ParseError parse_brackets("{ joe{bob,} bill} }")
-            @test_throws ParseError parse_brackets("{ joe{bob, {bill} }")
-            @test_throws ParseError parse_brackets("")
-
-            # verify parser round-trip
-            round_trips(str) = parse_walker((fn, p) -> nothing, parse_brackets(str)) == str
-            @test round_trips("bob")
-            @test round_trips("bob joe")
-            @test round_trips("bob, joe")
-            @test round_trips("bob,joe")
-            @test round_trips("{bob, joe}")
-            @test round_trips("foo{bob, joe}")
-            @test round_trips("foo {bob, joe}")
-            @test round_trips("foo{bar{baz, biz}, boz}")
-
-            # verify that we can replace an element in various locations using
-            # parse_walker's second argument
-            function replace_bob(str)
-                return parse_walker((fn, p) -> p == "bob" ? "BOB" : nothing,
-                                    parse_brackets(str))
-            end
-            @test replace_bob("bob") == "BOB"
-            @test replace_bob("bob joe") == "BOB joe"
-            @test replace_bob("bob, joe") == "BOB, joe"
-            @test replace_bob("bob,joe") == "BOB,joe"
-            @test replace_bob("{bob, joe}") == "{BOB, joe}"
-            @test replace_bob("foo{bob, joe}") == "foo{BOB, joe}"
-            @test replace_bob("foo {bob, joe}") == "foo {BOB, joe}"
-            @test replace_bob("foo{bar{baz, biz}, boz}") == "foo{bar{baz, biz}, boz}"
-            @test replace_bob("foo{bar{baz, bob}, boz}") == "foo{bar{baz, BOB}, boz}"
-
-            # validate the named tuple replaceer
-            @test cleanup_named_tuple_type(string(typeof((;)))) == "NamedTuple{(),Tuple{}}"
-            @test cleanup_named_tuple_type("@NamedTuple{x::Int, y::Int}") ==
-                  "NamedTuple{(:x,:y),Tuple{Int,Int}}"
-            new_type_str = "@NamedTuple{a::Int64, b::@NamedTuple{}, c::@NamedTuple{c1::Int64}, d::@NamedTuple{d1::Int64, d2::Int64}}"
-            old_type_str = "NamedTuple{(:a,:b,:c,:d),Tuple{Int64,NamedTuple{(),Tuple{}},NamedTuple{(:c1,),Tuple{Int64}},NamedTuple{(:d1,:d2),Tuple{Int64,Int64}}}}"
-            @test cleanup_named_tuple_type(new_type_str) == old_type_str
-            @test cleanup_named_tuple_type("@NamedTuple{x::Int}") ==
-                  "NamedTuple{(:x,),Tuple{Int}}"
-            @test cleanup_named_tuple_type("FooBar{Baz{Float64, (custom, display(}, " *
-                                           "@NamedTuple{x::Int, y::Int}}") ==
-                  "FooBar{Baz{Float64, (custom, display(}, NamedTuple{(:x,:y),Tuple{Int,Int}}}"
-        end
-    end
 end # @testset
 
 @testset "Aqua" begin
-    # NOTE: in Julia 1.9 and older we intentionally do not load `PikaParser`
-    # as it is only used when transforming type strings in 1.10
-
     # NOTE: aqua incorrectly flags the split_union method as having unbound type arguments
-    if VERSION >= StableHashTraits.NAMED_TUPLES_PRETTY_PRINT_VERSION
-        Aqua.test_all(StableHashTraits; unbound_args=(; broken=true))
-    else
-        Aqua.test_all(StableHashTraits; stale_deps=(; ignore=[:PikaParser]),
-                      unbound_args=(; broken=true))
-    end
+    Aqua.test_all(StableHashTraits; unbound_args=(; broken=true))
 end

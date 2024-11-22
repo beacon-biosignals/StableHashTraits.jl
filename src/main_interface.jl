@@ -11,80 +11,54 @@ these fallback methods will not change even if new hash versions are developed.
 struct HashVersion{V}
     function HashVersion{V}() where {V}
         V < 4 &&
-            Base.depwarn("HashVersion{T} for T < 4 are deprecated, favor `HashVersion{4}` in " *
-                         "all cases where backwards compatible hash values are not " *
-                         "required.", :HashVersion)
+            throw(ArgumentError("Versions < 4 are not supported in StableHashTraits 2.0"))
         return new{V}()
     end
 end
 
 """
-    stable_hash(x, context=HashVersion{1}(); alg=sha256)
-    stable_hash(x; alg=sha256, version=1)
+    stable_hash(x, context; alg=sha256)
+    stable_hash(x; alg=sha256, version)
 
 Create a stable hash of the given objects. As long as the context remains the same, this
 hash is intended to remain unchanged across julia versions. The built-in context is
 HashVersion{N}, and if you specify a `version`, this is equivalent to explicitly passing
-`HashVersion{version}`. To customize how the hash is copmuted see [Using Contexts](@ref).
+`HashVersion{version}`.
 
-It is best to pass an explicit version, since `HashVersion{4}` is the only non-deprecated
-version; it is much faster than 1 and more stable than 2. Furthermore, a new hash version is
-provided in a future release, the hash you get by passing an explicit `HashVersion{N}`
-should *not* change. (Note that the number in `HashVersion` does not necessarily match the
-package version of `StableHashTraits`).
+The version must be explicitly specified: if a new hash version is provided in a future
+release, your result will *not* change.
 
-In hash version 4, you customize how hashes are computed using [`transformer`](@ref), and in
-versions 1-4 using [`hash_method`](@ref).
+You customize how hashes are computed using [`transformer`](@ref).
 
 To change the hash algorithm used, pass a different function to `alg`. It accepts any `sha`
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
 [old_hash])`.
 
-The `context` value gets passed as the second argument to [`hash_method`](@ref) and
-[`transformer`](@ref), and as the third argument to [`StableHashTraits.write`](@ref). Note
-that both `hash_method` and `StableHashTraits.write` are deprecated.
+The `context` value gets passed as the second argument to [`transformer`](@ref), see
+[Using Contexts](@ref) for details.
 
 ## See Also
 
 [`transformer`](@ref)
 """
-stable_hash(x; alg=sha256, version=1) = stable_hash(x, HashVersion{version}(); alg)
+stable_hash(x; version, alg=sha256) = stable_hash(x, HashVersion{version}(); alg)
 function stable_hash(x, context; alg=sha256)
-    if root_version(context) < 4
-        if VERSION.minor > 10
-            @warn "`stable_hash(x; version < 4)` is not supported in Julia 1.11 or " *
-                  "higher. Calls should not error, but *may* silently produce different " *
-                  "hashes. `stable_hash` is intended to be used for caching, so this " *
-                  "likely will simply reduce the number of cache hits. Upgrade to " *
-                  "using `stable_hash(x; version=4) to avoid this warning." maxlog = 1
-        end
-        return compute_hash!(deprecated_hash_helper(x, HashState(alg, context), context,
-                                                    hash_method(x, context)))
-    else
-        hash_state = hash_type_and_value(x, HashState(alg, context), context)
-        return compute_hash!(hash_state)
-    end
+    hash_state = hash_type_and_value(x, HashState(alg, context), context)
+    return compute_hash!(hash_state)
 end
 
 """
     StableHashTraits.parent_context(context)
 
-Return the parent context of the given context object. (See [`hash_method`](@ref) and
-[`StableHashTraits.@context`](@ref) for details of using context). The default method falls back to returning
-`HashVersion{1}`, but this is flagged as a deprecation warning; in the future it is expected
-that all contexts define this method.
+Return the parent context of the given context object. (See [`transformer`](@ref) and
+[`StableHashTraits.@context`](@ref) for details of using context).
 
 This is normally all that you need to know to implement a new context. However, if your
 context is expected to be the root context—one that does not fallback to any parent (akin to
 `HashVersion`)—then there may be a bit more work involved. In this case, `parent_context`
-should return `nothing`. You will also need to define
-[`StableHashTraits.root_version`](@ref).
+should return `nothing`.
 """
-function parent_context(x::Any)
-    Base.depwarn("You should explicitly define a `parent_context` method for context " *
-                 "`$x`. See details in the docstring of `hash_method`.", :parent_context)
-    return HashVersion{1}()
-end
+function parent_context end
 
 """
     StableHashTraits.Transformer(fn=identity, result_method=nothing;
@@ -240,8 +214,8 @@ end
 
 function stable_hash_helper(x, hash_state, context, trait)
     throw(ArgumentError("Unrecognized trait of type `$(typeof(trait))` when " *
-                        "hashing object $x. The implementation of `transformer` for this " *
-                        "object provides an invalid second argument."))
+                        "hashing object $x. Review the implementation of " *
+                        "`StableHashTraits.transformer` for this object."))
     return
 end
 
@@ -310,51 +284,50 @@ throw an error, as no stable name is possible in this case.
 @inline module_nameof_string(m::Module) = module_nameof_(m)
 @inline module_nameof_string(::Type{T}) where {T} = handle_unions_(T, module_nameof_)
 @inline function module_nameof_(::Type{T}) where {T}
-    return validate_name(cleanup_name(string(parentmodule(T)) * "." * String(nameof(T))))
+    return validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
 end
+
+# TODO: use `Pluto.is_inside_pluto` when/if it is implemented
+function is_inside_pluto(mod::Module)
+    return startswith(string(nameof(mod)), "workspace#") &&
+           isdefined(mod, Symbol("@bind"))
+end
+
+function validate_name(str)
+    if occursin("#", str)
+        throw(ArgumentError("Anonymous types (those containing `#`) cannot be hashed to a reliable value: found type $str"))
+    end
+    return str
+end
+
+function clean_module(mod)
+    module_str = string(mod)
+    # keep modules stable across Pluto runs
+    if is_inside_pluto(mod)
+        module_str = replace(module_str, r"var\"workspace#[0-9]+\"" => "PlutoWorkspace")
+    end
+    # Core vs. Base is known to change across Julia versions
+    module_str = replace(module_str, "Core" => "Base")
+
+    return module_str
+end
+
 @inline function module_nameof_(T)
-    return validate_name(cleanup_name(string(parentmodule(T)) * "." * String(nameof(T))))
+    return validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
 end
-@static if VERSION < v"1.9"
-    # in julia v 1.8 and lower dispatching over Unions will not work, we need to
-    # dynamically check the type of `T`
-    function handle_unions_(T, namer)
-        if T isa Union
-            handle_unions_helper_(T, namer)
-        else
-            handle_function_types_(T, namer)
-        end
-    end
-    function handle_unions_helper_(T, namer)
-        # NOTE we are relying on julia intenrals here; thankfully we are doing so for a just
-        # a few julia versions (1.6-1.8) and can test the latest patch release of each to
-        # ensure they keep workiing (once the next LTS is settled, we can remove support for
-        # these older version and remove reliance on internals)
-        A = T.a
-        B = T.b
-        !@isdefined(A) && !@isdefined(B) && return ""
-        !@isdefined(B) && return handle_function_types_(A, namer)
-        # NOTE: The following line never gets run, because of the way julia's type dispatch
-        # is currently implemented, but it is here to avoid regressions in future julia
-        # version
-        !@isdefined(A) && return handle_function_types_(B, namer)
-        return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
-    end
-else
-    # in later version of julia, handling unions can be accomplished via dispatch (and does
-    # not require the use of julia internals)
-    function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
-        !@isdefined(A) && !@isdefined(B) && return ""
-        !@isdefined(B) && return handle_function_types_(A, namer)
-        # NOTE: The following line never gets run, because of the way julia's type dispatch
-        # is currently implemented, but it is here to avoid regressions in future julia
-        # version
-        !@isdefined(A) && return handle_function_types_(B, namer)
-        return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
-    end
-    # not all types are concrete, so they must be passed through a generic "handle_unions_"
-    handle_unions_(T, namer) = handle_function_types_(T, namer)
+
+function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
+    !@isdefined(A) && !@isdefined(B) && return ""
+    !@isdefined(B) && return handle_function_types_(A, namer)
+    # NOTE: The following line never gets run, because of the way julia's type dispatch
+    # is currently implemented, but it is here to avoid regressions in future julia
+    # versions
+    !@isdefined(A) && return handle_function_types_(B, namer)
+    return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
 end
+# not all types are concrete, so they must be passed through a generic "handle_unions_"
+handle_unions_(T, namer) = handle_function_types_(T, namer)
+
 hoist_type(::typeof(module_nameof_string)) = true
 @inline function handle_function_types_(::Type{T}, namer) where {T}
     # special case for function types
@@ -381,10 +354,10 @@ possible in this case.
 @inline nameof_string(::Type{T}) where {T} = handle_unions_(T, nameof_)
 hoist_type(::typeof(nameof_string)) = true
 @inline function nameof_(::Type{T}) where {T}
-    return validate_name(cleanup_name(String(nameof(T))))
+    return validate_name(String(nameof(T)))
 end
 @inline function nameof_(T)
-    return validate_name(cleanup_name(String(nameof(T))))
+    return validate_name(String(nameof(T)))
 end
 
 """
@@ -393,10 +366,10 @@ end
 The value to hash for type `T` when hashing an object's type. Users of `StableHashTraits`
 can implement a method that accepts one (`T`) or two arguments (`T` and `context`). If no
 method is implemented, the fallback `transform_type` value uses `StructType(T)` to decide
-how to hash `T`; this is documented under [What gets hashed? (hash version 4)](@ref).
+how to hash `T`; this is documented under [What gets hashed?](@ref).
 
 Any types returned by `transform_type` has `transform_type` applied to it, so make sure that
-you only return types when they are are some nested component of your type (do not return
+you only return types when they are some nested component of your type (do not return
 `T`!!)
 
 This method is used to add additional data to the hash of a type. Internally, the data
@@ -410,38 +383,6 @@ them from being included in a type's hash, since otherwise the assumptions neces
 efficient hash computation would be violated.
 
 ## Examples
-
-### Singleton Types
-
-You can opt in to hashing novel singleton types by overwriting `transform_type`:
-
-```julia
-struct MySingleton end
-StructTypes.StructType(::MySingleton) = StructTypes.SingletonType()
-function StableHashTraits.transform_type(::Type{<:MySingleton})
-    return "MySingleton"
-end
-```
-If you do not own the type you wish to customize, you can use a context:
-
-```julia
-using AnotherPackage: PackageSingleton
-StableHashTriats.@context HashAnotherSingleton
-function StableHashTraits.transform_type(::Type{<:PackageSingleton}, ::HashAnotherSingleton)
-    return "AnotherPackage.PackageSingleton"
-end
-context = HashAnotherSingleton(HashVersion{4}())
-stable_hash([PackageSingleton(), 1, 2], context) # will not error
-```
-
-### Functions
-
-Overwriting `transform_type` can be used to opt-in to hashing functions.
-
-```julia
-f(x) = x+1
-StableHashTraits.transform_type(::typeof(fn)) = "Main.fn"
-```
 
 ### Type Parameters
 
@@ -496,35 +437,12 @@ end
     transform_type_value(::Type{T}, [trait], [context]) where {T}
 
 The value that is hashed for type `T` when hashing a type as a value (e.g.
-`stable_hash(Int)`). Hashing types as values is an error by default, but you can use this
-method to opt-in to hashing a type as a value. You can return types (e.g. type parameters of
-`T`), but do not return `T` or you will get a stack overflow.
-
-## Example
-
-You can define a method of this function to opt in to hashing your type as a value.
-
-```julia
-struct MyType end
-StableHashTraits.transform_type_value(::Type{T}) where {T<:MyType} = module_nameof_string(T)
-stable_hash(MyType) # does not error
-```
-
-Likewise, you can opt in to this behavior for a type you don't own by defining a context.
-
-```julia
-StableHashTraits.@context HashNumberTypes
-function StableHashTraits.type_value_identifier(::Type{T},
-                                                ::HashNumberTypes) where {T <: Number}
-    return module_nameof_string(T)
-end
-stable_hash(Int, HashNumberTypes(HashVersion{4}())) # does not error
-```
+`stable_hash(Int)`). You can return types (e.g. type parameters of `T`), but do not return
+`T` or you will get a stack overflow.
 
 ## See Also
 
-[`transformer`](@ref)
-[`StableHashTraits.transform_type`](@ref)
+[`transformer`](@ref) [`StableHashTraits.transform_type`](@ref)
 
 """
 function transform_type_value(::Type{T}, context) where {T}

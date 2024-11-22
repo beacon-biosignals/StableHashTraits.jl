@@ -11,20 +11,8 @@
 
 Returns the updated hash state given a set of bytes (either a tuple or array of UInt8
 values).
-
-    update_hash!(state::HashState, obj, context)
-
-Returns the updated hash, given an object and some context. The object will
-be written to some bytes using `StableHashTraits.write(io, obj, context)`.
 """
 function update_hash! end
-
-# when a hasher has no internal buffer, we allocate one for each call to `update_hash!`
-function update_hash!(hasher, x, context)
-    io = IOBuffer()
-    write(io, x, context)
-    return update_hash!(hasher, take!(io))
-end
 
 """
     HashState(alg, context)
@@ -76,22 +64,15 @@ for fn in filter(startswith("sha") ∘ string, names(SHA))
         # we cheat a little here, technically `SHA_CTX` and friends are not `HashState`
         # but we make them satisfy the same interface below
         @eval function HashState(::typeof(SHA.$(fn)), context)
-            root_version(context) < 2 && return SHA.$(CTX)()
             return BufferedHashState(SHA.$(CTX)())
         end
     end
 end
 
-# NOTE: while BufferedHashState is a faster implementation of `start/end_nested_hash!`
-# we still need a recursive hash implementation to implement `HashVersion{1}()`
-start_nested_hash!(ctx::SHA.SHA_CTX) = typeof(ctx)()
+# NOTE: we rely on BufferedHashState's implementation of `start/end_nested_hash!`
 function update_hash!(sha::SHA.SHA_CTX, bytes::AbstractVector{UInt8})
     SHA.update!(sha, bytes)
     return sha
-end
-function end_nested_hash!(hash_state::SHA.SHA_CTX, nested_hash_state)
-    SHA.update!(hash_state, SHA.digest!(nested_hash_state))
-    return hash_state
 end
 compute_hash!(sha::SHA.SHA_CTX) = SHA.digest!(sha)
 similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
@@ -101,7 +82,6 @@ similar_hash_state(::T) where {T<:SHA.SHA_CTX} = T()
 #####
 
 function HashState(fn::Function, context)
-    root_version(context) < 2 && return RecursiveHashState(fn)
     return BufferedHashState(RecursiveHashState(fn))
 end
 
@@ -114,12 +94,8 @@ function RecursiveHashState(fn)
     hash = fn(UInt8[])
     return RecursiveHashState(fn, hash, hash)
 end
-start_nested_hash!(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
 function update_hash!(hasher::RecursiveHashState, bytes::AbstractVector{UInt8})
     return RecursiveHashState(hasher.fn, hasher.fn(bytes, hasher.val), hasher.init)
-end
-function end_nested_hash!(fn::RecursiveHashState, nested::RecursiveHashState)
-    return update_hash!(fn, reinterpret(UInt8, [nested.val;]))
 end
 compute_hash!(x::RecursiveHashState) = x.val
 similar_hash_state(x::RecursiveHashState) = RecursiveHashState(x.fn, x.init, x.init)
@@ -171,16 +147,8 @@ function end_nested_hash!(root::BufferedHashState, x::BufferedHashState)
     return x
 end
 
-function update_hash!(hasher::BufferedHashState, obj, context)
-    # TODO: when we remove `deprecated.jl`, change this to `Base.write` and remove the
-    # `context` parameters
-    write(hasher.io, obj, context)
-    flush_bytes!(hasher)
-    return hasher
-end
-
 function update_hash!(hasher::BufferedHashState, obj)
-    write(hasher.io, obj)
+    Base.write(hasher.io, obj)
     flush_bytes!(hasher)
     return hasher
 end

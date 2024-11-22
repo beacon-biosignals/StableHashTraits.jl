@@ -33,12 +33,12 @@ stable_hash(a; version=4) == stable_hash(b; version=4) # true
 ```
 <!--END_EXAMPLE-->
 
-Users can define a method of `transformer` to customize how an object is hashed. It should dispatch on the type to be transformed, and return a function wrapped in `Transformer`. During hashing, this function is called and its result is the value that is actually hashed.
+In many cases, users can simply call `stable_hash(x; version=4)` on the type they want to hash. However, a method of `transformer` can be used to customize how an object is hashed. It should dispatch on the type to be transformed, and return a function wrapped in `Transformer`. During hashing, this function is called and its result is the value that is actually hashed.
 
 StableHashTraits aims to guarantee a stable hash so long as you only upgrade to non-breaking versions (e.g. `StableHashTraits = "1"` in `[compat]` of `Project.toml`); any changes in an object's hash in this case would be considered a bug.
 
-> [!WARNING]
-> Hash versions 4 constitutes a substantial redesign of StableHashTraits so as to avoid reliance on the internals of Base julia and packages. Hash versions 1-3 are deprecated and will be removed in a soon-to-be released StableHashTraits 2.0. They are not supported in julia versions 1.11 and higher. Hash version 4 will remain unchanged in the 2.0 release. For backwards compatibility, hash version 1 is currently the default version if you don't specify a version. You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2-3 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
+> [!NOTE]
+> In versions prior to 2.0, StableHashTraits included hash versions 1-3. These have been removed in version 2.0 of StableHashTraits, and the existing version 4 has been left unchanged, to avoid confusion: calling `stable_hash(x; version=4)` will yield the same result, regardless of whether you are using StableHashTraits 1.3 or 2.0. Calls to the earlier hash versions will error in 2.0.
 
 <!--The START_ and STOP_ comments are used to extract content that is also repeated in the documentation-->
 <!--START_OVERVIEW-->
@@ -46,9 +46,7 @@ StableHashTraits aims to guarantee a stable hash so long as you only upgrade to 
 
 StableHashTraits is designed to be used in cases where there is an object you wish to serialize in a content-addressed cache. How and when objects pass the same input to a hashing algorithm is meant to be predictable and well defined, so that the user can reliably define methods of `transformer` to modify this behavior.
 
-## What gets hashed? (hash version 4)
-
-This covers the behavior when using the latest hash version (4). You can read the documentation for hash version 1 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.0.0/README.md) and hash version 2-3 [here](https://github.com/beacon-biosignals/StableHashTraits.jl/blob/v1.1.8/README.md).
+## What gets hashed?
 
 When you call `stable_hash(x; version=4)`, StableHashTraits hashes both the value `x` and its type `T`. Rather than hashing the type `T` itself directly, in most cases instead `StructTypes.StructType(T)` is hashed, using [StructTypes.jl](https://github.com/JuliaData/StructTypes.jl). For example, since the "StructType" of Float64 and Float32 are both `NumberType`, when hashing Float64 and Float32 values, value and `NumberType` are hashed. This provides a simple trait-based system that doesn't need to rely on internal details. See below for more details.
 
@@ -239,6 +237,10 @@ julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
 <!--END_OVERVIEW-->
 
 ## Breaking changes
+
+### In 2.0
+
+All deprecated behavior has been removed; the only hash version available is 4. Users must now explicitly specify the hash version to use (e.g. `stable_hash(x; version=4)`)
 
 ### In 1.3
 

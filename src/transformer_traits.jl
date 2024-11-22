@@ -6,33 +6,6 @@ hash_trait(x::Transformer, y) = x.result_method
 hash_trait(::Transformer{<:Any,Nothing}, y) = hash_trait(y)
 hash_trait(x) = StructType(x)
 
-function check_hash_method(x, transform, context)
-    # because of how `hash_method` uses `NotImplemented` we can leverage
-    # this to check for deprecated API usage
-    if is_implemented(hash_method(x, context)) && transform.fn === identity &&
-       isnothing(transform.result_method)
-        @warn """`hash_method` is implemented for type
-
-           $(typeof(x))
-
-           when in context of type
-
-           $(typeof(context))
-
-           No specialized `transformer` method is defined for this type. This object's
-           StableHashTraits customization may be deprecated, and may not work properly for
-           HashVersion{4}. If the default method for `transformer` is appropriate, you can
-           prevent this warning from appearing by implementing a method similar to the
-           following:
-
-           function hash_method(::MyType, context::SomeContextType)
-               StableHashTraits.root_version(context) > 3 && return StableHashTraits.NotImplemented()
-               # implement `hash_method` for `MyType`
-           end
-           """ _id = Symbol(module_nameof_string(typeof(x))) maxlog = 1
-    end
-end
-
 # how we hash when we haven't hoisted the type hash out of a loop
 function hash_type_and_value(x, hash_state, context)
     transform = transformer(typeof(x), context)::Transformer
@@ -40,7 +13,6 @@ function hash_type_and_value(x, hash_state, context)
         hash_state = hash_type!(hash_state, context, typeof(x))
     end
     tx = transform(x)
-    check_hash_method(x, transform, context)
     if !transform.hoist_type
         hash_state = hash_type!(hash_state, context, typeof(tx))
     end
@@ -50,7 +22,6 @@ end
 # how we hash when the type hash can be hoisted out of a loop
 function hash_value(x, hash_state, context, transform::Transformer)
     tx = transform(x)
-    check_hash_method(x, transform, context)
     return stable_hash_helper(tx, hash_state, context, hash_trait(transform, tx))
 end
 
@@ -75,7 +46,6 @@ end
 Hash type `T` in the given context, updating `hash_state`.
 """
 function hash_type!(hash_state, context, ::Type{T}) where {T}
-    # TODO: cache type hashing in the final release (no this PR)
     type_context = TypeHashContext(context)
     transform = transformer(typeof(T), type_context)
     tT = transform(T)
@@ -84,7 +54,7 @@ function hash_type!(hash_state, context, ::Type{T}) where {T}
                                          hash_trait(transform, tT))
     bytes = reinterpret(UInt8, asarray(compute_hash!(hash_type_state)))
 
-    return update_hash!(hash_state, bytes, context)
+    return update_hash!(hash_state, bytes)
 end
 asarray(x) = [x]
 asarray(x::AbstractArray) = x
@@ -136,15 +106,15 @@ struct TypeAsValueContext{T}
 end
 parent_context(x::TypeAsValueContext) = x.parent
 
-function hash_type!(hash_state, context, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type!(hash_state, ::Any, ::Type{<:Type})
+    return update_hash!(hash_state, "Base.Type")
 end
 # these methods are required to avoid method ambiguities
-function hash_type!(hash_state, context::TypeHashContext, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type!(hash_state, ::TypeHashContext, ::Type{<:Type})
+    return update_hash!(hash_state, "Base.Type")
 end
-function hash_type!(hash_state, context::TypeAsValueContext, ::Type{<:Type})
-    return update_hash!(hash_state, "Base.Type", context)
+function hash_type!(hash_state, ::TypeAsValueContext, ::Type{<:Type})
+    return update_hash!(hash_state, "Base.Type")
 end
 
 function transformer(::Type{<:Type}, context::TypeAsValueContext)
@@ -408,18 +378,18 @@ end
 
 function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
     nested_hash_state = start_nested_hash!(hash_state)
-    update_hash!(nested_hash_state, str isa AbstractString ? str : string(str), context)
+    update_hash!(nested_hash_state, str isa AbstractString ? str : string(str))
     return end_nested_hash!(hash_state, nested_hash_state)
 end
 
 function stable_hash_helper(number::T, hash_state, context,
                             ::StructTypes.NumberType) where {T}
     U = StructTypes.numbertype(T)
-    return update_hash!(hash_state, U(number), context)
+    return update_hash!(hash_state, U(number))
 end
 
 function stable_hash_helper(bool, hash_state, context, ::StructTypes.BoolType)
-    return update_hash!(hash_state, Bool(bool), context)
+    return update_hash!(hash_state, Bool(bool))
 end
 
 # null types are encoded purely by their type hash
@@ -437,24 +407,31 @@ stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType) = hash_s
 #####
 
 # NOTE: we don't have great options for keeping the next few functions from depending on
-# internals of Base julia
+# some internals of Base julia
+#
+# The underlying problem is that there is no public API for inspecting regex flags or the
+# regex pattern of a regex.
 #
 # We can:
 #
 # 1. Use the string representation of regex: non-breaking Julia releases change this
-# 2. Directly read both private properties and flag defaults to compute what relevant regex
-#    flags have been marked (e.g. `r"a"i` has the `i` flag marked).
-#        a. an added complication is that the default flags change across Julia versions,
-#        so we can't just use all bytes of `compile_options` and `match_options`; this
-#        will break compatibility with older julia version
+# 2. Directly read private fields of Regex and use flag defaults to compute what relevant
+#    regex flags have been marked (e.g. `r"a"i` has the `i` flag marked).
 #
-# For now, the below seems like the most robust option
+# An added complication is that the default options for PCRE change across Julia versions,
+# so we can't just use all the bytes of `compile_options`; this will break compatibility
+# across julia versions.
+#
+# It seems more likely that the string representation will change than that the fields and
+# private bit masks will change; so for now, the second approach is taken.
 
 pattern_(x::Regex)::String = x.pattern
 
 function compile_options_(x::Regex)::UInt32
-    # NOTE: using this mask keeps the code from breaking on Julia 1.6 😢
-    # TODO: when 2.0 comes out, we should drop support for 1.6 and remove the mask
+    # NOTE: using this mask kept the code from breaking on Julia 1.6 we can't change it now,
+    # since we don't want the hash to change furthermore, the default flags could
+    # conceivably change in a future julia version. In our tests, we verify that this mask
+    # properly captures the state all documented regex flags.
     mask = ~Base.DEFAULT_COMPILER_OPTS | Base.PCRE.UCP
     return x.compile_options & mask
 end

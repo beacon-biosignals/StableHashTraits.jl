@@ -20,10 +20,6 @@ jobs:
         # we test on all versions back to LTS because we want to test for stability across
         # julia versions
         version:
-          - '1.6' # old LTS (TODO: remove support for 1.6-1.1.9 when we move to 2.0)
-          - '1.7'
-          - '1.8'
-          - '1.9'
           - '1.10'
           - '1.11'
           - 'pre'
@@ -46,7 +42,6 @@ jobs:
       - uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: lcov.info
   docs:
     name: Documentation
     runs-on: ubuntu-latest
@@ -54,7 +49,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.10' # TODO: revert back to '1' once StableHashTraits 2.0 is released
+          version: '1'
       - run: |
           julia --project=docs -e '
             using Pkg

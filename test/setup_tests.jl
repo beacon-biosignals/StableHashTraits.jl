@@ -40,33 +40,15 @@ struct TestType5
     bob::String
 end
 
-StableHashTraits.hash_method(::TestType) = StructHash()
-StableHashTraits.hash_method(::TestType2) = FnHash(qualified_name), StructHash()
 function StableHashTraits.transformer(::Type{<:TestType2})
     return StableHashTraits.Transformer(x -> (x.a, x.b); hoist_type=true)
 end
-StableHashTraits.hash_method(::TestType3) = StructHash(:ByName)
 
 # make TestType3 look exactly like TestType
 StableHashTraits.transform_type(::Type{<:TestType3}) = "TestType"
 function StableHashTraits.transformer(::Type{<:TestType3})
     return StableHashTraits.Transformer(pick_fields(:a, :b))
 end
-function StableHashTraits.hash_method(::TestType4, context::HashVersion{V}) where {V}
-    V > 3 && return StableHashTraits.NotImplemented()
-    return StructHash(propertynames => getproperty)
-end
-function StableHashTraits.hash_method(::TestType4, context)
-    StableHashTraits.root_version(context) > 3 && return StableHashTraits.NotImplemented()
-    return StructHash(propertynames => getproperty)
-end
-
-function StableHashTraits.hash_method(::TypeType, context::HashVersion{V}) where {V}
-    V > 3 && return StableHashTraits.NotImplemented()
-    return StructHash()
-end
-
-StableHashTraits.write(io, x::TestType5) = write(io, reverse(x.bob))
 
 StableHashTraits.transform_type(::Type{<:TestType2}) = "TestType2"
 StructTypes.StructType(::Type{<:TestType4}) = StructTypes.OrderedStruct()
@@ -75,7 +57,6 @@ struct NonTableStruct
     x::Vector{Int}
     y::Vector{Int}
 end
-StableHashTraits.hash_method(::NonTableStruct) = StructHash()
 
 struct NestedObject{T}
     x::T
@@ -86,7 +67,6 @@ struct BasicHashObject
     x::AbstractRange
     y::Vector{Float64}
 end
-StableHashTraits.hash_method(::BasicHashObject) = StructHash()
 struct CustomHashObject
     x::AbstractRange
     y::Vector{Float64}
@@ -95,29 +75,14 @@ struct CustomContext{P}
     parent_context::P
 end
 StableHashTraits.parent_context(x::CustomContext) = x.parent_context
-function StableHashTraits.hash_method(::CustomHashObject)
-    return HashAndContext(StructHash(), CustomContext)
-end
-StableHashTraits.hash_method(::BasicHashObject) = StructHash()
-StableHashTraits.hash_method(::AbstractRange, ::CustomContext) = IterateHash()
-function StableHashTraits.hash_method(x::Any, c::CustomContext)
-    return StableHashTraits.hash_method(x, c.parent_context)
-end
 
 struct BadTransform end
-StableHashTraits.hash_method(::BadTransform) = FnHash(identity)
 
 struct GoodTransform{T}
     count::T
 end
-function StableHashTraits.hash_method(x::GoodTransform)
-    !(x.count isa Number) && return FnHash(qualified_name), FnHash(x -> x.count)
-    x.count > 0 && return FnHash(x -> GoodTransform(-0.1x.count))
-    return FnHash(x -> GoodTransform(string(x.count)))
-end
 
 struct MyOldContext end
-StableHashTraits.hash_method(::AbstractArray, ::MyOldContext) = IterateHash()
 
 struct ExtraTypeParams{P,T}
     value::T
@@ -127,15 +92,17 @@ function StableHashTraits.transform_type(::Type{T}) where {P,U,T<:ExtraTypeParam
 end
 
 struct BadHashMethod end
-StableHashTraits.hash_method(::BadHashMethod) = "garbage"
 StableHashTraits.transformer(::Type{<:BadHashMethod}) = "garbage"
+
+struct BadHashMethod2 end
+function StableHashTraits.transformer(::Type{<:BadHashMethod2})
+    return StableHashTraits.Transformer(identity, "garbage")
+end
 
 struct Singleton1 end
 struct Singleton2 end
 
 struct BadRootContext end
-StableHashTraits.parent_context(::BadRootContext) = nothing
-StableHashTraits.hash_method(::Int, ::BadRootContext) = WriteHash()
 StableHashTraits.transformer(::Type{Int}, ::BadRootContext) = StableHashTraits.Transformer()
 
 mutable struct CountedBufferState
@@ -192,10 +159,6 @@ end
 function StableHashTraits.transformer(::Type{<:UnstableStruct3})
     return StableHashTraits.Transformer(x -> (; x.a); hoist_type=true)
 end
-
-# TODO: we need to rewrite the docs on when `hoist_type` is safe
-# TODO: we need to probably write some helper functions for
-# `omit` and `keep` that maintain feildtypes
 
 struct WeirdTypeValue end
 StableHashTraits.transform_type_value(::Type{<:WeirdTypeValue}) = Int
