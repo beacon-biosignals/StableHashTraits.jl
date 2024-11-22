@@ -23,7 +23,7 @@ end
 Create a stable hash of the given objects. As long as the context remains the same, this
 hash is intended to remain unchanged across julia versions. The built-in context is
 HashVersion{N}, and if you specify a `version`, this is equivalent to explicitly passing
-`HashVersion{version}`. To customize how the hash is copmuted see [Using Contexts](@ref).
+`HashVersion{version}`.
 
 The version must be explicitly specified: if a new hash version is provided in a future
 release, your result will *not* change.
@@ -34,7 +34,8 @@ To change the hash algorithm used, pass a different function to `alg`. It accept
 related function from `SHA` or any function of the form `hash(x::AbstractArray{UInt8},
 [old_hash])`.
 
-The `context` value gets passed as the second argument to [`transformer`](@ref).
+The `context` value gets passed as the second argument to [`transformer`](@ref), see
+[Using Contexts](@ref) for details.
 
 ## See Also
 
@@ -303,11 +304,9 @@ function clean_module(mod)
     module_str = string(mod)
     # keep modules stable across Pluto runs
     if is_inside_pluto(mod)
-        # the exact pattern to replace depends on the julia version
-        module_str = replace(module_str, r"var\"workspace#[0-9]+\"" => "PlutoWorkspace") # julia >= 1.8
         module_str = replace(module_str, r"workspace#[0-9]+" => "PlutoWorkspace") # julia < 1.8
     end
-    # Core vs. Base is a known implementation detail
+    # Core vs. Base is known to change across Julia versions
     module_str = replace(module_str, "Core" => "Base")
 
     return module_str
@@ -317,14 +316,12 @@ end
     return validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
 end
 
-# in later version of julia, handling unions can be accomplished via dispatch (and does
-# not require the use of julia internals)
 function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
     !@isdefined(A) && !@isdefined(B) && return ""
     !@isdefined(B) && return handle_function_types_(A, namer)
     # NOTE: The following line never gets run, because of the way julia's type dispatch
     # is currently implemented, but it is here to avoid regressions in future julia
-    # version
+    # versions
     !@isdefined(A) && return handle_function_types_(B, namer)
     return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
 end
