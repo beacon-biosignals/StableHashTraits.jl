@@ -1,7 +1,7 @@
 name = "StableHashTraits"
 uuid = "c5dd0088-6c3f-4803-b00e-f31a60c170fa"
 authors = ["Beacon Biosignals, Inc."]
-version = "2.0.0"
+version = "2.1.0"
 
 [deps]
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
@@ -24,9 +24,16 @@ SHA = "0.7, 1"
 StructTypes = "1"
 Tables = "1.7"
 Test = "1"
+TimeZones = "1.19.0"
 TupleTools = "1"
 UUIDs = "1"
 julia = "1.10"
+
+[weakdeps]
+TimeZones = "f269a46b-ccf7-5d73-abea-4c690281aa53"
+
+[extensions]
+TimeZonesExt = "TimeZones"
 
 [extras]
 AWSS3 = "1c724243-ef5b-51ab-93f4-b0a88ac62a95"
@@ -38,7 +45,8 @@ Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Pluto = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
 ReferenceTests = "324d217c-45ce-50fc-942e-d289b448e8cf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+TimeZones = "f269a46b-ccf7-5d73-abea-4c690281aa53"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [targets]
-test = ["AWSS3", "Aqua", "BenchmarkTools", "CRC32c", "DataFrames", "Dates", "Pluto", "ReferenceTests", "Test", "UUIDs"]
+test = ["AWSS3", "Aqua", "BenchmarkTools", "CRC32c", "DataFrames", "Dates", "Pluto", "ReferenceTests", "Test", "UUIDs", "TimeZones"]

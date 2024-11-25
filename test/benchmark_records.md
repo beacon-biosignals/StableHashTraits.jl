@@ -217,3 +217,52 @@ on the performance of benchmarks for hash version 4.
   15 │ strings     sha256     4          1.753 ms    1.707 ms     0.973521
   16 │ missings    sha256     4          477.875 μs  443.042 μs   0.927109
 ```
+
+# TimeZones PR
+
+There are several improvements slated for `HashVersion{5}`. All of these rely on the new package extensions possible starting in Julia 1.9. With StableHashTraits 2.0, we no longer are supporting julia versions lower than 1.10, and so the upgrade opens up several improvements I didn't want to make until the use of extensions was possible.
+
+The first such improvement, the TimeZones PR, optimizes the hashing of `ZonedDateTime` objects, by computing the absolute date time, for UTC-0, thereby bypassing a large object tracking time zone history referenced by all `ZonedDatTime` objects.
+
+```
+36×6 DataFrame
+ Row │ benchmark    hash       version    base        trait       ratio
+     │ SubStrin…    SubStrin…  SubStrin…  String      String      Float64
+─────┼────────────────────────────────────────────────────────────────────────
+   1 │ dicts        crc        4          2.063 ms    49.241 ms   23.8634
+   2 │ structs      crc        4          57.875 μs   1.025 ms    17.7106
+   3 │ tuples       crc        4          58.041 μs   350.458 μs   6.03811
+   4 │ numbers      crc        4          29.500 μs   124.167 μs   4.20905
+   5 │ dataframes   crc        4          71.375 μs   275.125 μs   3.85464
+   6 │ symbols      crc        4          1.386 ms    1.602 ms     1.15599
+   7 │ missings     crc        4          263.125 μs  208.916 μs   0.79398
+   8 │ strings      crc        4          1.082 ms    292.292 μs   0.270068
+   9 │ zoned-times  crc        4          47.061 ms   8.516 ms     0.180952
+  10 │ dicts        sha256     4          2.563 ms    80.325 ms   31.3358
+  11 │ structs      sha256     4          475.791 μs  1.853 ms     3.89352
+  12 │ tuples       sha256     4          475.459 μs  1.183 ms     2.489
+  13 │ dataframes   sha256     4          490.000 μs  710.291 μs   1.44957
+  14 │ numbers      sha256     4          237.875 μs  334.750 μs   1.40725
+  15 │ symbols      sha256     4          2.270 ms    2.822 ms     1.24309
+  16 │ missings     sha256     4          503.667 μs  450.959 μs   0.895351
+  17 │ strings      sha256     4          1.943 ms    1.493 ms     0.768817
+  18 │ zoned-times  sha256     4          53.458 ms   10.030 ms    0.187625
+  19 │ dicts        crc        5          2.069 ms    69.390 ms   33.5307
+  20 │ structs      crc        5          58.000 μs   1.012 ms    17.4555
+  21 │ tuples       crc        5          57.959 μs   351.166 μs   6.05887
+  22 │ numbers      crc        5          28.959 μs   123.250 μs   4.25602
+  23 │ dataframes   crc        5          71.833 μs   275.875 μs   3.84051
+  24 │ symbols      crc        5          1.385 ms    1.633 ms     1.17872
+  25 │ missings     crc        5          260.833 μs  209.250 μs   0.802237
+  26 │ strings      crc        5          1.085 ms    292.125 μs   0.269354
+  27 │ zoned-times  crc        5          50.270 ms   126.417 μs   0.00251478
+  28 │ dicts        sha256     5          2.532 ms    80.358 ms   31.7379
+  29 │ structs      sha256     5          475.625 μs  1.865 ms     3.92116
+  30 │ tuples       sha256     5          475.541 μs  1.191 ms     2.50434
+  31 │ dataframes   sha256     5          490.917 μs  711.167 μs   1.44865
+  32 │ numbers      sha256     5          238.083 μs  338.542 μs   1.42195
+  33 │ symbols      sha256     5          2.248 ms    2.875 ms     1.27883
+  34 │ missings     sha256     5          508.750 μs  451.958 μs   0.88837
+  35 │ strings      sha256     5          1.936 ms    1.490 ms     0.769345
+  36 │ zoned-times  sha256     5          50.163 ms   335.792 μs   0.00669402
+```

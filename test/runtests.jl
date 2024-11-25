@@ -12,7 +12,7 @@ include("setup_tests.jl")
         end
     end
 
-    for V in (4,), hashfn in (sha256, sha1, crc32c)
+    for V in StableHashTraits.HASH_VERSIONS, hashfn in (sha256, sha1, crc32c)
         @testset "Hash: $(nameof(hashfn)); context: $V" begin
             ctx = HashVersion{V}()
             test_hash(x, c=ctx) = stable_hash(x, c; alg=hashfn)
@@ -233,6 +233,20 @@ include("setup_tests.jl")
                 @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
                 @test_throws TypeError test_hash(BadHashMethod())
                 @test_throws r"Unrecognized trait" test_hash(BadHashMethod2())
+            end
+
+            @testset "TimeZones" begin
+                a = Dates.now()
+                b = a + Hour(1)
+                @test test_hash(ZonedDateTime(a, tz"UTC-5")) != test_hash(ZonedDateTime(a, tz"UTC-4"))
+                @test test_hash(ZonedDateTime(a, tz"UTC-5")) == test_hash(ZonedDateTime(b, tz"UTC-4"))
+                @test test_hash(ZonedDateTime(a, tz"UTC-5")) != test_hash(ZonedDateTime(b, tz"UTC-5"))
+
+                if V == 4
+                    @test test_hash(ZonedDateTime(a, tz"UTC-5"), HashVersion{4}()) !=
+                    test_hash(ZonedDateTime(a, tz"UTC-5"), HashVersion{5}())
+                end
+                @test_reference "tz01_$(V)_$(nameof(hashfn))" test_hash(ZonedDateTime(a, tz"UTC-5"))
             end
 
             @testset "Pluto-defined structs are stable, even for `module_nameof_string`" begin

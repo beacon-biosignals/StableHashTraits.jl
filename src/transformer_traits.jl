@@ -227,8 +227,10 @@ end
 ndims_(::Type{<:AbstractArray{<:Any,N}}) where {N} = N
 ndims_(::Type{<:AbstractArray}) = nothing
 
-function transformer(::Type{<:AbstractArray}, ::HashVersion{4})
-    return Transformer(x -> (size(x), split_union(x)); hoist_type=true)
+for V in HASH_VERSIONS
+    @eval function transformer(::Type{<:AbstractArray}, ::HashVersion{$V})
+        return Transformer(x -> (size(x), split_union(x)); hoist_type=true)
+    end
 end
 
 split_union(array) = TransformIdentity(array)
@@ -296,8 +298,10 @@ end
 #####
 
 transform_type(::Type{<:AbstractRange}) = "Base.AbstractRange"
-function transformer(::Type{<:AbstractRange}, ::HashVersion{4})
-    return Transformer(x -> (first(x), step(x), last(x)); hoist_type=true)
+for V in HASH_VERSIONS
+    @eval function transformer(::Type{<:AbstractRange}, ::HashVersion{$V})
+        return Transformer(x -> (first(x), step(x), last(x)); hoist_type=true)
+    end
 end
 
 #####
@@ -372,8 +376,10 @@ end
 #####
 
 transform_type(::Type{Symbol}) = "Base.Symbol"
-function transformer(::Type{<:Symbol}, ::HashVersion{4})
-    return Transformer(String; hoist_type=true)
+for V in HASH_VERSIONS
+    @eval function transformer(::Type{<:Symbol}, ::HashVersion{$V})
+        return Transformer(String; hoist_type=true)
+    end
 end
 
 function stable_hash_helper(str, hash_state, context, ::StructTypes.StringType)
@@ -439,7 +445,9 @@ end
 # NOTE: we can safely hoist here because
 # 1. the input type is concrete
 # 2. all output types are primitive, concrete types
-function transformer(::Type{Regex}, ::HashVersion{4})
-    # This skips the compiled regex which is stored as a Ptr{Nothing}
-    return Transformer(x -> (pattern_(x), compile_options_(x)); hoist_type=true)
+for V in HASH_VERSIONS
+    @eval function transformer(::Type{Regex}, ::HashVersion{$V})
+        # This skips the compiled regex which is stored as a Ptr{Nothing}
+        return Transformer(x -> (pattern_(x), compile_options_(x)); hoist_type=true)
+    end
 end

@@ -11,6 +11,8 @@ using Tables
 using AWSS3
 using Pluto
 using StructTypes
+using TimeZones
+using Dates
 
 struct TestType
     a::Any

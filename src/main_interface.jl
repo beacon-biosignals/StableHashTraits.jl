@@ -1,17 +1,19 @@
+const HASH_VERSIONS = (4, 5)
+
 """
     HashVersion{V}()
 
-The default `hash_context` used by `stable_hash`. There are currently four versions (1-4).
-Version 4 should be favored when at all possible. Version 1 is the default version, so as to
-avoid changing the hash computed by existing code.
+The default `hash_context` used by `stable_hash`. There are currently two versions (4-5) The
+most recent version should be favored, unless backwards compatibility is necessary.
 
-By explicitly passing this hash version in `stable_hash` you ensure that hash values for
-these fallback methods will not change even if new hash versions are developed.
+Since the version is required to be explicitly passed to `stable_hash`, hash values for
+default hash methods (those not overwritten by users) will not change, even if new hash
+versions are developed.
 """
 struct HashVersion{V}
     function HashVersion{V}() where {V}
-        V < 4 &&
-            throw(ArgumentError("Versions < 4 are not supported in StableHashTraits 2.0"))
+        V in HASH_VERSIONS ||
+            throw(ArgumentError("Only versions 4-5 are supported in StableHashTraits 2.0"))
         return new{V}()
     end
 end
@@ -119,7 +121,9 @@ argument method when they wish to affect the transformation across all contexts 
 have a context specific method.
 """
 transformer(::Type{T}, context) where {T} = transformer(T, parent_context(context))
-transformer(::Type{T}, ::HashVersion{4}) where {T} = transformer(T)
+for V in HASH_VERSIONS
+    @eval transformer(::Type{T}, ::HashVersion{$V}) where {T} = transformer(T)
+end
 transformer(x) = Transformer()
 
 const TUPLE_DIFF = """
@@ -208,8 +212,10 @@ In this example we hash both some metadata about a custom array, and each of the
 struct TransformIdentity{T}
     val::T
 end
-function transformer(::Type{<:TransformIdentity}, ::HashVersion{4})
-    return Transformer(x -> x.val; hoist_type=true)
+for V in HASH_VERSIONS
+    @eval function transformer(::Type{<:TransformIdentity}, ::HashVersion{$V})
+        return Transformer(x -> x.val; hoist_type=true)
+    end
 end
 
 function stable_hash_helper(x, hash_state, context, trait)
@@ -237,15 +243,15 @@ end
 StableHashTraits.parent_context(x::MyContext) = x.parent
 ```
 
-The parent context is typically another custom context, or the root context
-`HashVersion{4}()`.
+The parent context is typically another custom context, or the root context, such as
+`HashVersion{5}()`.
 
 ## Example
 
 ```julia
 StableHashTraits.@context NumberAbs
 transformer(::Type{<:Number}, ::NumberAbs) = Transformer(abs; hoist_type=true)
-stable_hash(10, NumberAbs(HashVersion{4}())) == stable_hash(-10, NumberAbs(HashVersion{4}()))
+stable_hash(10, NumberAbs(HashVersion{5}())) == stable_hash(-10, NumberAbs(HashVersion{5}()))
 ```
 
 ## See Also
@@ -277,7 +283,7 @@ throw an error, as no stable name is possible in this case.
     The module of many types are considered an
     implementation detail and can change between non-breaking versions of a package. For
     this reason uses of `module_nameof_string` must be explicitly specified by user of
-    `StableHashTraits`. This function is not used internally hor `HashVersion{4}` for types
+    `StableHashTraits`. This function is not used internally or `HashVersion{V}` for types
     that are not defined in `StableHashTraits`.
 """
 @inline module_nameof_string(::T) where {T} = module_nameof_string(T)
@@ -414,7 +420,7 @@ function HashTraits.type_structure(::Type{<:I}, ::IntervalEndpointsMatter) where
     return (L, R)
 end
 
-context = IntervalEndpointsMatter(HashVersion{4}())
+context = IntervalEndpointsMatter(HashVersion{5}())
 stable_hash(Interval{Closed, Open}(1, 2), context) !=
     stable_hash(Interval{Open, Closed}(1, 2), context) # true
 ```
@@ -426,7 +432,9 @@ stable_hash(Interval{Closed, Open}(1, 2), context) !=
 function transform_type(::Type{T}, context) where {T}
     return transform_type(T, parent_context(context))
 end
-transform_type(::Type{T}, ::HashVersion{4}) where {T} = transform_type(T)
+for V in HASH_VERSIONS
+    @eval transform_type(::Type{T}, ::HashVersion{$V}) where {T} = transform_type(T)
+end
 transform_type(::Type{Union{}}) = "Union{}"
 transform_type(::Type{T}) where {T} = transform_type_by_trait(T, StructType(T))
 function transform_type_by_trait(::Type, ::S) where {S<:StructTypes.StructType}
@@ -449,12 +457,17 @@ function transform_type_value(::Type{T}, context) where {T}
     return transform_type_value(T, parent_context(context))
 end
 
-function transform_type_value(::Type{T}, c::HashVersion{4}) where {T}
-    return transform_type_value(T)
+for V in HASH_VERSIONS
+    @eval function transform_type_value(::Type{T}, c::HashVersion{$V}) where {T}
+        return transform_type_value(T)
+    end
 end
+
 transform_type_value(::Type{Union{}}) = "Union{}"
 transform_type_value(::Type{T}) where {T} = nameof_string(T)
 
-function transform_type_value(::Type{T}, c::HashVersion{4}) where {T<:Function}
-    return transform_type(T)
+for V in HASH_VERSIONS
+    @eval function transform_type_value(::Type{T}, c::HashVersion{$V}) where {T<:Function}
+        return transform_type(T)
+    end
 end

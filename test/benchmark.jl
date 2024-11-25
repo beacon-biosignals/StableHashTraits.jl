@@ -8,6 +8,8 @@ using SHA
 using CRC32c
 using Random
 using Serialization
+using TimeZones
+using Dates
 
 # only `collect` when we have to
 crc(x, s=0x000000) = crc32c(collect(x), s)
@@ -45,6 +47,7 @@ structs = [BenchTest(rand(Int), rand(Int)) for _ in 1:N]
 df = DataFrame(; x=1:N, y=1:N)
 missings_values = shuffle!([rand(Int, N); fill(missing, N >> 4)])
 dicts = build_nested_dict(10, 4);
+zoned_times = ZonedDateTime.(unix2datetime.(rand(Int, N)), tz"UTC-5")
 
 function serialized_bytes(x)
     io = IOBuffer()
@@ -62,11 +65,12 @@ benchmarks = [(; name="dataframes", data=df);
               (; name="tuples", data=tuples);
               (; name="missings", data=missings_values);
               (; name="numbers", data=data);
-              (; name="dicts", data=dicts)]
+              (; name="dicts", data=dicts);
+              (; name="zoned-times", data=zoned_times)]
 
 for hashfn in (crc, sha256)
     hstr = nameof(hashfn)
-    for V in (4,)
+    for V in StableHashTraits.HASH_VERSIONS
         for (; name, data) in benchmarks
             suite["$(name)_$(hstr)_$V"] = BenchmarkGroup([name])
             suite["$(name)_$(hstr)_$V"]["base"] = begin

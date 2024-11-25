@@ -35,7 +35,7 @@ julia> begin
         function transformer(::Type{<:NamedTuple}, ::NamedTuplesOrdered)
             Transformer(identity, StructTypes.OrderedStruct())
         end
-        context = NamedTuplesOrdered(HashVersion{4}())
+        context = NamedTuplesOrdered(HashVersion{5}())
        end;
 
 julia> stable_hash((; a=1:2, b=1:2), context) != stable_hash((; b=1:2, a=1:2), context)
@@ -52,7 +52,7 @@ julia> begin
         function transformer(::Type{<:NamedTuple}, ::NamedTuplesOrdered)
             Transformer(identity, StructTypes.OrderedStruct())
         end
-        context = NamedTuplesOrdered(HashVersion{4}())
+        context = NamedTuplesOrdered(HashVersion{5}())
        end;
 
 julia> stable_hash((; a=1:2, b=1:2), context) != stable_hash((; b=1:2, a=1:2), context)
