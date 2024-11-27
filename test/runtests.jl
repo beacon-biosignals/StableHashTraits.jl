@@ -236,17 +236,26 @@ include("setup_tests.jl")
             end
 
             @testset "TimeZones" begin
-                a = Dates.now()
+                a = DateTime("1983-11-09T01:02:03")
                 b = a + Hour(1)
-                @test test_hash(ZonedDateTime(a, tz"UTC-5")) != test_hash(ZonedDateTime(a, tz"UTC-4"))
-                @test test_hash(ZonedDateTime(a, tz"UTC-5")) == test_hash(ZonedDateTime(b, tz"UTC-4"))
-                @test test_hash(ZonedDateTime(a, tz"UTC-5")) != test_hash(ZonedDateTime(b, tz"UTC-5"))
+                @test test_hash(ZonedDateTime(a, tz"UTC-5")) !=
+                      test_hash(ZonedDateTime(a, tz"UTC-4"))
+                @test test_hash(ZonedDateTime(a, tz"UTC-5")) !=
+                      test_hash(ZonedDateTime(b, tz"UTC-5"))
 
                 if V == 4
+                    @test test_hash(ZonedDateTime(a, tz"UTC-5")) !=
+                          test_hash(ZonedDateTime(b, tz"UTC-4"))
                     @test test_hash(ZonedDateTime(a, tz"UTC-5"), HashVersion{4}()) !=
-                    test_hash(ZonedDateTime(a, tz"UTC-5"), HashVersion{5}())
+                          test_hash(ZonedDateTime(a, tz"UTC-5"), HashVersion{5}())
+                else
+                    @test test_hash(ZonedDateTime(a, tz"UTC-5")) ==
+                        test_hash(ZonedDateTime(b, tz"UTC-4"))
                 end
-                @test_reference "tz01_$(V)_$(nameof(hashfn))" test_hash(ZonedDateTime(a, tz"UTC-5"))
+
+                @test_reference "references/tz01_$(V)_$(nameof(hashfn))" begin
+                    test_hash(ZonedDateTime(a, tz"UTC-5"))
+                end
             end
 
             @testset "Pluto-defined structs are stable, even for `module_nameof_string`" begin
