@@ -222,7 +222,7 @@ on the performance of benchmarks for hash version 4.
 
 There are several improvements slated for `HashVersion{5}`. All of these rely on the new package extensions possible starting in Julia 1.9. With StableHashTraits 2.0, we no longer are supporting julia versions lower than 1.10, and so the upgrade opens up several improvements I didn't want to make until the use of extensions was possible.
 
-The first such improvement, the TimeZones PR, optimizes the hashing of `ZonedDateTime` objects, by computing the absolute date time, for UTC-0, thereby bypassing a large object tracking time zone history referenced by all `ZonedDatTime` objects.
+The first such improvement, the TimeZones PR, optimizes the hashing of `ZonedDateTime` objects, by hashing the absolute date time, for UTC-0. This avoids hashing a large object inside `ZonedDateTime` that tracks historical information about time zones.
 
 ```
 36×6 DataFrame
