@@ -85,6 +85,37 @@ include("setup_tests.jl")
                 @test test_hash((; a=1, b=2)) != test_hash((; a=2, b=1))
             end
 
+            @testset "DataStructures.jl" begin
+                @test test_hash(Accumulator("a" => 2, "b" => 3, "c" => 1)) !=
+                      test_hash(Accumulator("a" => 2, "b" => 3, "c" => 2))
+                let
+                    t = AVLTree{Int}()
+                    insert!(t, 1)
+                    before_insert = test_hash(t)
+                    insert!(t, 101)
+                    after_insert = test_hash(t)
+                    @test before_insert != after_insert
+                end
+                @test test_hash(BinaryHeap([1, 2])) != test_hash(BinaryHeap([1, 2, 3]))
+                @test test_hash(BinaryMaxHeap([1, 2])) != test_hash(BinaryMaxHeap([1, 2, 3]))
+                @test test_hash(BinaryMinHeap([1, 2])) != test_hash(BinaryMinHeap([1, 2, 3]))
+                @test test_hash(CircularBuffer{Int}([1, 2])) != test_hash(CircularBuffer{Int}([1, 2, 3]))
+                @test test_hash(CircularDeque{Int}([1, 2])) != test_hash(CircularDeque{Int}([1, 2, 3]))
+                @test test_hash(DefaultDict(0.0, 1 => 1.0)) != test_hash(DefaultDict(0.0, 1 => 1.0, 2 => 2.0))
+                @test test_hash(Dequeue{Int}([1,2])) != test_hash(Dequeue{Int}([1,2,3]))
+                @test test_hash(DiBitVector(10)) != test_hash( DiBitVector(10, 0))
+                # TODO: stopped here in my process of looking through DataStructures.jl tests
+
+                @test test_hash(OrderedDict(:a => 1, :b => 2)) !=
+                      test_hash(OrderedDict(:b => 2, :a => 1))
+                @test test_hash(OrderedSet(["a", "b"])) != test_hash(OrderedSet(["b", "a"]))
+                @test test_hash(SortedDict(:b => 1, :a => 2)) == test_hash(SortedDict(:a => 2, :b => 1))
+                @test test_hash(SortedMultiDict(:b => 1, :a => 2)) == test_hash(SortedMultiDict(:a => 2, :b => 1))
+                @test test_hash(SortedSet(["a", "b"])) == test_hash(SortedSet(["b", "a"]))
+
+                # TODO: add reference tests
+            end
+
             # table like
             @testset "Tables" begin
                 @test test_hash((; x=collect(1:10), y=collect(1:10))) !=
@@ -374,12 +405,15 @@ include("setup_tests.jl")
             @testset "Hash-invariance to buffer size" begin
                 data = (rand(Int8, 2), rand(Int8, 2))
                 wrapped1 = StableHashTraits.HashState(sha256, HashVersion{V}())
-                alg_small = CountedBufferState(StableHashTraits.BufferedHashState(wrapped1,
-                                                                                  3))
+                alg_small = begin
+                    CountedBufferState(StableHashTraits.BufferedHashState(wrapped1, 3))
+                end
 
                 wrapped2 = StableHashTraits.HashState(sha256, HashVersion{V}())
-                alg_large = CountedBufferState(StableHashTraits.BufferedHashState(wrapped2,
-                                                                                  20))
+                alg_large = begin
+                    CountedBufferState(StableHashTraits.BufferedHashState(wrapped2, 20))
+                end
+
                 # verify that the hashes are the same...
                 @test stable_hash(data, ctx; alg=alg_small) ==
                       stable_hash(data, ctx; alg=alg_large)

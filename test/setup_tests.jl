@@ -11,6 +11,7 @@ using Tables
 using AWSS3
 using Pluto
 using StructTypes
+using DataStructures
 
 struct TestType
     a::Any
