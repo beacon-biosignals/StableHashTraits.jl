@@ -231,6 +231,7 @@ include("setup_tests.jl")
                 @test test_hash(TestType4(1, 2)) != test_hash(TestType3(1, 2))
                 @test test_hash(TestType(1, 2)) != test_hash(TestType4(2, 1))
                 @test test_hash(TestType(1, 2)) == test_hash(TestType3(2, 1))
+                @test test_hash(TestType6(1, 2, 4)) == test_hash(TestType6(1, 2, 3))
                 @test_throws TypeError test_hash(BadHashMethod())
                 @test_throws r"Unrecognized trait" test_hash(BadHashMethod2())
             end
