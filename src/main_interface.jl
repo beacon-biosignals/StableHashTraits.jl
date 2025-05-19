@@ -171,10 +171,10 @@ struct OmitFields{T} <: Function
 end
 hoist_type(::OmitFields) = true
 function (o::OmitFields)(x::T) where {T}
-    fields = TupleTools.filter(f -> f ∉ o.fields, fieldnames(T))
+    fields = filter(f -> f ∉ o.fields, fieldnames(T))
     vals = map(f -> getfield(x, f), fields)
     types = map(f -> fieldtype(T, f), fields)
-    return NamedTuple{o.fields,Tuple{types...}}(vals)
+    return NamedTuple{fields,Tuple{types...}}(vals)
 end
 omit_fields(x, fields::NTuple{<:Any,Symbol}) = omit_fields(fields)(x)
 omit_fields(fields::Symbol...) = omit_fields(fields)
