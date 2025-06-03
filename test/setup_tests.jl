@@ -40,6 +40,12 @@ struct TestType5
     bob::String
 end
 
+struct TestType6
+    a::Any
+    b::Any
+    c::Any
+end
+
 function StableHashTraits.transformer(::Type{<:TestType2})
     return StableHashTraits.Transformer(x -> (x.a, x.b); hoist_type=true)
 end
@@ -48,6 +54,10 @@ end
 StableHashTraits.transform_type(::Type{<:TestType3}) = "TestType"
 function StableHashTraits.transformer(::Type{<:TestType3})
     return StableHashTraits.Transformer(pick_fields(:a, :b))
+end
+
+function StableHashTraits.transformer(::Type{<:TestType6})
+    return StableHashTraits.Transformer(omit_fields(:c))
 end
 
 StableHashTraits.transform_type(::Type{<:TestType2}) = "TestType2"

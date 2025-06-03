@@ -236,7 +236,11 @@ julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
 
 <!--END_OVERVIEW-->
 
-## Breaking changes
+## Change Log
+
+### In 2.0.1
+
+A bug in the `omit_fields` prevented it from removing the requested object fields from a hash. Existing hashes depending on this erroneous behavior have changed.
 
 ### In 2.0
 
