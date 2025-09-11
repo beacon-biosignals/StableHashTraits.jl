@@ -348,10 +348,21 @@ Get a stable name of `T`. This is a helpful utility for writing your own methods
 [`StableHashTraits.transform_type_value`](@ref). The stable name is computed from `nameof`.
 Anonymous names (e.g. `module_nameof_string(x -> x+1)`) throw an error, as no stable name is
 possible in this case.
+
+## Implementation notes
+
+To support stable hash values for Julia ≤1.11, the Julia 1.12 types
+`Base.Fix{2}` and `Base.Fix{1}` are printed as `Base.Fix2` and `Base.Fix1`.
+Julia 1.12 generalized Fix1 and Fix2 to the more generic Fix{N} type.
 """
 @inline nameof_string(m::Module) = nameof_(m)
 @inline nameof_string(::T) where {T} = nameof_(T)
 @inline nameof_string(::Type{T}) where {T} = handle_unions_(T, nameof_)
+@static if VERSION >= v"1.12.0-0"
+    @inline nameof_string(::Type{<:Base.Fix1}) = "Fix1"
+    @inline nameof_string(::Type{<:Base.Fix2}) = "Fix2"
+end
+
 hoist_type(::typeof(nameof_string)) = true
 @inline function nameof_(::Type{T}) where {T}
     return validate_name(String(nameof(T)))
