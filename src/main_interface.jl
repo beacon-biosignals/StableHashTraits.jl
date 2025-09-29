@@ -275,7 +275,8 @@ throw an error, as no stable name is possible in this case. In Julia 1.12 `Base.
 printed as `Base.Fix1` and `Base.Fix{2}` as `Base.Fix2` to remain stable with their outputs
 in Julia `1.11`. (Julia 1.12 generalized `Fix1` and `Fix2` to `Fix{N}`).
 
-!!! danger "A type's module often changes" The module of many types are considered an
+!!! danger "A type's module often changes"
+    The module of many types are considered an
     implementation detail and can change between non-breaking versions of a package. For
     this reason uses of `module_nameof_string` must be explicitly specified by user of
     `StableHashTraits`. This function is not used internally nor `HashVersion{4}` for types
