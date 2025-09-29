@@ -74,6 +74,8 @@ include("setup_tests.jl")
                                                       d=(d1=1, d2=2)))))
                 @test_reference("references/ref26_$(V)_$(nameof(hashfn)).txt",
                                 bytes2hex_(test_hash(2 => 3)))
+                @test_reference("references/ref27_$(V)_$(nameof(hashfn)).txt",
+                                StableHashTraits.module_nameof_string(==(1)))
             end
 
             # dictionary like

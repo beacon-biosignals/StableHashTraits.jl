@@ -271,13 +271,15 @@ of [`StableHashTraits.transform_type`](@ref) and
 [`StableHashTraits.transform_type_value`](@ref). The stable name includes the name of the
 module that `T` was defined in. Any uses of `Core` are replaced with `Base` to keep the name
 stable across versions of julia. Anonymous names (e.g. `module_nameof_string(x -> x+1)`)
-throw an error, as no stable name is possible in this case.
+throw an error, as no stable name is possible in this case. In Julia 1.12 `Base.Fix{1}` is
+printed as `Base.Fix1` and `Base.Fix{2}` as `Base.Fix2` to remain stable with their outputs
+in Julia `1.11`. (Julia 1.12 generalized `Fix1` and `Fix2` to `Fix{N}`).
 
 !!! danger "A type's module often changes"
     The module of many types are considered an
     implementation detail and can change between non-breaking versions of a package. For
     this reason uses of `module_nameof_string` must be explicitly specified by user of
-    `StableHashTraits`. This function is not used internally hor `HashVersion{4}` for types
+    `StableHashTraits`. This function is not used internally nor `HashVersion{4}` for types
     that are not defined in `StableHashTraits`.
 """
 @inline module_nameof_string(::T) where {T} = module_nameof_string(T)
@@ -285,6 +287,11 @@ throw an error, as no stable name is possible in this case.
 @inline module_nameof_string(::Type{T}) where {T} = handle_unions_(T, module_nameof_)
 @inline function module_nameof_(::Type{T}) where {T}
     return validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
+end
+
+@static if VERSION >= v"1.12.0-0"
+    @inline module_nameof_string(::Type{<:Base.Fix1}) = "Base.Fix1"
+    @inline module_nameof_string(::Type{<:Base.Fix2}) = "Base.Fix2"
 end
 
 # TODO: use `Pluto.is_inside_pluto` when/if it is implemented
@@ -348,10 +355,21 @@ Get a stable name of `T`. This is a helpful utility for writing your own methods
 [`StableHashTraits.transform_type_value`](@ref). The stable name is computed from `nameof`.
 Anonymous names (e.g. `module_nameof_string(x -> x+1)`) throw an error, as no stable name is
 possible in this case.
+
+## Implementation notes
+
+To support stable hash values for Julia ≤1.11, the Julia 1.12 types
+`Base.Fix{2}` and `Base.Fix{1}` are printed as `Base.Fix2` and `Base.Fix1`.
+Julia 1.12 generalized Fix1 and Fix2 to the more generic Fix{N} type.
 """
 @inline nameof_string(m::Module) = nameof_(m)
 @inline nameof_string(::T) where {T} = nameof_(T)
 @inline nameof_string(::Type{T}) where {T} = handle_unions_(T, nameof_)
+@static if VERSION >= v"1.12.0-0"
+    @inline nameof_string(::Type{<:Base.Fix1}) = "Fix1"
+    @inline nameof_string(::Type{<:Base.Fix2}) = "Fix2"
+end
+
 hoist_type(::typeof(nameof_string)) = true
 @inline function nameof_(::Type{T}) where {T}
     return validate_name(String(nameof(T)))
