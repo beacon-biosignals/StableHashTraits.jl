@@ -372,11 +372,17 @@ end
 
 hoist_type(::typeof(nameof_string)) = true
 @inline function nameof_(::Type{T}) where {T}
-    return validate_name(String(nameof(T)))
+    return maybe_validate_name(T, String(nameof(T)))
 end
 @inline function nameof_(T)
-    return validate_name(String(nameof(T)))
+    return maybe_validate_name(T, String(nameof(T)))
 end
+
+# known Base types
+for name in [Int8,Int16,Int32,Int64,Int128,BigInt,UInt8,UInt16,UInt32,UInt64,UInt128,Float16,Float32,Float64,BigFloat,Bool,Char,String,Symbol]
+    @eval maybe_validate_name(::Type{$name}, s) = s
+end
+maybe_validate_name(@nospecialize(::Any), s) = validate_name(s)
 
 """
    transform_type(::Type{T}, [context])
