@@ -382,6 +382,9 @@ end
 for name in [Int8,Int16,Int32,Int64,Int128,BigInt,UInt8,UInt16,UInt32,UInt64,UInt128,Float16,Float32,Float64,BigFloat,Bool,Char,String,Symbol]
     @eval maybe_validate_name(::Type{$name}, s) = s
 end
+for name in [name for name in names(StructTypes, all=true) if Base.isstructtype(getfield(StructTypes, name)) && !occursin("#", string(name))]
+    @eval maybe_validate_name(::Type{StructTypes.$name}, s) = s
+end
 maybe_validate_name(@nospecialize(::Any), s) = validate_name(s)
 
 """
