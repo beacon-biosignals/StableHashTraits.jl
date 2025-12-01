@@ -217,3 +217,30 @@ on the performance of benchmarks for hash version 4.
   15 │ strings     sha256     4          1.753 ms    1.707 ms     0.973521
   16 │ missings    sha256     4          477.875 μs  443.042 μs   0.927109
 ```
+
+# Version 2.1.0
+
+This version improves type-stability in handling `Union` types.
+Benchmarks:
+```
+16×6 DataFrame
+ Row │ benchmark   hash       version    base        trait       ratio
+     │ SubStrin…   SubStrin…  SubStrin…  String      String      Float64
+─────┼─────────────────────────────────────────────────────────────────────
+   1 │ dicts       crc        4          1.588 ms    102.622 ms  64.6296
+   2 │ structs     crc        4          17.277 μs   752.080 μs  43.5307
+   3 │ tuples      crc        4          17.358 μs   529.185 μs  30.4865
+   4 │ numbers     crc        4          6.791 μs    186.629 μs  27.4818
+   5 │ dataframes  crc        4          27.073 μs   438.643 μs  16.2022
+   6 │ symbols     crc        4          1.168 ms    1.619 ms     1.38543
+   7 │ missings    crc        4          302.562 μs  315.324 μs   1.04218
+   8 │ strings     crc        4          1.223 ms    334.434 μs   0.273366
+   9 │ dicts       sha256     4          2.281 ms    133.743 ms  58.6238
+  10 │ structs     sha256     4          643.719 μs  2.024 ms     3.145
+  11 │ tuples      sha256     4          628.626 μs  1.792 ms     2.8509
+  12 │ dataframes  sha256     4          653.632 μs  1.084 ms     1.65908
+  13 │ numbers     sha256     4          321.180 μs  506.102 μs   1.57576
+  14 │ symbols     sha256     4          2.365 ms    3.576 ms     1.51254
+  15 │ missings    sha256     4          649.787 μs  692.879 μs   1.06632
+  16 │ strings     sha256     4          2.555 ms    2.159 ms     0.844936
+```
