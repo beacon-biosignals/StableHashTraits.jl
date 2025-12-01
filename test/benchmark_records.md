@@ -217,3 +217,30 @@ on the performance of benchmarks for hash version 4.
   15 │ strings     sha256     4          1.753 ms    1.707 ms     0.973521
   16 │ missings    sha256     4          477.875 μs  443.042 μs   0.927109
 ```
+
+# Version 2.0.3
+
+This version improves type-stability in `hash_fields`.
+Benchmarks:
+```
+16×6 DataFrame
+ Row │ benchmark   hash       version    base        trait       ratio
+     │ SubStrin…   SubStrin…  SubStrin…  String      String      Float64
+─────┼─────────────────────────────────────────────────────────────────────
+   1 │ dicts       crc        4          1.594 ms    110.488 ms  69.3065
+   2 │ tuples      crc        4          16.445 μs   513.070 μs  31.1991
+   3 │ structs     crc        4          17.372 μs   515.770 μs  29.6897
+   4 │ numbers     crc        4          7.002 μs    190.778 μs  27.2462
+   5 │ dataframes  crc        4          25.515 μs   394.936 μs  15.4786
+   6 │ symbols     crc        4          1.125 ms    1.736 ms     1.54343
+   7 │ missings    crc        4          307.998 μs  325.848 μs   1.05795
+   8 │ strings     crc        4          1.224 ms    364.596 μs   0.297855
+   9 │ dicts       sha256     4          2.310 ms    144.709 ms  62.6373
+  10 │ tuples      sha256     4          615.085 μs  1.818 ms     2.95518
+  11 │ structs     sha256     4          614.753 μs  1.777 ms     2.8914
+  12 │ numbers     sha256     4          306.402 μs  507.110 μs   1.65505
+  13 │ dataframes  sha256     4          654.525 μs  1.082 ms     1.65288
+  14 │ symbols     sha256     4          2.394 ms    3.510 ms     1.46617
+  15 │ missings    sha256     4          680.580 μs  691.508 μs   1.01606
+  16 │ strings     sha256     4          2.528 ms    2.163 ms     0.855819
+```
