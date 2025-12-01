@@ -240,7 +240,9 @@ split_union(array) = TransformIdentity(array)
 function split_union(array::AbstractArray{Union{N,M}}) where {N,M}
     # NOTE: when an abstract array is e.g. AbstractArray{Int}, N becomes
     # Int and M is left as undefined, we just need to hash this array
-    !@isdefined(M) && return TransformIdentity(array)
+    if !(eltype(array) isa Union)
+        return TransformIdentity(array)
+    end
     # special case null and singleton-types, since we don't need to hash their content at
     # all
     if StructType(N) isa StructTypes.NullType ||
