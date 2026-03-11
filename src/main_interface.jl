@@ -323,13 +323,13 @@ end
     return validate_name(clean_module(parentmodule(T)) * "." * String(nameof(T)))
 end
 
-function handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
-    !@isdefined(A) && !@isdefined(B) && return ""
-    !@isdefined(B) && return handle_function_types_(A, namer)
-    # NOTE: The following line never gets run, because of the way julia's type dispatch
-    # is currently implemented, but it is here to avoid regressions in future julia
-    # versions
-    !@isdefined(A) && return handle_function_types_(B, namer)
+function handle_unions_(::Type{T}, namer) where {T}
+    if T isa Union
+        return _handle_unions_(T, namer)
+    end
+    return handle_function_types_(T, namer)
+end
+function _handle_unions_(::Type{Union{A,B}}, namer) where {A,B}
     return handle_unions_(A, namer) * "," * handle_unions_(B, namer)
 end
 # not all types are concrete, so they must be passed through a generic "handle_unions_"
