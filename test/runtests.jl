@@ -390,6 +390,17 @@ include("setup_tests.jl")
                 # buffer sizes while updating the hash state...
                 @test alg_small.positions != alg_large.positions
             end
+
+            @testset "Nested singletons" begin
+                struct A end
+                struct B end
+                struct Thing{T}
+                    inner::T
+                end
+                x = Thing(A())
+                y = Thing(B())
+                @test test_hash(x) != test_hash(y)
+            end
         end # @testset
     end # for
 end # @testset
