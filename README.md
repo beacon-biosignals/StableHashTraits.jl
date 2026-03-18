@@ -240,7 +240,7 @@ julia> rotate((pi / 4), SVector{2}(0.42095778959006, -0.42095778959006))
 
 ### In 2.0.2
 
-A bug caused hash collisions between two distinct pairs of nested singleton types. Existing hashes of nested singleton types have changed.
+A bug caused hash collisions pairs of distinct nested singleton types. Existing hashes of nested singleton types have changed.
 
 ### In 2.0.1
 
