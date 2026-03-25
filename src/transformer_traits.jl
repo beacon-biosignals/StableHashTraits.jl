@@ -401,6 +401,18 @@ stable_hash_helper(_, hash_state, context, ::StructTypes.NullType) = hash_state
 # singleton types are encoded purely by their type hash
 transform_type_by_trait(::Type{T}, ::StructTypes.SingletonType) where {T} = nameof_string(T)
 stable_hash_helper(_, hash_state, context, ::StructTypes.SingletonType) = hash_state
+# singleton types can have fields when all the nested types are singleton types as well
+function internal_type_structure(::Type{T}, trait::StructTypes.SingletonType) where {T}
+    if isconcretetype(T) && !isempty(fieldnames(T))
+        # NOTE: we check for empty in the `if` statement above to ensure that singleton
+        # types that aren't nested have a hash unchanged from versions of StableHashTraits
+        # that did not include this method
+        fields = fieldnames(T)
+        return fields, map(field -> fieldtype(T, field), fields)
+    else
+        return nothing
+    end
+end
 
 #####
 ##### Regex
