@@ -92,6 +92,10 @@ struct Transformer{F,H}
                          hoist_type=StableHashTraits.hoist_type(fn))
         return new{typeof(fn),typeof(result_method)}(fn, result_method, hoist_type)
     end
+    function Transformer(::Type{T}, result_method=nothing;
+                         hoist_type=StableHashTraits.hoist_type(fn)) where {T}
+        return new{Type{T},typeof(result_method)}(T, result_method, hoist_type)
+    end
 end
 (tr::Transformer)(x) = tr.fn(x)
 
