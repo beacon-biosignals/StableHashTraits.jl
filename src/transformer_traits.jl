@@ -172,9 +172,9 @@ function stable_hash_helper(x, hash_state, context, st::StructTypes.DataType)
     return hash_state
 end
 
-function hash_fields(x, fields, hash_state, context)
-    for field in fields
-        val = getfield(x, field)
+Base.@constprop :aggressive function hash_fields(x, fields, hash_state, context)
+    vals = map(field -> getfield(x, field), fields)
+    map(fields, vals) do field, val
         # can we optimize away the field's type_hash?
         transform = transformer(typeof(val), context)
         if isconcretetype(fieldtype(typeof(x), field)) && transform.hoist_type
