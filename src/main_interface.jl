@@ -372,11 +372,20 @@ end
 
 hoist_type(::typeof(nameof_string)) = true
 @inline function nameof_(::Type{T}) where {T}
-    return validate_name(String(nameof(T)))
+    return maybe_validate_name(T, String(nameof(T)))
 end
 @inline function nameof_(T)
-    return validate_name(String(nameof(T)))
+    return maybe_validate_name(T, String(nameof(T)))
 end
+
+# known Base types
+for name in unique(name -> getfield(Base, name), [name for name in names(Base) if Base.isstructtype(getfield(Base, name)) && !occursin("#", string(name))])
+    @eval maybe_validate_name(::Type{Base.$name}, s) = s
+end
+for name in unique(name -> getfield(StructTypes, name), [name for name in names(StructTypes, all=true) if Base.isstructtype(getfield(StructTypes, name)) && !occursin("#", string(name))])
+    @eval maybe_validate_name(::Type{StructTypes.$name}, s) = s
+end
+maybe_validate_name(@nospecialize(::Any), s) = validate_name(s)
 
 """
    transform_type(::Type{T}, [context])
